@@ -7,6 +7,32 @@
     "frontend-admin": "Frontend 2 — Panneau d'administration",
     "devops-qa": "DevOps / QA — CI, environnements, tests E2E, sécurité"
   },
+  "owners": {
+    "dev-a": {
+      "name": "Développeur A",
+      "github": "",
+      "focus": "Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, admin Utilisateurs/Tickets/Finance, CI & Staging, sécurité"
+    },
+    "dev-b": {
+      "name": "Développeur B",
+      "github": "",
+      "focus": "Sports, paris & opérations — Données sportives, Catalogue, Coupon & tickets, admin Événements/Résultats, Docker, logs, E2E, charge, sauvegardes, monitoring"
+    },
+    "product": {
+      "name": "Chef de projet",
+      "github": "plaisirrubly29-byte",
+      "focus": "Décisions Phase 0, validation, recette et lancement"
+    }
+  },
+  "waves": {
+    "0": "Décisions (en parallèle, à démarrer tout de suite)",
+    "1": "Socle",
+    "2": "Identité & synchronisation des données",
+    "3": "Ledger, audit & catalogue",
+    "4": "Paris simulés",
+    "5": "Règlement & administration",
+    "6": "Finitions admin, QA & préparation production"
+  },
   "phases": [
     {
       "id": "P0",
@@ -70,7 +96,9 @@
       "acceptance": [
         "Décision écrite dans docs/decisions.md",
         "Liste des obligations (âge, KYC, jeu responsable) consignée"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P0-02",
@@ -83,7 +111,9 @@
         "Fournisseur choisi et documenté",
         "Accès sandbox obtenu (clé stockée hors du dépôt)",
         "Documentation de l'API fournisseur liée dans docs/decisions.md"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P0-03",
@@ -95,7 +125,9 @@
       "acceptance": [
         "Liste fermée des sports et marchés V1",
         "Décision simple/combiné consignée"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P0-04",
@@ -107,7 +139,9 @@
       "acceptance": [
         "Règles écrites avec exemples chiffrés",
         "Validées par le propriétaire du projet"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P0-05",
@@ -118,7 +152,9 @@
       "description": "Paramètres financiers de la V1.",
       "acceptance": [
         "Devise(s), règle d'arrondi, min/max et plafonds consignés"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P0-06",
@@ -130,7 +166,9 @@
       "acceptance": [
         "Matrice validée",
         "Actions nécessitant une double validation identifiées"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P0-07",
@@ -141,7 +179,9 @@
       "description": "Choisir l'hébergeur, objectifs de disponibilité, politique de sauvegarde et durée de conservation des données.",
       "acceptance": [
         "Choix documenté avec coût estimé"
-      ]
+      ],
+      "owner": "product",
+      "wave": 0
     },
     {
       "id": "P1-01",
@@ -153,7 +193,9 @@
       "acceptance": [
         "Chaque membre lance le projet en suivant le README",
         "GET /api/v1/health répond depuis le frontend"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 1
     },
     {
       "id": "P1-02",
@@ -166,7 +208,9 @@
         "CI verte sur main",
         "Push direct sur main impossible",
         "CODEOWNERS rempli avec les comptes de l'équipe"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 1
     },
     {
       "id": "P1-03",
@@ -179,7 +223,9 @@
         "Format d'erreur unique appliqué via le handler d'exceptions",
         "Guide dans docs/api/README.md",
         "Swagger UI ou équivalent consultable"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 1
     },
     {
       "id": "P1-04",
@@ -191,7 +237,9 @@
       "acceptance": [
         "Chaque log contient request_id",
         "Test du middleware"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 1
     },
     {
       "id": "P1-05",
@@ -203,7 +251,9 @@
       "acceptance": [
         "Composants de base dans src/shared/components",
         "Responsive mobile vérifié"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 1
     },
     {
       "id": "P1-06",
@@ -218,7 +268,9 @@
       ],
       "depends": [
         "P0-07"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 4
     },
     {
       "id": "P2-01",
@@ -230,7 +282,9 @@
       "acceptance": [
         "Migrations réversibles",
         "Seeders des rôles : Super Admin, Opérations, Finance, Support, Conformité"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 1
     },
     {
       "id": "P2-02",
@@ -246,7 +300,9 @@
       ],
       "depends": [
         "P2-01"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 2
     },
     {
       "id": "P2-03",
@@ -261,7 +317,9 @@
       ],
       "depends": [
         "P2-02"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 2
     },
     {
       "id": "P2-04",
@@ -277,7 +335,9 @@
       "depends": [
         "P2-01",
         "P0-06"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 2
     },
     {
       "id": "P2-05",
@@ -292,7 +352,9 @@
       ],
       "depends": [
         "P2-04"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 3
     },
     {
       "id": "P2-06",
@@ -308,7 +370,9 @@
       "depends": [
         "P2-02",
         "P1-05"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 2
     },
     {
       "id": "P2-07",
@@ -322,7 +386,9 @@
       ],
       "depends": [
         "P2-04"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 3
     },
     {
       "id": "P3-01",
@@ -334,7 +400,9 @@
       "acceptance": [
         "Index événement/statut",
         "Identifiant fournisseur unique par entité"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 1
     },
     {
       "id": "P3-02",
@@ -349,7 +417,9 @@
       ],
       "depends": [
         "P0-02"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 2
     },
     {
       "id": "P3-03",
@@ -365,7 +435,9 @@
       "depends": [
         "P3-01",
         "P3-02"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 2
     },
     {
       "id": "P3-04",
@@ -380,7 +452,9 @@
       ],
       "depends": [
         "P3-03"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 2
     },
     {
       "id": "P3-05",
@@ -395,7 +469,9 @@
       ],
       "depends": [
         "P3-04"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 3
     },
     {
       "id": "P3-06",
@@ -410,7 +486,9 @@
       ],
       "depends": [
         "P3-05"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 3
     },
     {
       "id": "P4-01",
@@ -425,7 +503,9 @@
       ],
       "depends": [
         "P3-01"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 3
     },
     {
       "id": "P4-02",
@@ -437,7 +517,9 @@
       "acceptance": [
         "Requête rejouée ne crée rien de nouveau",
         "Tests concurrence"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 2
     },
     {
       "id": "P4-03",
@@ -456,7 +538,9 @@
         "P4-02",
         "P5-02",
         "P0-04"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 4
     },
     {
       "id": "P4-04",
@@ -470,7 +554,9 @@
       ],
       "depends": [
         "P4-01"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 3
     },
     {
       "id": "P4-05",
@@ -486,7 +572,9 @@
       "depends": [
         "P4-03",
         "P3-06"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 4
     },
     {
       "id": "P4-06",
@@ -501,7 +589,9 @@
       ],
       "depends": [
         "P4-04"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 4
     },
     {
       "id": "P4-07",
@@ -515,7 +605,9 @@
       ],
       "depends": [
         "P4-03"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 4
     },
     {
       "id": "P5-01",
@@ -530,7 +622,9 @@
       ],
       "depends": [
         "P0-05"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 3
     },
     {
       "id": "P5-02",
@@ -546,7 +640,9 @@
       ],
       "depends": [
         "P5-01"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 3
     },
     {
       "id": "P5-03",
@@ -560,7 +656,9 @@
       ],
       "depends": [
         "P5-02"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 3
     },
     {
       "id": "P5-04",
@@ -574,7 +672,9 @@
       ],
       "depends": [
         "P3-02"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 3
     },
     {
       "id": "P5-05",
@@ -591,7 +691,9 @@
         "P5-02",
         "P5-04",
         "P4-03"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 5
     },
     {
       "id": "P5-06",
@@ -607,7 +709,9 @@
       "depends": [
         "P5-05",
         "P6-01"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 5
     },
     {
       "id": "P5-07",
@@ -621,7 +725,9 @@
       ],
       "depends": [
         "P5-03"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 4
     },
     {
       "id": "P6-01",
@@ -636,7 +742,9 @@
       ],
       "depends": [
         "P2-04"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 3
     },
     {
       "id": "P6-02",
@@ -652,7 +760,9 @@
       "depends": [
         "P6-01",
         "P3-05"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 5
     },
     {
       "id": "P6-03",
@@ -667,7 +777,9 @@
       ],
       "depends": [
         "P6-01"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 5
     },
     {
       "id": "P6-04",
@@ -683,7 +795,9 @@
       "depends": [
         "P6-01",
         "P5-02"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 5
     },
     {
       "id": "P6-05",
@@ -698,7 +812,9 @@
       "depends": [
         "P2-05",
         "P1-05"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 5
     },
     {
       "id": "P6-06",
@@ -714,7 +830,9 @@
       "depends": [
         "P6-05",
         "P6-02"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 5
     },
     {
       "id": "P6-07",
@@ -731,7 +849,9 @@
         "P6-05",
         "P6-03",
         "P6-04"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 6
     },
     {
       "id": "P6-08",
@@ -748,7 +868,9 @@
         "P6-05",
         "P6-04",
         "P6-01"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 6
     },
     {
       "id": "P6-09",
@@ -764,7 +886,9 @@
         "P6-02",
         "P6-03",
         "P6-04"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 6
     },
     {
       "id": "P7-01",
@@ -781,7 +905,9 @@
         "P0-01",
         "P5-02"
       ],
-      "blocked": true
+      "blocked": true,
+      "owner": "dev-a",
+      "wave": 6
     },
     {
       "id": "P7-02",
@@ -797,7 +923,9 @@
       "depends": [
         "P0-01",
         "P4-03"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 6
     },
     {
       "id": "P8-01",
@@ -812,7 +940,9 @@
       "depends": [
         "P5-05",
         "P4-05"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 6
     },
     {
       "id": "P8-02",
@@ -823,7 +953,9 @@
       "description": "OWASP : CORS strict, CSRF, XSS, injection, en-têtes, secrets, dépendances.",
       "acceptance": [
         "Rapport avec corrections des points bloquants"
-      ]
+      ],
+      "owner": "dev-a",
+      "wave": 6
     },
     {
       "id": "P8-03",
@@ -834,7 +966,9 @@
       "description": "Catalogue et POST /bets sous charge attendue.",
       "acceptance": [
         "Objectifs de temps de réponse atteints"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 6
     },
     {
       "id": "P8-04",
@@ -846,7 +980,9 @@
       "acceptance": [
         "Restauration réussie et chronométrée",
         "Runbook d'incident"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 6
     },
     {
       "id": "P9-01",
@@ -862,7 +998,9 @@
         "P8-01",
         "P8-02",
         "P8-04"
-      ]
+      ],
+      "owner": "product",
+      "wave": 6
     },
     {
       "id": "P9-02",
@@ -874,7 +1012,9 @@
       "acceptance": [
         "Alertes testées",
         "Astreinte définie"
-      ]
+      ],
+      "owner": "dev-b",
+      "wave": 6
     }
   ]
 }
