@@ -1,0 +1,29 @@
+name: Bug
+description: Comportement incorrect constaté
+labels: ["type:bug"]
+body:
+  - type: dropdown
+    id: env
+    attributes:
+      label: Environnement
+      options: [Development, Staging, Production]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Résultat attendu / obtenu
+    validations:
+      required: true
+  - type: checkboxes
+    id: money
+    attributes:
+      label: Impact financier
+      options:
+        - label: Ce bug touche un solde, un ticket, un règlement ou le ledger (priorité haute)

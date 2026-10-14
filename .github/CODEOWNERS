@@ -1,0 +1,13 @@
+# Relecteurs obligatoires par zone. Remplacer les @utilisateurs par les comptes GitHub de l'équipe.
+# Le dernier motif correspondant l'emporte.
+
+*                                   @plaisirrubly29-byte
+
+# /backend/                         @backend-lead
+# /backend/app/Modules/Wallet/      @backend-lead @finance-reviewer
+# /backend/app/Modules/Settlement/  @backend-lead @finance-reviewer
+# /backend/app/Modules/Betting/     @backend-dev
+# /backend/app/Modules/SportsData/  @backend-dev
+# /frontend/                        @frontend-lead
+# /frontend/src/admin/              @admin-dev
+# /.github/ /docker-compose.yml     @devops

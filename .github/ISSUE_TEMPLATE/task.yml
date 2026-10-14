@@ -1,0 +1,30 @@
+name: Tâche
+description: Une unité de travail du plan de développement
+labels: ["type:feature"]
+body:
+  - type: input
+    id: task_id
+    attributes:
+      label: ID de tâche
+      description: Voir docs/TASKS.md (ex. P4-03)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d'acceptation
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Dépend de
+      description: IDs ou numéros d'issues bloquantes

@@ -1,31 +1,25 @@
-/vendor/
-node_modules/
-npm-debug.log
-yarn-error.log
+# Les sous-projets ont leurs propres .gitignore (backend/, frontend/).
 
-# Laravel 4 specific
-bootstrap/compiled.php
-app/storage/
-
-# Laravel 5 & Lumen specific
-public/storage
-public/hot
-
-# Laravel 5 & Lumen specific with changed public path
-public_html/storage
-public_html/hot
-
-storage/*.key
+# Secrets
 .env
-Homestead.yaml
-Homestead.json
-/.vagrant
-.phpunit.result.cache
-/.phpunit.cache
-
-/public/build
-/storage/pail
-.env.backup
-.env.production
-.phpactor.json
+.env.*
+!.env.example
 auth.json
+
+# Dépendances / builds
+vendor/
+node_modules/
+dist/
+
+# Logs
+*.log
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Fichiers temporaires Office
+~$*

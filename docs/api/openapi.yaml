@@ -1,0 +1,121 @@
+openapi: 3.1.0
+info:
+  title: REYEL 16 PAYAJ API
+  version: 1.0.0-draft
+  description: |
+    Contrat de l'API v1. Toute route doit être documentée ici AVANT l'intégration frontend.
+    Les routes marquées `x-task` ne sont pas encore implémentées.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Développement local
+
+tags:
+  - name: System
+  - name: Auth
+  - name: Catalogue
+  - name: Bets
+  - name: Wallet
+  - name: Admin
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: État de l'API
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  version: { type: string, example: v1 }
+                  time: { type: string, format: date-time }
+
+  /auth/register:
+    post: { tags: [Auth], summary: Inscription, x-task: P2-02, responses: { "201": { description: Créé } } }
+  /auth/login:
+    post: { tags: [Auth], summary: Connexion, x-task: P2-02, responses: { "200": { description: OK } } }
+  /auth/logout:
+    post: { tags: [Auth], summary: Déconnexion, x-task: P2-02, responses: { "204": { description: OK } } }
+  /me:
+    get: { tags: [Auth], summary: Utilisateur connecté, x-task: P2-02, responses: { "200": { description: OK } } }
+
+  /sports:
+    get: { tags: [Catalogue], summary: Liste des sports, x-task: P3-05, responses: { "200": { description: OK } } }
+  /competitions:
+    get: { tags: [Catalogue], summary: Liste des compétitions, x-task: P3-05, responses: { "200": { description: OK } } }
+  /events:
+    get: { tags: [Catalogue], summary: Événements ouverts, x-task: P3-05, responses: { "200": { description: OK } } }
+  /events/{id}/markets:
+    get:
+      tags: [Catalogue]
+      summary: Marchés et cotes disponibles d'un événement
+      x-task: P3-05
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /bets:
+    post:
+      tags: [Bets]
+      summary: Placer un pari (simulé en V1)
+      x-task: P4-03
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201": { description: Ticket créé (reçu immuable) }
+        "409": { description: Cote changée — confirmation requise }
+        "422": { description: Marché fermé, limites, solde insuffisant }
+    get: { tags: [Bets], summary: Mes tickets, x-task: P4-04, responses: { "200": { description: OK } } }
+  /bets/{id}:
+    get:
+      tags: [Bets]
+      summary: Détail d'un ticket
+      x-task: P4-04
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "404": { description: Introuvable ou non autorisé } }
+
+  /wallet:
+    get: { tags: [Wallet], summary: Solde, x-task: P5-03, responses: { "200": { description: OK } } }
+  /wallet/transactions:
+    get: { tags: [Wallet], summary: Historique des écritures, x-task: P5-03, responses: { "200": { description: OK } } }
+
+  /admin/events/{id}:
+    patch:
+      tags: [Admin]
+      summary: Modifier l'état d'un événement (motif requis)
+      x-task: P6-02
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+  /admin/markets/{id}:
+    patch:
+      tags: [Admin]
+      summary: Suspendre / masquer un marché (motif requis)
+      x-task: P6-02
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+  /admin/users/{id}:
+    patch:
+      tags: [Admin]
+      summary: Suspendre un compte (motif requis)
+      x-task: P6-03
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID unique par intention utilisateur. Une requête rejouée renvoie la même réponse.
+      schema: { type: string, format: uuid }
+  schemas:
+    Money:
+      type: object
+      description: Montant en unité mineure (entier) — jamais de nombre décimal.
+      properties:
+        minor: { type: integer, example: 10050 }
+        currency: { type: string, example: HTG }

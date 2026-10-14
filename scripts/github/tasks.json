@@ -1,0 +1,880 @@
+{
+  "roles": {
+    "product": "Chef de projet / propriétaire — décisions, conformité, validation",
+    "backend-core": "Backend 1 — Identité, Wallet & Ledger, Règlement, Audit",
+    "backend-data": "Backend 2 — Données sportives, Catalogue, Tickets",
+    "frontend-public": "Frontend 1 — Site public et espace joueur",
+    "frontend-admin": "Frontend 2 — Panneau d'administration",
+    "devops-qa": "DevOps / QA — CI, environnements, tests E2E, sécurité"
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "title": "Phase 0 — Décisions & conformité",
+      "exit": "Décisions consignées ; dépendances externes confirmées ou explicitement bloquées."
+    },
+    {
+      "id": "P1",
+      "title": "Phase 1 — Architecture & socle",
+      "exit": "Application déployée en Staging ; tests et migrations fonctionnels."
+    },
+    {
+      "id": "P2",
+      "title": "Phase 2 — Identité & rôles",
+      "exit": "Tests d'accès et de session réussis."
+    },
+    {
+      "id": "P3",
+      "title": "Phase 3 — Données sportives",
+      "exit": "Données de sandbox cohérentes ; pannes et cotes périmées gérées."
+    },
+    {
+      "id": "P4",
+      "title": "Phase 4 — Coupon & tickets simulés",
+      "exit": "Tests de doublon, changement de cote et événement fermé réussis."
+    },
+    {
+      "id": "P5",
+      "title": "Phase 5 — Ledger simulé & règlement",
+      "exit": "Aucun double débit/gain ; historique vérifiable."
+    },
+    {
+      "id": "P6",
+      "title": "Phase 6 — Administration",
+      "exit": "Matrice des permissions validée ; actions sensibles tracées."
+    },
+    {
+      "id": "P7",
+      "title": "Phase 7 — Intégrations autorisées",
+      "exit": "Tests contractuels et rapprochement approuvés."
+    },
+    {
+      "id": "P8",
+      "title": "Phase 8 — QA & préparation production",
+      "exit": "Aucune anomalie bloquante ; checklist signée."
+    },
+    {
+      "id": "P9",
+      "title": "Phase 9 — Lancement contrôlé",
+      "exit": "Validation opérationnelle et plan de support actifs."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "P0-01",
+      "title": "Valider le territoire, le cadre juridique et les licences",
+      "module": "compliance",
+      "area": "product",
+      "role": "product",
+      "description": "Confirmer le territoire autorisé, les licences, restrictions territoriales et règles de protection des données (§8, §13).",
+      "acceptance": [
+        "Décision écrite dans docs/decisions.md",
+        "Liste des obligations (âge, KYC, jeu responsable) consignée"
+      ]
+    },
+    {
+      "id": "P0-02",
+      "title": "Choisir le fournisseur de données sportives et de cotes",
+      "module": "sports-data",
+      "area": "product",
+      "role": "product",
+      "description": "Comparer les fournisseurs, droits d'utilisation, limites d'appels, coûts et environnement sandbox.",
+      "acceptance": [
+        "Fournisseur choisi et documenté",
+        "Accès sandbox obtenu (clé stockée hors du dépôt)",
+        "Documentation de l'API fournisseur liée dans docs/decisions.md"
+      ]
+    },
+    {
+      "id": "P0-03",
+      "title": "Définir sports, compétitions, marchés et types de paris de la V1",
+      "module": "catalogue",
+      "area": "product",
+      "role": "product",
+      "description": "Sports/compétitions/marchés inclus ; pari simple seulement ou combiné également.",
+      "acceptance": [
+        "Liste fermée des sports et marchés V1",
+        "Décision simple/combiné consignée"
+      ]
+    },
+    {
+      "id": "P0-04",
+      "title": "Politique de changement de cote, annulation, report et correction de résultat",
+      "module": "betting",
+      "area": "product",
+      "role": "product",
+      "description": "Règles à appliquer quand la cote change, quand un match est reporté/abandonné, ou quand un résultat est corrigé (§4.2, §4.3).",
+      "acceptance": [
+        "Règles écrites avec exemples chiffrés",
+        "Validées par le propriétaire du projet"
+      ]
+    },
+    {
+      "id": "P0-05",
+      "title": "Devise, arrondi, mises min/max et plafonds de gain",
+      "module": "wallet",
+      "area": "product",
+      "role": "product",
+      "description": "Paramètres financiers de la V1.",
+      "acceptance": [
+        "Devise(s), règle d'arrondi, min/max et plafonds consignés"
+      ]
+    },
+    {
+      "id": "P0-06",
+      "title": "Rôles administratifs, double validation et limites d'action",
+      "module": "admin",
+      "area": "product",
+      "role": "product",
+      "description": "Compléter docs/permissions-matrix.md (rôle × action × ressource).",
+      "acceptance": [
+        "Matrice validée",
+        "Actions nécessitant une double validation identifiées"
+      ]
+    },
+    {
+      "id": "P0-07",
+      "title": "Hébergement, disponibilité, sauvegardes et rétention",
+      "module": "infra",
+      "area": "devops",
+      "role": "product",
+      "description": "Choisir l'hébergeur, objectifs de disponibilité, politique de sauvegarde et durée de conservation des données.",
+      "acceptance": [
+        "Choix documenté avec coût estimé"
+      ]
+    },
+    {
+      "id": "P1-01",
+      "title": "Valider l'environnement Docker local pour toute l'équipe",
+      "module": "infra",
+      "area": "devops",
+      "role": "devops-qa",
+      "description": "Vérifier docker compose (PostgreSQL, Redis, backend, queue, frontend) sur Windows/macOS/Linux, compléter le README si besoin.",
+      "acceptance": [
+        "Chaque membre lance le projet en suivant le README",
+        "GET /api/v1/health répond depuis le frontend"
+      ]
+    },
+    {
+      "id": "P1-02",
+      "title": "CI GitHub Actions verte et protection de la branche main",
+      "module": "infra",
+      "area": "devops",
+      "role": "devops-qa",
+      "description": "Faire passer la CI, protéger main et develop (PR obligatoire, 1 revue, CI verte).",
+      "acceptance": [
+        "CI verte sur main",
+        "Push direct sur main impossible",
+        "CODEOWNERS rempli avec les comptes de l'équipe"
+      ]
+    },
+    {
+      "id": "P1-03",
+      "title": "Conventions API : format JSON, erreurs, pagination, OpenAPI",
+      "module": "core",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Définir le format de réponse et d'erreur (codes, messages), la pagination, et documenter dans docs/api/openapi.yaml.",
+      "acceptance": [
+        "Format d'erreur unique appliqué via le handler d'exceptions",
+        "Guide dans docs/api/README.md",
+        "Swagger UI ou équivalent consultable"
+      ]
+    },
+    {
+      "id": "P1-04",
+      "title": "Journalisation structurée et identifiant de requête",
+      "module": "core",
+      "area": "backend",
+      "role": "devops-qa",
+      "description": "Logs JSON, middleware X-Request-Id propagé dans les logs et les jobs.",
+      "acceptance": [
+        "Chaque log contient request_id",
+        "Test du middleware"
+      ]
+    },
+    {
+      "id": "P1-05",
+      "title": "Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API",
+      "module": "core",
+      "area": "frontend",
+      "role": "frontend-public",
+      "description": "Choisir et installer la librairie de requêtes (ex. TanStack Query), composants de base (bouton, champ, tableau, alerte), affichage des erreurs ApiError.",
+      "acceptance": [
+        "Composants de base dans src/shared/components",
+        "Responsive mobile vérifié"
+      ]
+    },
+    {
+      "id": "P1-06",
+      "title": "Déploiement Staging automatisé",
+      "module": "infra",
+      "area": "devops",
+      "role": "devops-qa",
+      "description": "Image de production, secrets séparés, déploiement depuis develop vers Staging, migrations automatiques.",
+      "acceptance": [
+        "Staging accessible en HTTPS",
+        "Procédure de déploiement et rollback documentée"
+      ],
+      "depends": [
+        "P0-07"
+      ]
+    },
+    {
+      "id": "P2-01",
+      "title": "Migrations utilisateurs, profils, rôles et permissions",
+      "module": "identity",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Tables users/user_profiles/roles/permissions/user_roles + statut du compte.",
+      "acceptance": [
+        "Migrations réversibles",
+        "Seeders des rôles : Super Admin, Opérations, Finance, Support, Conformité"
+      ]
+    },
+    {
+      "id": "P2-02",
+      "title": "API inscription, connexion, déconnexion, /me (Sanctum)",
+      "module": "identity",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Publier la config Sanctum, choisir le mode SPA (cookie) pour le frontend, limiter les tentatives.",
+      "acceptance": [
+        "POST /auth/register, /auth/login, /auth/logout, GET /me",
+        "Rate limiting et message identique compte inconnu/mauvais mot de passe",
+        "Tests Feature"
+      ],
+      "depends": [
+        "P2-01"
+      ]
+    },
+    {
+      "id": "P2-03",
+      "title": "Récupération de compte sécurisée",
+      "module": "identity",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Réinitialisation de mot de passe par lien à usage unique et expirant.",
+      "acceptance": [
+        "Pas d'énumération des comptes",
+        "Tests"
+      ],
+      "depends": [
+        "P2-02"
+      ]
+    },
+    {
+      "id": "P2-04",
+      "title": "RBAC : middleware, policies et protection contre l'auto-élévation",
+      "module": "identity",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Vérification des permissions côté API ; un rôle ne peut pas s'accorder des permissions.",
+      "acceptance": [
+        "Middleware permission:xxx",
+        "Tests d'accès direct par identifiant (IDOR)"
+      ],
+      "depends": [
+        "P2-01",
+        "P0-06"
+      ]
+    },
+    {
+      "id": "P2-05",
+      "title": "MFA pour les rôles administratifs",
+      "module": "identity",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "TOTP obligatoire pour les comptes admin.",
+      "acceptance": [
+        "Accès admin refusé sans MFA",
+        "Codes de secours"
+      ],
+      "depends": [
+        "P2-04"
+      ]
+    },
+    {
+      "id": "P2-06",
+      "title": "Pages inscription, connexion, profil",
+      "module": "identity",
+      "area": "frontend",
+      "role": "frontend-public",
+      "description": "Formulaires connectés à l'API, gestion de session et routes protégées.",
+      "acceptance": [
+        "Erreurs de validation affichées",
+        "Redirection si non connecté"
+      ],
+      "depends": [
+        "P2-02",
+        "P1-05"
+      ]
+    },
+    {
+      "id": "P2-07",
+      "title": "Tests d'accès et de session",
+      "module": "identity",
+      "area": "qa",
+      "role": "devops-qa",
+      "description": "Couverture des scénarios : expiration, révocation, rôles, accès direct.",
+      "acceptance": [
+        "Suite de tests verte en CI"
+      ],
+      "depends": [
+        "P2-04"
+      ]
+    },
+    {
+      "id": "P3-01",
+      "title": "Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes",
+      "module": "sports-data",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Références internes et externes, statut, version de cote, horodatage de synchronisation (§5).",
+      "acceptance": [
+        "Index événement/statut",
+        "Identifiant fournisseur unique par entité"
+      ]
+    },
+    {
+      "id": "P3-02",
+      "title": "Interface SportsDataProvider + faux fournisseur",
+      "module": "sports-data",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Contrat dans app/Modules/SportsData/Contracts ; implémentation Fake pour dev/tests ; implémentation réelle du fournisseur sandbox.",
+      "acceptance": [
+        "Sélection du fournisseur via SPORTS_DATA_PROVIDER",
+        "Tests avec le faux fournisseur"
+      ],
+      "depends": [
+        "P0-02"
+      ]
+    },
+    {
+      "id": "P3-03",
+      "title": "Jobs de synchronisation (queue) avec validation",
+      "module": "sports-data",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Jobs planifiés idempotents ; validation schéma, source, horodatage, état.",
+      "acceptance": [
+        "Relance sans doublon",
+        "Erreurs fournisseur journalisées"
+      ],
+      "depends": [
+        "P3-01",
+        "P3-02"
+      ]
+    },
+    {
+      "id": "P3-04",
+      "title": "Règle de fraîcheur et suspension automatique des marchés",
+      "module": "sports-data",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Marché suspendu/masqué si cote périmée, incohérente ou panne fournisseur (§4.1).",
+      "acceptance": [
+        "Seuil de fraîcheur configurable",
+        "Tests panne fournisseur"
+      ],
+      "depends": [
+        "P3-03"
+      ]
+    },
+    {
+      "id": "P3-05",
+      "title": "API catalogue public",
+      "module": "catalogue",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "GET /sports, /competitions, /events, /events/{id}/markets avec filtrage des événements fermés.",
+      "acceptance": [
+        "Cotes périmées jamais exposées",
+        "Documenté dans OpenAPI"
+      ],
+      "depends": [
+        "P3-04"
+      ]
+    },
+    {
+      "id": "P3-06",
+      "title": "Pages sports, compétitions, matchs et cotes",
+      "module": "catalogue",
+      "area": "frontend",
+      "role": "frontend-public",
+      "description": "Navigation sport → compétition → match → marchés ; ajout d'une sélection au coupon.",
+      "acceptance": [
+        "Responsive",
+        "État 'marché suspendu' affiché"
+      ],
+      "depends": [
+        "P3-05"
+      ]
+    },
+    {
+      "id": "P4-01",
+      "title": "Migrations tickets et sélections de ticket",
+      "module": "betting",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "bet_tickets/bet_selections : référence unique, mise (entier), cote acceptée, instantané des règles.",
+      "acceptance": [
+        "Référence unique contrainte en base",
+        "Pas de float"
+      ],
+      "depends": [
+        "P3-01"
+      ]
+    },
+    {
+      "id": "P4-02",
+      "title": "Middleware clé d'idempotence",
+      "module": "core",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "En-tête Idempotency-Key obligatoire sur les routes à effet ; même clé = même réponse.",
+      "acceptance": [
+        "Requête rejouée ne crée rien de nouveau",
+        "Tests concurrence"
+      ]
+    },
+    {
+      "id": "P4-03",
+      "title": "POST /bets : revalidation serveur et transaction atomique",
+      "module": "betting",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Recharger le marché, revalider cote/limites/éligibilité/fonds, appliquer la politique de changement de cote, créer le ticket + réserver la mise (§4.2).",
+      "acceptance": [
+        "Cote du client jamais utilisée comme autorité",
+        "Reçu immuable retourné",
+        "Tests doublon, cote changée, événement fermé"
+      ],
+      "depends": [
+        "P4-01",
+        "P4-02",
+        "P5-02",
+        "P0-04"
+      ]
+    },
+    {
+      "id": "P4-04",
+      "title": "GET /bets et GET /bets/{id}",
+      "module": "betting",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Historique et détail des tickets du joueur connecté uniquement.",
+      "acceptance": [
+        "Accès au ticket d'un autre joueur refusé (test IDOR)"
+      ],
+      "depends": [
+        "P4-01"
+      ]
+    },
+    {
+      "id": "P4-05",
+      "title": "Coupon de pari et confirmation de changement de cote",
+      "module": "betting",
+      "area": "frontend",
+      "role": "frontend-public",
+      "description": "Sélections, mise, gain potentiel indicatif, envoi avec Idempotency-Key, gestion du refus/nouvelle cote.",
+      "acceptance": [
+        "Double clic ne crée pas deux tickets",
+        "Message clair si cote changée"
+      ],
+      "depends": [
+        "P4-03",
+        "P3-06"
+      ]
+    },
+    {
+      "id": "P4-06",
+      "title": "Historique des tickets",
+      "module": "betting",
+      "area": "frontend",
+      "role": "frontend-public",
+      "description": "Liste et détail des tickets avec statut.",
+      "acceptance": [
+        "Pagination",
+        "Statuts lisibles"
+      ],
+      "depends": [
+        "P4-04"
+      ]
+    },
+    {
+      "id": "P4-07",
+      "title": "Tests d'acceptation tickets",
+      "module": "betting",
+      "area": "qa",
+      "role": "devops-qa",
+      "description": "Critères §11 : marché fermé, cote périmée, doublon, erreur fournisseur.",
+      "acceptance": [
+        "Tous les critères §11 liés aux tickets couverts"
+      ],
+      "depends": [
+        "P4-03"
+      ]
+    },
+    {
+      "id": "P5-01",
+      "title": "Migrations wallets et ledger_entries",
+      "module": "wallet",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Montants en bigInteger (unité mineure) + devise ; référence métier unique ; append-only.",
+      "acceptance": [
+        "Contrainte d'unicité sur la référence métier",
+        "Aucune route de modification de solde"
+      ],
+      "depends": [
+        "P0-05"
+      ]
+    },
+    {
+      "id": "P5-02",
+      "title": "Service Ledger : écritures, réservation de mise, compensations",
+      "module": "wallet",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Service unique pour toute écriture financière ; utilise App\\Support\\Money.",
+      "acceptance": [
+        "Solde = somme des écritures",
+        "Corrections uniquement par écritures compensatoires",
+        "Tests unitaires"
+      ],
+      "depends": [
+        "P5-01"
+      ]
+    },
+    {
+      "id": "P5-03",
+      "title": "API portefeuille en lecture",
+      "module": "wallet",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "GET /wallet et /wallet/transactions.",
+      "acceptance": [
+        "Lecture privée du propriétaire uniquement"
+      ],
+      "depends": [
+        "P5-02"
+      ]
+    },
+    {
+      "id": "P5-04",
+      "title": "Migrations résultats/règlements et import de résultats de test",
+      "module": "settlement",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Source, référence externe, version, historique de correction.",
+      "acceptance": [
+        "Résultats de test importables via le faux fournisseur"
+      ],
+      "depends": [
+        "P3-02"
+      ]
+    },
+    {
+      "id": "P5-05",
+      "title": "Service de règlement idempotent",
+      "module": "settlement",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Calcul du statut à partir de la cote et des règles figées ; écriture ledger idempotente (§4.3).",
+      "acceptance": [
+        "Relance ne paie jamais deux fois (test)",
+        "Job relançable"
+      ],
+      "depends": [
+        "P5-02",
+        "P5-04",
+        "P4-03"
+      ]
+    },
+    {
+      "id": "P5-06",
+      "title": "Correction de résultat auditée",
+      "module": "settlement",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Réévaluation et écritures compensatoires en cas de résultat corrigé ; double contrôle.",
+      "acceptance": [
+        "Historique complet consultable",
+        "Action auditée"
+      ],
+      "depends": [
+        "P5-05",
+        "P6-01"
+      ]
+    },
+    {
+      "id": "P5-07",
+      "title": "Page portefeuille",
+      "module": "wallet",
+      "area": "frontend",
+      "role": "frontend-public",
+      "description": "Solde (fourni par l'API) et historique des transactions.",
+      "acceptance": [
+        "Aucun calcul de solde côté client"
+      ],
+      "depends": [
+        "P5-03"
+      ]
+    },
+    {
+      "id": "P6-01",
+      "title": "Journal d'audit (admin_actions / audit_logs)",
+      "module": "audit",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Acteur, action, ressource, avant/après, motif ; service réutilisable par tous les modules.",
+      "acceptance": [
+        "Append-only",
+        "Motif obligatoire pour les actions sensibles"
+      ],
+      "depends": [
+        "P2-04"
+      ]
+    },
+    {
+      "id": "P6-02",
+      "title": "API admin événements et marchés",
+      "module": "admin",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Consulter, suspendre/masquer un marché, voir origine et fraîcheur.",
+      "acceptance": [
+        "RBAC testé",
+        "Actions auditées"
+      ],
+      "depends": [
+        "P6-01",
+        "P3-05"
+      ]
+    },
+    {
+      "id": "P6-03",
+      "title": "API admin utilisateurs",
+      "module": "admin",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Recherche, consultation du statut, suspension autorisée avec motif.",
+      "acceptance": [
+        "Données minimales pour le rôle Support",
+        "Actions auditées"
+      ],
+      "depends": [
+        "P6-01"
+      ]
+    },
+    {
+      "id": "P6-04",
+      "title": "API admin tickets et finance",
+      "module": "admin",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Recherche de tickets, ledger, rapprochement, écarts ; double validation pour corrections critiques.",
+      "acceptance": [
+        "Rôle Finance séparé",
+        "Double validation testée"
+      ],
+      "depends": [
+        "P6-01",
+        "P5-02"
+      ]
+    },
+    {
+      "id": "P6-05",
+      "title": "Admin : authentification, layout et vue d'ensemble",
+      "module": "admin",
+      "area": "frontend",
+      "role": "frontend-admin",
+      "description": "Connexion admin (avec MFA), menu selon permissions, tableau de bord (état synchro, alertes, opérations en attente).",
+      "acceptance": [
+        "Menu filtré selon les permissions reçues de l'API"
+      ],
+      "depends": [
+        "P2-05",
+        "P1-05"
+      ]
+    },
+    {
+      "id": "P6-06",
+      "title": "Admin : écrans Événements & marchés et Résultats & règlement",
+      "module": "admin",
+      "area": "frontend",
+      "role": "frontend-admin",
+      "description": "Liste/filtre des événements, suspension/masquage d’un marché avec motif, suivi des résultats et règlements.",
+      "acceptance": [
+        "Motif demandé avant chaque action sensible",
+        "Origine et fraîcheur des données visibles"
+      ],
+      "depends": [
+        "P6-05",
+        "P6-02"
+      ]
+    },
+    {
+      "id": "P6-07",
+      "title": "Admin : écrans Utilisateurs et Tickets",
+      "module": "admin",
+      "area": "frontend",
+      "role": "frontend-admin",
+      "description": "Recherche de comptes, suspension avec motif ; recherche de tickets par référence, statut, date, utilisateur.",
+      "acceptance": [
+        "Tableaux filtrables et paginés",
+        "Données minimales selon le rôle"
+      ],
+      "depends": [
+        "P6-05",
+        "P6-03",
+        "P6-04"
+      ]
+    },
+    {
+      "id": "P6-08",
+      "title": "Admin : écrans Finance, Paramètres et Audit",
+      "module": "admin",
+      "area": "frontend",
+      "role": "frontend-admin",
+      "description": "Ledger, rapprochement, écarts ; limites et configuration ; journal d’audit et exports.",
+      "acceptance": [
+        "Double validation visible pour les corrections critiques",
+        "Exports journalisés"
+      ],
+      "depends": [
+        "P6-05",
+        "P6-04",
+        "P6-01"
+      ]
+    },
+    {
+      "id": "P6-09",
+      "title": "Matrice des permissions validée par tests API",
+      "module": "admin",
+      "area": "qa",
+      "role": "devops-qa",
+      "description": "Un test par ligne de docs/permissions-matrix.md.",
+      "acceptance": [
+        "Matrice 100 % couverte"
+      ],
+      "depends": [
+        "P6-02",
+        "P6-03",
+        "P6-04"
+      ]
+    },
+    {
+      "id": "P7-01",
+      "title": "Payments Adapter (BLOQUÉ jusqu'à validation juridique)",
+      "module": "payments",
+      "area": "backend",
+      "role": "backend-core",
+      "description": "Interface prestataire, webhooks signés, anti-rejeu, rapprochement. Ne pas activer de flux réel.",
+      "acceptance": [
+        "Validation juridique et contractuelle écrite",
+        "Tests en sandbox uniquement"
+      ],
+      "depends": [
+        "P0-01",
+        "P5-02"
+      ],
+      "blocked": true
+    },
+    {
+      "id": "P7-02",
+      "title": "Jeu responsable : limites, pause, auto-exclusion",
+      "module": "compliance",
+      "area": "backend",
+      "role": "backend-data",
+      "description": "Selon les exigences du territoire validé.",
+      "acceptance": [
+        "Limites appliquées à POST /bets",
+        "Événements journalisés"
+      ],
+      "depends": [
+        "P0-01",
+        "P4-03"
+      ]
+    },
+    {
+      "id": "P8-01",
+      "title": "Tests E2E du parcours complet",
+      "module": "qa",
+      "area": "qa",
+      "role": "devops-qa",
+      "description": "Compte → événement → coupon → ticket simulé → résultat test → règlement simulé (Playwright).",
+      "acceptance": [
+        "E2E exécuté en CI sur Staging"
+      ],
+      "depends": [
+        "P5-05",
+        "P4-05"
+      ]
+    },
+    {
+      "id": "P8-02",
+      "title": "Revue de sécurité",
+      "module": "qa",
+      "area": "qa",
+      "role": "devops-qa",
+      "description": "OWASP : CORS strict, CSRF, XSS, injection, en-têtes, secrets, dépendances.",
+      "acceptance": [
+        "Rapport avec corrections des points bloquants"
+      ]
+    },
+    {
+      "id": "P8-03",
+      "title": "Test de charge adapté",
+      "module": "qa",
+      "area": "qa",
+      "role": "devops-qa",
+      "description": "Catalogue et POST /bets sous charge attendue.",
+      "acceptance": [
+        "Objectifs de temps de réponse atteints"
+      ]
+    },
+    {
+      "id": "P8-04",
+      "title": "Sauvegarde/restauration testée et procédure d'incident",
+      "module": "infra",
+      "area": "devops",
+      "role": "devops-qa",
+      "description": "Restauration dans un environnement contrôlé ; procédure documentée.",
+      "acceptance": [
+        "Restauration réussie et chronométrée",
+        "Runbook d'incident"
+      ]
+    },
+    {
+      "id": "P9-01",
+      "title": "Checklist de lancement et plan de rollback",
+      "module": "infra",
+      "area": "devops",
+      "role": "product",
+      "description": "Checklist signée, procès-verbal de recette, limites connues.",
+      "acceptance": [
+        "Checklist signée"
+      ],
+      "depends": [
+        "P8-01",
+        "P8-02",
+        "P8-04"
+      ]
+    },
+    {
+      "id": "P9-02",
+      "title": "Monitoring et alertes de production",
+      "module": "infra",
+      "area": "devops",
+      "role": "devops-qa",
+      "description": "Alertes : erreurs API, retard de synchronisation, échecs de règlement, anomalies financières.",
+      "acceptance": [
+        "Alertes testées",
+        "Astreinte définie"
+      ]
+    }
+  ]
+}
