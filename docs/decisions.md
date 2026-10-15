@@ -6,7 +6,7 @@ Une décision non validée = la fonctionnalité concernée reste **désactivée*
 | # | Sujet | Tâche | Statut | Décision | Date | Validé par |
 |---|---|---|---|---|---|---|
 | D-01 | Territoire, cadre juridique, licences | P0-01 | 🟡 À décider | | | |
-| D-02 | Fournisseur de données sportives et cotes (droits, limites, sandbox) | P0-02 | 🟡 À décider | | | |
+| D-02 | Fournisseur de données sportives et cotes (droits, limites, sandbox) | P0-02 | 🟡 Pressenti | **The Odds API** (accès détenu par Rubly) — à confirmer : droits d'usage pour des paris, quotas, sports couverts, résultats (scores) | | |
 | D-03 | Sports, compétitions et marchés V1 | P0-03 | 🟡 À décider | | | |
 | D-04 | Types de paris V1 : simple seulement ou combiné | P0-03 | 🟡 À décider | | | |
 | D-05 | Politique changement de cote / annulation / report / abandon / correction | P0-04 | 🟡 À décider | | | |
