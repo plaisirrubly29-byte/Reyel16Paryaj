@@ -1,13 +1,31 @@
-# Relecteurs obligatoires par zone. Remplacer les @utilisateurs par les comptes GitHub de l'équipe.
-# Le dernier motif correspondant l'emporte.
+# Relecteurs demandés automatiquement par zone (docs/REPARTITION.md).
+# Le dernier motif correspondant l'emporte. Les comptes doivent avoir un accès en écriture au dépôt.
+#
+# Équipe : @plaisirrubly29-byte (chef de projet, dev full-stack) · @benginio (dev full-stack)
+#          @widsondelne7376-design (analyste conception)
+# Règle : chaque PR est relue par l'AUTRE développeur ; 2 relecteurs pour tout ce qui touche à l'argent.
 
-*                                   @plaisirrubly29-byte
+# Par défaut : les deux développeurs
+*                                           @plaisirrubly29-byte @benginio
 
-# /backend/                         @backend-lead
-# /backend/app/Modules/Wallet/      @backend-lead @finance-reviewer
-# /backend/app/Modules/Settlement/  @backend-lead @finance-reviewer
-# /backend/app/Modules/Betting/     @backend-dev
-# /backend/app/Modules/SportsData/  @backend-dev
-# /frontend/                        @frontend-lead
-# /frontend/src/admin/              @admin-dev
-# /.github/ /docker-compose.yml     @devops
+# Domaine Rubly — Compte, argent & administration (relu par Benginio)
+/backend/app/Modules/IdentityAccess/        @benginio @plaisirrubly29-byte
+/backend/app/Modules/Audit/                 @benginio @plaisirrubly29-byte
+/backend/app/Modules/Admin/                 @benginio @plaisirrubly29-byte
+/backend/app/Modules/Wallet/                @benginio @plaisirrubly29-byte
+/backend/app/Modules/Settlement/            @benginio @plaisirrubly29-byte
+/backend/app/Modules/Payments/              @benginio @plaisirrubly29-byte
+/backend/app/Support/Money.php              @benginio @plaisirrubly29-byte
+/backend/config/permissions.php             @benginio @plaisirrubly29-byte
+/.github/                                   @benginio @plaisirrubly29-byte
+
+# Domaine Benginio — Sports, paris & opérations (relu par Rubly)
+/backend/app/Modules/SportsData/            @plaisirrubly29-byte @benginio
+/backend/app/Modules/Catalogue/             @plaisirrubly29-byte @benginio
+/backend/app/Modules/Betting/               @plaisirrubly29-byte @benginio
+/docker-compose.yml                         @plaisirrubly29-byte @benginio
+/backend/Dockerfile                         @plaisirrubly29-byte @benginio
+
+# Décisions et règles métier : l'analyste conception est aussi demandé
+/docs/decisions.md                          @plaisirrubly29-byte @widsondelne7376-design
+/docs/permissions-matrix.md                 @plaisirrubly29-byte @widsondelne7376-design @benginio
