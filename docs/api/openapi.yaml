@@ -5,6 +5,9 @@ info:
   description: |
     Contrat de l'API v1. Toute route doit être documentée ici AVANT l'intégration frontend.
     Les routes marquées `x-task` ne sont pas encore implémentées.
+
+    Conventions (format des réponses, codes d'erreur, pagination, idempotence) : docs/api/README.md.
+    Toute erreur suit le schéma `Error`.
 servers:
   - url: http://localhost:8000/api/v1
     description: Développement local
@@ -67,7 +70,7 @@ paths:
       responses:
         "201": { description: Ticket créé (reçu immuable) }
         "409": { description: Cote changée — confirmation requise }
-        "422": { description: Marché fermé, limites, solde insuffisant }
+        "422": { description: "Marché fermé, limites, solde insuffisant" }
     get: { tags: [Bets], summary: Mes tickets, x-task: P4-04, responses: { "200": { description: OK } } }
   /bets/{id}:
     get:
@@ -112,7 +115,91 @@ components:
       required: true
       description: UUID unique par intention utilisateur. Une requête rejouée renvoie la même réponse.
       schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      description: Taille de page, bornée à 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    ValidationError:
+      description: Données invalides
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              code: validation_failed
+              message: Les données envoyées sont invalides.
+              details: { email: ["Le champ email est obligatoire."] }
+    Unauthenticated:
+      description: Authentification requise
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: unauthenticated, message: Authentification requise. } }
+    Forbidden:
+      description: Permission refusée
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: forbidden, message: Action non autorisée. } }
+    NotFound:
+      description: Introuvable (ou non autorisé, sans révéler l'existence)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: not_found, message: Ressource introuvable. } }
+    TooManyRequests:
+      description: Trop de tentatives
+      headers:
+        Retry-After: { schema: { type: integer }, description: Secondes avant de réessayer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: too_many_requests, message: Trop de tentatives. Réessayez plus tard. } }
+
   schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Identifiant stable (snake_case) sur lequel le client se base.
+              example: validation_failed
+            message:
+              type: string
+              description: Message lisible, affichable tel quel.
+            details:
+              type: object
+              additionalProperties: true
+              description: Informations complémentaires (ex. erreurs par champ).
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: [string, "null"] }
+        last: { type: [string, "null"] }
+        prev: { type: [string, "null"] }
+        next: { type: [string, "null"] }
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
+        from: { type: [integer, "null"] }
+        to: { type: [integer, "null"] }
+        path: { type: string }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
