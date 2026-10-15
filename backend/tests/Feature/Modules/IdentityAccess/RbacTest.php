@@ -66,7 +66,7 @@ class RbacTest extends TestCase
         $player = User::factory()->create();
 
         $this->actingAs($finance)->getJson('/api/v1/_test/ledger')->assertOk();
-        $this->actingAs($operations)->getJson('/api/v1/_test/ledger')->assertForbidden()->assertJsonPath('error.code', 'forbidden');
+        $this->actingAsVerifiedAdmin($operations)->getJson('/api/v1/_test/ledger')->assertForbidden()->assertJsonPath('error.code', 'forbidden');
         $this->actingAs($player)->getJson('/api/v1/_test/ledger')->assertForbidden();
     }
 
@@ -75,8 +75,8 @@ class RbacTest extends TestCase
         $compliance = User::factory()->withRole(RoleSlug::Compliance)->create();
         $support = User::factory()->withRole(RoleSlug::Support)->create();
 
-        $this->actingAs($compliance)->getJson('/api/v1/_test/audit-or-ledger')->assertOk();
-        $this->actingAs($support)->getJson('/api/v1/_test/audit-or-ledger')->assertForbidden();
+        $this->actingAsVerifiedAdmin($compliance)->getJson('/api/v1/_test/audit-or-ledger')->assertOk();
+        $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/_test/audit-or-ledger')->assertForbidden();
     }
 
     public function test_guest_gets_401_not_403(): void
@@ -109,7 +109,7 @@ class RbacTest extends TestCase
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
         $target = User::factory()->withRole(RoleSlug::Support)->create();
 
-        $this->actingAs($admin)->putRoles($target, ['support', 'finance'])
+        $this->actingAsVerifiedAdmin($admin)->putRoles($target, ['support', 'finance'])
             ->assertOk()
             ->assertJsonPath('data.roles', ['finance', 'support']);
 
@@ -124,7 +124,7 @@ class RbacTest extends TestCase
     {
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
 
-        $this->actingAs($admin)->putRoles($admin, [])
+        $this->actingAsVerifiedAdmin($admin)->putRoles($admin, [])
             ->assertForbidden()
             ->assertJsonPath('error.code', 'cannot_modify_own_roles');
 
@@ -136,8 +136,8 @@ class RbacTest extends TestCase
         $support = User::factory()->withRole(RoleSlug::Support)->create();
         $other = User::factory()->create();
 
-        $this->actingAs($support)->putRoles($support, ['super_admin'])->assertForbidden();
-        $this->actingAs($support)->putRoles($other, ['super_admin'])->assertForbidden();
+        $this->actingAsVerifiedAdmin($support)->putRoles($support, ['super_admin'])->assertForbidden();
+        $this->actingAsVerifiedAdmin($support)->putRoles($other, ['super_admin'])->assertForbidden();
 
         $this->assertFalse($support->fresh()->hasRole(RoleSlug::SuperAdmin));
         $this->assertSame(0, $other->roles()->count());
@@ -160,8 +160,8 @@ class RbacTest extends TestCase
         $support = User::factory()->withRole(RoleSlug::Support)->create();
         $existing = User::factory()->create();
 
-        $forExisting = $this->actingAs($support)->putRoles($existing, ['support']);
-        $forMissing = $this->actingAs($support)->putJson('/api/v1/admin/users/999999/roles', ['roles' => ['support'], 'reason' => 'Test motif'], [
+        $forExisting = $this->actingAsVerifiedAdmin($support)->putRoles($existing, ['support']);
+        $forMissing = $this->actingAsVerifiedAdmin($support)->putJson('/api/v1/admin/users/999999/roles', ['roles' => ['support'], 'reason' => 'Test motif'], [
             'Idempotency-Key' => (string) Str::uuid(),
         ]);
 
@@ -174,11 +174,11 @@ class RbacTest extends TestCase
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
         $target = User::factory()->create();
 
-        $this->actingAs($admin)->putJson('/api/v1/admin/users/999999/roles', ['roles' => [], 'reason' => 'Test motif'], [
+        $this->actingAsVerifiedAdmin($admin)->putJson('/api/v1/admin/users/999999/roles', ['roles' => [], 'reason' => 'Test motif'], [
             'Idempotency-Key' => (string) Str::uuid(),
         ])->assertNotFound();
 
-        $this->actingAs($admin)->putRoles($target, ['god_mode'])
+        $this->actingAsVerifiedAdmin($admin)->putRoles($target, ['god_mode'])
             ->assertStatus(422)
             ->assertJsonStructure(['error' => ['details' => ['roles.0']]]);
     }
@@ -188,7 +188,7 @@ class RbacTest extends TestCase
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
         $target = User::factory()->create();
 
-        $this->actingAs($admin)->putRoles($target, ['support'], '')
+        $this->actingAsVerifiedAdmin($admin)->putRoles($target, ['support'], '')
             ->assertStatus(422)
             ->assertJsonStructure(['error' => ['details' => ['reason']]]);
     }
@@ -198,7 +198,7 @@ class RbacTest extends TestCase
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
         $target = User::factory()->create();
 
-        $this->actingAs($admin)->putJson("/api/v1/admin/users/{$target->id}/roles", ['roles' => ['support'], 'reason' => 'Nouveau poste'])
+        $this->actingAsVerifiedAdmin($admin)->putJson("/api/v1/admin/users/{$target->id}/roles", ['roles' => ['support'], 'reason' => 'Nouveau poste'])
             ->assertStatus(428);
     }
 }

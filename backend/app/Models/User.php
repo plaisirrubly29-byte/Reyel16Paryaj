@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -23,9 +24,13 @@ use Illuminate\Support\Collection;
  * @property string $name
  * @property string $email
  * @property AccountStatus $status
+ * @property string|null $mfa_secret
+ * @property Carbon|null $mfa_confirmed_at
+ * @property list<string>|null $mfa_recovery_codes
+ * @property int|null $mfa_last_used_step
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -53,6 +58,10 @@ class User extends Authenticatable
             'status' => AccountStatus::class,
             'status_changed_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'mfa_secret' => 'encrypted',
+            'mfa_confirmed_at' => 'datetime',
+            'mfa_recovery_codes' => 'encrypted:array',
+            'mfa_last_used_step' => 'integer',
         ];
     }
 
