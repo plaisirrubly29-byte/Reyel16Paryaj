@@ -143,3 +143,13 @@ nav a.active { color: var(--accent); }
   .details { grid-template-columns: 1fr; gap: 0.1rem; }
   .details dd { margin-bottom: 0.5rem; }
 }
+
+/* --- Portefeuille --- */
+h2 { font-size: 1.2rem; margin: 0; }
+.small { font-size: 0.85rem; }
+.balance-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; background: var(--surface); border-radius: var(--radius); padding: 1.25rem; }
+.balance-card .muted { width: 100%; }
+.balance { font-size: 2rem; }
+.badge { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.1rem 0.6rem; font-size: 0.8rem; color: var(--muted); }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: end; justify-content: space-between; }
+.field-inline { min-width: 220px; }
