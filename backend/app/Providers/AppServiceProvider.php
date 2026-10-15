@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -26,6 +28,22 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configurePasswords();
         $this->configureRateLimiting();
+        $this->configureAuthorization();
+    }
+
+    /**
+     * Les permissions RBAC sont utilisables comme abilities : Gate::allows('users.suspend'),
+     * $this->authorize('ledger.view'), @can… Une permission absente est un refus explicite.
+     */
+    private function configureAuthorization(): void
+    {
+        Gate::before(function (User $user, string $ability) {
+            if (array_key_exists($ability, config('permissions.permissions'))) {
+                return $user->hasPermission($ability);
+            }
+
+            return null;
+        });
     }
 
     private function configurePasswords(): void

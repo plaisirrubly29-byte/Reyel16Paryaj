@@ -201,6 +201,46 @@ paths:
       x-task: P6-02
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+  /admin/users/{id}/roles:
+    put:
+      tags: [Admin]
+      summary: Remplacer les rôles administratifs d'un utilisateur
+      description: |
+        Permission `roles.manage` (Super Admin). Interdit sur son propre compte (`403 cannot_modify_own_roles`).
+        Sans permission : 403, que l'identifiant existe ou non.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles, reason]
+              properties:
+                roles:
+                  type: array
+                  items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Rôles mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      roles: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/users/{id}:
     patch:
       tags: [Admin]
