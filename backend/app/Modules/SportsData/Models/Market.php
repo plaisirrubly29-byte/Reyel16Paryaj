@@ -3,6 +3,7 @@
 namespace App\Modules\SportsData\Models;
 
 use App\Modules\SportsData\Enums\MarketStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -29,6 +30,26 @@ class Market extends Model
             'odds_version' => 'integer',
             'odds_updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Marchés sur lesquels on peut parier : ouverts ET dont la cote est assez récente (règle de fraîcheur).
+     * Une cote trop ancienne (synchro en panne, fournisseur indisponible) n'est jamais proposée.
+     *
+     * @param  Builder<Market>  $query
+     */
+    public function scopeBettable(Builder $query): void
+    {
+        $query->where('status', MarketStatus::Open)
+            ->whereNotNull('odds_updated_at')
+            ->where('odds_updated_at', '>=', now()->subMinutes((int) config('sports_data.max_odds_age_minutes')));
+    }
+
+    public function isBettable(): bool
+    {
+        return $this->status === MarketStatus::Open
+            && $this->odds_updated_at !== null
+            && $this->odds_updated_at->gte(now()->subMinutes((int) config('sports_data.max_odds_age_minutes')));
     }
 
     /** @return BelongsTo<Event, $this> */
