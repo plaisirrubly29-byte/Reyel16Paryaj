@@ -15,7 +15,7 @@ L'analyste conseil n'a aucune tâche : il relit les choix de conception et conse
 |---|---|---|---|---|
 | **Rubly PLAISIR** | Chef de projet & développeur full-stack | @plaisirrubly29-byte | Pilotage (juridique, hébergement, lancement) + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, admin Utilisateurs/Tickets/Finance, CI & Staging | 26 |
 | **Benginio Jean-Baptiste** | Développeur full-stack | @benginio | Sports, paris & opérations — Données sportives, Catalogue, Coupon & tickets, admin Événements/Résultats, Docker, logs, E2E, charge, sauvegardes, monitoring, revue de sécurité | 26 |
-| **Widsondelne7376** | Analyste — conception | @Widsondelne7376 | Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données | 5 |
+| **Widsondelne7376** | Analyste — conception | @widsondelne7376-design | Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données | 5 |
 | **Marckendy Fevrier** | Analyste conseil (neutre) | @MarckendyFevrier | Assiste et conseille l’équipe (revue des choix de conception, avis sur les livrables). Aucune tâche assignée. | — |
 
 ## Vagues
@@ -97,7 +97,7 @@ _Sports, paris & opérations — Données sportives, Catalogue, Coupon & tickets
 | 6 | P8-04 | Sauvegarde/restauration testée et procédure d'incident | — |
 | 6 | P9-02 | Monitoring et alertes de production | — |
 
-## Widsondelne7376 — Analyste — conception (@Widsondelne7376)
+## Widsondelne7376 — Analyste — conception (@widsondelne7376-design)
 
 _Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données_
 
