@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 
 /**
  * @property int $id
@@ -88,5 +89,22 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->roles->contains('is_admin', true);
+    }
+
+    /**
+     * Permissions obtenues via les rôles (config/permissions.php).
+     *
+     * @return Collection<int, string>
+     */
+    public function permissionSlugs(): Collection
+    {
+        $this->loadMissing('roles.permissions');
+
+        return $this->roles->flatMap(fn (Role $role) => $role->permissions->pluck('slug'))->unique()->values();
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        return $this->permissionSlugs()->contains($permission);
     }
 }

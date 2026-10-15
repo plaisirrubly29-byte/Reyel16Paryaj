@@ -2,6 +2,7 @@
 
 use App\Modules\IdentityAccess\Http\Controllers\AuthController;
 use App\Modules\IdentityAccess\Http\Controllers\PasswordResetController;
+use App\Modules\IdentityAccess\Http\Controllers\RoleAssignmentController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -21,4 +22,9 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
+Route::middleware(['auth:sanctum', 'active'])->group(function () {
+    Route::get('/me', [AuthController::class, 'me']);
+
+    Route::put('/admin/users/{user}/roles', [RoleAssignmentController::class, 'update'])
+        ->middleware(['permission:roles.manage', 'idempotent']);
+});

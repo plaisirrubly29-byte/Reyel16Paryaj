@@ -38,6 +38,14 @@ Comptes de démonstration (local) : `php artisan db:seed` — `joueur@example.co
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/me`
 
+## RBAC (P2-04)
+
+- Matrice : `config/permissions.php` (brouillon P0-06), synchronisée par `PermissionSeeder`.
+- Route protégée : `->middleware(['auth:sanctum', 'active', 'permission:users.suspend'])`.
+- Dans le code : `$user->hasPermission('ledger.view')` ou `Gate::allows('ledger.view')`.
+- `active` coupe l'accès d'un compte suspendu même si sa session est ouverte.
+- `permission` s'exécute avant la résolution des modèles de l'URL (403 sans révéler si l'identifiant existe).
+
 ## Règles à respecter
 
 - Mots de passe hachés (cast `hashed`), limitation des tentatives, pas d’énumération des comptes.

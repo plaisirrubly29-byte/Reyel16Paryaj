@@ -1,11 +1,14 @@
 <?php
 
 use App\Http\Middleware\RequireIdempotencyKey;
+use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
+use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
 use App\Support\Http\ApiErrorRenderer;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -24,7 +27,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'idempotent' => RequireIdempotencyKey::class,
+            'permission' => RequirePermission::class,
+            'active' => EnsureAccountIsActive::class,
         ]);
+
+        // Permissions vérifiées AVANT la résolution des {modèles} de l'URL : sans permission, 403 que
+        // l'identifiant existe ou non (pas de sondage des identifiants).
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureAccountIsActive::class);
+        $middleware->prependToPriorityList(SubstituteBindings::class, RequirePermission::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

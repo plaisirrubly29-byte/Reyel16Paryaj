@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(RoleSeeder::class);
+        $this->call(PermissionSeeder::class);
 
         // Comptes de démonstration — environnement local uniquement (mot de passe : "password").
         if (! app()->environment('local', 'testing')) {
