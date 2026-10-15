@@ -1,0 +1,9 @@
+# Lint du contrat OpenAPI (docs/api/openapi.yaml) — exécuté par la CI.
+# Base "minimal" tant que le contrat est en brouillon ; durcir (recommended) quand les routes sont implémentées.
+extends:
+  - minimal
+rules:
+  struct: error
+  no-unresolved-refs: error
+  security-defined: off # à activer avec la section securitySchemes (P2-02)
+  no-unused-components: off # composants partagés ajoutés avant les routes qui les utilisent
