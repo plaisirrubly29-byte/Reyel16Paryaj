@@ -245,6 +245,38 @@ class TheOddsApiProviderTest extends TestCase
         }
     }
 
+    public function test_paid_calls_are_never_retried_on_network_failure(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            $attempts++;
+            throw new ConnectionException('cURL error 28: Operation timed out');
+        });
+
+        try {
+            $this->provider()->events('soccer_epl');
+        } catch (SportsDataException $e) {
+            $this->assertSame(SportsDataException::UNAVAILABLE, $e->reason);
+        }
+
+        $this->assertSame(1, $attempts, 'Un appel payant a été rejoué (crédit gaspillé).');
+    }
+
+    public function test_free_calls_are_retried_on_network_failure(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            if (++$attempts < 3) {
+                throw new ConnectionException('cURL error 28: Operation timed out');
+            }
+
+            return Http::response([], 200);
+        });
+
+        $this->assertSame([], $this->provider()->sports());
+        $this->assertSame(3, $attempts);
+    }
+
     public function test_missing_key_is_refused_before_any_call(): void
     {
         config(['sports_data.theodds.key' => null]);

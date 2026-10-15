@@ -13,7 +13,7 @@ return [
     'theodds' => [
         'url' => env('SPORTS_DATA_API_URL', 'https://api.the-odds-api.com/v4'),
         'key' => env('SPORTS_DATA_API_KEY'),
-        'timeout' => (int) env('SPORTS_DATA_TIMEOUT', 10),
+        'timeout' => (int) env('SPORTS_DATA_TIMEOUT', 30),
 
         // Coût d'un appel de cotes = nombre de marchés × nombre de régions (en crédits).
         'regions' => env('SPORTS_DATA_REGIONS', 'eu'),
@@ -25,6 +25,18 @@ return [
 
     // Sports synchronisés (clés du fournisseur), ex. "soccer_epl,basketball_nba". Liste V1 : décision D-03 (P0-03).
     'sports' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_SPORTS', 'soccer_epl'))))),
+
+    // Noms affichés des compétitions (le fournisseur n'a que des codes : "EPL", "NBA"…).
+    'competition_labels' => [
+        'soccer_epl' => ['name' => 'Premier League', 'country' => 'Angleterre'],
+        'soccer_france_ligue_one' => ['name' => 'Ligue 1', 'country' => 'France'],
+        'soccer_spain_la_liga' => ['name' => 'LaLiga', 'country' => 'Espagne'],
+        'soccer_italy_serie_a' => ['name' => 'Serie A', 'country' => 'Italie'],
+        'soccer_germany_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Allemagne'],
+        'soccer_uefa_champs_league' => ['name' => 'Ligue des champions', 'country' => 'Europe'],
+        'basketball_nba' => ['name' => 'NBA', 'country' => 'États-Unis'],
+        'baseball_mlb' => ['name' => 'MLB', 'country' => 'États-Unis'],
+    ],
 
     // Garde-fou : plus aucun appel payant quand le quota restant passe sous ce seuil.
     'min_remaining_requests' => (int) env('SPORTS_DATA_MIN_REMAINING', 25),

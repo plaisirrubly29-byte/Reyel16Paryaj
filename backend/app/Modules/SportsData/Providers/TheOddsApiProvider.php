@@ -177,7 +177,9 @@ class TheOddsApiProvider implements SportsDataProvider
                 ->baseUrl(rtrim($this->config['url'], '/'))
                 ->acceptJson()
                 ->timeout($this->config['timeout'])
-                ->retry(2, 500, fn ($e) => $e instanceof ConnectionException, throw: false)
+                // Nouvel essai réseau seulement pour les appels gratuits : rejouer un appel payant coûte un crédit,
+                // même si la première réponse n'est jamais arrivée (délai dépassé).
+                ->retry($paid ? 1 : 3, 500, fn ($e) => $e instanceof ConnectionException, throw: false)
                 ->get($path, ['apiKey' => $this->config['key']] + $query);
         } catch (ConnectionException $e) {
             throw new SportsDataException(SportsDataException::UNAVAILABLE, 'The Odds API injoignable : '.$this->redact($e->getMessage()), $e);

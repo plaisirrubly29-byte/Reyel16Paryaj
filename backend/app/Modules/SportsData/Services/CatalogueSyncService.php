@@ -134,10 +134,19 @@ class CatalogueSyncService
             ['name' => self::SPORT_NAMES[$slug] ?? ucfirst($slug)],
         );
 
-        return Competition::firstOrCreate(
+        $label = config("sports_data.competition_labels.{$data->sportKey}");
+
+        $competition = Competition::firstOrCreate(
             ['provider' => $this->provider->name(), 'external_key' => $data->sportKey],
-            ['sport_id' => $sport->id, 'name' => $data->competition],
+            ['sport_id' => $sport->id, 'name' => $label['name'] ?? $data->competition, 'country' => $label['country'] ?? null],
         );
+
+        // Un libellé configuré l'emporte sur le code du fournisseur (ex. "EPL" → "Premier League").
+        if ($label !== null && ($competition->name !== $label['name'] || $competition->country !== ($label['country'] ?? null))) {
+            $competition->update(['name' => $label['name'], 'country' => $label['country'] ?? null]);
+        }
+
+        return $competition;
     }
 
     /** Marché du bookmaker de référence (déjà filtré par le fournisseur s'il est configuré), sinon le premier. */

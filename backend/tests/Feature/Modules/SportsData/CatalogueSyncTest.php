@@ -50,7 +50,8 @@ class CatalogueSyncTest extends TestCase
         $this->assertTrue($report->succeeded());
         $this->assertSame(2, $report->eventsCreated);
         $this->assertSame('Football', Sport::where('slug', 'soccer')->value('name'));
-        $this->assertSame('EPL', Competition::where('external_key', 'soccer_epl')->value('name'));
+        $competition = Competition::where('external_key', 'soccer_epl')->firstOrFail();
+        $this->assertSame(['Premier League', 'Angleterre'], [$competition->name, $competition->country]);
 
         $event = Event::with(['homeTeam', 'awayTeam'])->where('external_id', 'fake-1')->firstOrFail();
         $this->assertSame('Arsenal', $event->homeTeam->name);
