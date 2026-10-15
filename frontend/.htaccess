@@ -1,0 +1,8 @@
+# XAMPP : frontend/index.html est le point d'entrée de Vite (code source non compilé), illisible tel quel
+# par le navigateur. On redirige donc la racine du dossier vers le build compilé (npm run build:xampp).
+# Le chemin est repris de l'URL demandée : fonctionne quel que soit l'emplacement du dépôt dans htdocs.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_URI} ^(.*/)(index\.html)?$
+  RewriteRule ^(index\.html)?$ %1dist/ [R=302,L]
+</IfModule>

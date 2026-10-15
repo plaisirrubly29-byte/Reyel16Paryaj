@@ -12,6 +12,19 @@ Règle d'or : **le frontend affiche, le serveur décide** (solde, cote acceptée
 | `npm run lint` | ESLint |
 | `npm run build` | Vérification TypeScript + build de production |
 
+### Consulter le site avec XAMPP (Apache)
+
+`index.html` est le point d'entrée de Vite : ouvert directement par Apache, il donne une **page blanche**
+(le navigateur ne sait pas exécuter le code TypeScript/React non compilé). Il faut d'abord compiler :
+
+```bash
+npm run build:xampp        # génère frontend/dist/ (chemin défini dans .env.xampp)
+```
+
+Puis ouvrir http://localhost/dashboard/Reyel16Paryaj/Reyel16Paryaj/frontend/ (redirigé vers `dist/`).
+Relancer `npm run build:xampp` après chaque modification. Pour développer, préférer `npm run dev`
+(rechargement instantané). L'API doit tourner à part (`php artisan serve`, PHP 8.3).
+
 Ouvrir le site via **`localhost`** (pas `127.0.0.1`) : les cookies de session Sanctum sont liés au nom d'hôte
 et doivent être partagés entre le frontend (`localhost:5173`) et l'API (`localhost:8000`).
 

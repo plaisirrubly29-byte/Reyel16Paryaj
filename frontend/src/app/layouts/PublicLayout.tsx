@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useMe } from '../../features/auth/api/auth';
+import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
   const [open, setOpen] = useState(false);
@@ -48,6 +49,7 @@ export function PublicLayout() {
       <main className="content">
         <Outlet />
       </main>
+      <SiteFooter />
     </div>
   );
 }
