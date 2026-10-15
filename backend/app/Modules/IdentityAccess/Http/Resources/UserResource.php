@@ -3,6 +3,7 @@
 namespace App\Modules\IdentityAccess\Http\Resources;
 
 use App\Models\User;
+use App\Modules\IdentityAccess\Services\MfaService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -23,6 +24,12 @@ class UserResource extends JsonResource
             'status' => $this->status->value,
             'roles' => $this->roles->pluck('slug')->values(),
             'is_admin' => $this->isAdmin(),
+            // Pour le frontend : rediriger un admin vers l'activation ou la saisie du code MFA.
+            'mfa' => [
+                'enabled' => $this->mfa_confirmed_at !== null,
+                'verified' => app(MfaService::class)->isVerified($this->resource, $request->hasSession() ? $request->session() : null),
+                'required' => $this->isAdmin(),
+            ],
             'profile' => $this->whenLoaded('profile', fn () => [
                 'first_name' => $this->profile?->first_name,
                 'last_name' => $this->profile?->last_name,

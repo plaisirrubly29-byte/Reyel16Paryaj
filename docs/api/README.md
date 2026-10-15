@@ -96,11 +96,19 @@ Les codes métier sont listés ici au fur et à mesure de leur création :
 
 | HTTP | `code` | Module | Sens |
 |---|---|---|---|
-| 409 | `odds_changed` | Betting | La cote a changé : confirmation requise (`details` = nouvelle cote) |
+| 409 | `odds_changed` | Betting | La cote a changé : confirmation requise (`details` = nouvelle cote) — P4-03 |
+| 400 | `idempotency_key_invalid` | Core | `Idempotency-Key` n'est pas un UUID |
 | 409 | `idempotency_key_reused` | Core | Même `Idempotency-Key` avec un contenu différent |
-| 409 | `idempotency_request_in_progress` | Core | Requête identique encore en cours de traitement |
-| 403 | `mfa_required` | Identity | Rôle administratif sans MFA validé |
-| 423 | `account_suspended` | Identity | Compte suspendu ou exclu |
+| 409 | `idempotency_request_in_progress` | Core | Requête identique encore en cours (`Retry-After`) |
+| 422 | `invalid_credentials` | Identity | Email ou mot de passe incorrect (même réponse si le compte n'existe pas) |
+| 423 | `account_suspended` | Identity | Compte suspendu, exclu ou fermé (session fermée) |
+| 422 | `invalid_reset_token` | Identity | Lien de réinitialisation invalide, expiré ou déjà utilisé |
+| 403 | `mfa_setup_required` | Identity | Compte admin sans MFA activé → écran d'activation |
+| 403 | `mfa_required` | Identity | MFA activé mais non validé dans cette session → saisir le code |
+| 422 | `invalid_mfa_code` | Identity | Code TOTP ou code de secours invalide / déjà utilisé |
+| 409 | `mfa_already_enabled` | Identity | Le MFA est déjà actif |
+| 403 | `cannot_modify_own_roles` | Identity | Un admin ne modifie jamais ses propres rôles |
+| 403 | `cannot_reset_own_mfa` | Identity | Un admin ne réinitialise pas son propre MFA |
 
 ## Idempotence
 

@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\RequireIdempotencyKey;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
+use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
 use App\Support\Http\ApiErrorRenderer;
 use Illuminate\Foundation\Application;
@@ -29,11 +30,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'idempotent' => RequireIdempotencyKey::class,
             'permission' => RequirePermission::class,
             'active' => EnsureAccountIsActive::class,
+            'mfa' => EnsureMfaVerified::class,
         ]);
 
         // Permissions vérifiées AVANT la résolution des {modèles} de l'URL : sans permission, 403 que
         // l'identifiant existe ou non (pas de sondage des identifiants).
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsureAccountIsActive::class);
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureMfaVerified::class);
         $middleware->prependToPriorityList(SubstituteBindings::class, RequirePermission::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

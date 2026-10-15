@@ -69,6 +69,9 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
 
+        // MFA : 5 essais par minute et par compte (10^6 combinaisons → force brute impraticable).
+        RateLimiter::for('mfa', fn (Request $request) => Limit::perMinute(5)->by('mfa:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
         RateLimiter::for('password-reset', fn (Request $request) => [
             Limit::perMinute(3)->by('password-reset:'.Str::lower((string) $request->input('email'))),
             Limit::perMinute(10)->by('password-reset-ip:'.$request->ip()),

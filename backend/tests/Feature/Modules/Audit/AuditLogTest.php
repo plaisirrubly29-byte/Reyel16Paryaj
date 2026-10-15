@@ -91,7 +91,7 @@ class AuditLogTest extends TestCase
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
         $target = User::factory()->withRole(RoleSlug::Support)->create();
 
-        $this->actingAs($admin)->putJson("/api/v1/admin/users/{$target->id}/roles", [
+        $this->actingAsVerifiedAdmin($admin)->putJson("/api/v1/admin/users/{$target->id}/roles", [
             'roles' => ['finance'],
             'reason' => 'Mutation au service Finance',
         ], ['Idempotency-Key' => (string) Str::uuid()])->assertOk();
@@ -107,7 +107,7 @@ class AuditLogTest extends TestCase
     {
         $admin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
 
-        $this->actingAs($admin)->putJson("/api/v1/admin/users/{$admin->id}/roles", [
+        $this->actingAsVerifiedAdmin($admin)->putJson("/api/v1/admin/users/{$admin->id}/roles", [
             'roles' => [],
             'reason' => 'Tentative',
         ], ['Idempotency-Key' => (string) Str::uuid()])->assertForbidden();
@@ -125,10 +125,10 @@ class AuditLogTest extends TestCase
         $logger->record(AuditAction::UserSuspended, $player, reason: 'Motif A', actor: $compliance);
         $logger->record(AuditAction::RolesUpdated, $operations, reason: 'Motif B', actor: $compliance);
 
-        $this->actingAs($operations)->getJson('/api/v1/admin/audit-logs')->assertForbidden();
+        $this->actingAsVerifiedAdmin($operations)->getJson('/api/v1/admin/audit-logs')->assertForbidden();
         $this->actingAs($player)->getJson('/api/v1/admin/audit-logs')->assertForbidden();
 
-        $this->actingAs($compliance)->getJson('/api/v1/admin/audit-logs?action=user.suspended')
+        $this->actingAsVerifiedAdmin($compliance)->getJson('/api/v1/admin/audit-logs?action=user.suspended')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.reason', 'Motif A')

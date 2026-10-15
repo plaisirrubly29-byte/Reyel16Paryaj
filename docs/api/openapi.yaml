@@ -129,6 +129,79 @@ paths:
           description: "`invalid_reset_token` (jeton invalide, expiré, déjà utilisé ou compte inconnu) ou `validation_failed`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/setup:
+    post:
+      tags: [Auth]
+      summary: Générer un secret TOTP (MFA admin) — à afficher en QR code
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Secret en attente de confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret: { type: string, example: JBSWY3DPEHPK3PXP }
+                      otpauth_uri: { type: string, example: "otpauth://totp/REYEL%2016%20PAYAJ:admin%40example.com?secret=…" }
+        "409":
+          description: "`mfa_already_enabled`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /auth/mfa/confirm:
+    post:
+      tags: [Auth]
+      summary: Activer le MFA avec un premier code — renvoie 8 codes de secours (affichés une seule fois)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string, example: "123456" } } } } }
+      responses:
+        "200":
+          description: MFA activé ; session validée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object, properties: { recovery_codes: { type: array, items: { type: string } } } }
+        "409":
+          description: "`mfa_already_enabled` ou `mfa_setup_required`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "`invalid_mfa_code`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/verify:
+    post:
+      tags: [Auth]
+      summary: Valider la session avec un code TOTP ou un code de secours (requis après chaque connexion admin)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, example: "123456" }
+                recovery_code: { type: string, example: "a1b2c-d3e4f" }
+      responses:
+        "204": { description: Session validée }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [Auth]
+      summary: Régénérer les codes de secours (session MFA validée)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Nouveaux codes (les anciens sont invalidés) }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /auth/logout:
     post:
       tags: [Auth]
@@ -241,6 +314,22 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/mfa:
+    delete:
+      tags: [Admin]
+      summary: Réinitialiser le MFA d'un autre administrateur (appareil perdu) — audité
+      description: Permission `roles.manage`. Interdit sur son propre compte (`403 cannot_reset_own_mfa`).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5 } } } } }
+      responses:
+        "204": { description: MFA réinitialisé }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /admin/users/{id}:
     patch:
       tags: [Admin]
@@ -369,6 +458,13 @@ components:
           items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
           description: Vide pour un joueur.
         is_admin: { type: boolean }
+        mfa:
+          type: object
+          description: Le frontend redirige un admin vers l'activation (enabled=false) ou la saisie du code (verified=false).
+          properties:
+            enabled: { type: boolean }
+            verified: { type: boolean }
+            required: { type: boolean }
         profile:
           type: [object, "null"]
           properties:
