@@ -3,6 +3,8 @@
 namespace App\Modules\IdentityAccess\Services;
 
 use App\Models\User;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\IdentityAccess\Models\Role;
 use App\Support\Http\ApiException;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -18,6 +20,8 @@ use Illuminate\Support\Facades\DB;
  */
 class RoleAssignmentService
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     /**
      * Remplace les rôles de $target.
      *
@@ -34,7 +38,7 @@ class RoleAssignmentService
             throw new ApiException('cannot_modify_own_roles', __('Vous ne pouvez pas modifier vos propres rôles.'), 403);
         }
 
-        return DB::transaction(function () use ($actor, $target, $roleSlugs) {
+        return DB::transaction(function () use ($actor, $target, $roleSlugs, $reason) {
             $before = $target->roles()->pluck('slug')->sort()->values()->all();
 
             $wanted = Role::whereIn('slug', $roleSlugs)->pluck('id');
@@ -46,6 +50,8 @@ class RoleAssignmentService
             $target->unsetRelation('roles');
 
             $after = $target->roles()->pluck('slug')->sort()->values()->all();
+
+            $this->audit->record(AuditAction::RolesUpdated, $target, ['roles' => $before], ['roles' => $after], $reason, $actor);
 
             return ['before' => $before, 'after' => $after];
         });
