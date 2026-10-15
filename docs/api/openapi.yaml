@@ -369,14 +369,72 @@ paths:
         "204": { description: MFA réinitialisé }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Rechercher des comptes (permission users.view)
+      description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: search, in: query, description: "Email, nom ou identifiant", schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
+        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Consulter un compte (consultation des données personnelles journalisée)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [Admin]
-      summary: Suspendre un compte (motif requis)
-      x-task: P6-03
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
-
+      summary: Suspendre ou réactiver un compte (motif requis, audité)
+      description: |
+        Permission users.suspend. Interdit sur son propre compte. Le compte d'un administrateur ne peut être
+        suspendu que par un Super Admin. Une auto-exclusion ne peut pas être levée ici (409 invalid_status_transition).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Statut appliqué
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`invalid_status_transition`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/audit-logs:
     get:
       tags: [Admin]
@@ -481,6 +539,20 @@ components:
         related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
         description: { type: [string, "null"] }
         created_at: { type: string, format: date-time }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [active, suspended, excluded, closed] }
+        status_changed_at: { type: [string, "null"], format: date-time }
+        is_admin: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_login_at: { type: [string, "null"], format: date-time }
+        roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
+        mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
+        profile: { type: object, description: "Avec users.view_personal_data uniquement" }
     AuditLog:
       type: object
       properties:

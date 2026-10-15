@@ -12,6 +12,7 @@ enum AuditAction: string
     case UserSuspended = 'user.suspended';
     case UserReactivated = 'user.reactivated';
     case MfaReset = 'mfa.reset';
+    case UserPersonalDataViewed = 'user.personal_data_viewed';
 
     // Audit
     case AuditViewed = 'audit.viewed';
@@ -21,7 +22,7 @@ enum AuditAction: string
     public function requiresReason(): bool
     {
         return match ($this) {
-            self::AuditViewed => false,
+            self::AuditViewed, self::UserPersonalDataViewed => false,
             default => true,
         };
     }
