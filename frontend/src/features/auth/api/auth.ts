@@ -8,6 +8,8 @@ export type User = {
   email: string;
   status: 'active' | 'suspended' | 'excluded' | 'closed';
   roles: string[];
+  /** Permissions effectives : servent seulement à adapter l'affichage, l'API vérifie chaque route. */
+  permissions: string[];
   is_admin: boolean;
   mfa: { enabled: boolean; verified: boolean; required: boolean };
   profile: {
