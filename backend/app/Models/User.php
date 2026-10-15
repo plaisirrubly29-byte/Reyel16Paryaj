@@ -7,6 +7,7 @@ use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\IdentityAccess\Models\Role;
 use App\Modules\IdentityAccess\Models\UserProfile;
+use App\Modules\IdentityAccess\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -52,6 +53,16 @@ class User extends Authenticatable
             'status_changed_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Lien de réinitialisation vers le frontend, envoyé en file d'attente.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 
     /** @return HasOne<UserProfile, $this> */
