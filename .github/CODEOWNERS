@@ -8,7 +8,7 @@
 # Par défaut : les deux développeurs
 *                                           @plaisirrubly29-byte @benginio
 
-# Domaine Rubly — Compte, argent & administration (relu par Benginio)
+# Domaine Rubly — frontend, données sportives, paris, résultats, compte, argent & administration (relu par Benginio)
 /backend/app/Modules/IdentityAccess/        @benginio @plaisirrubly29-byte
 /backend/app/Modules/Audit/                 @benginio @plaisirrubly29-byte
 /backend/app/Modules/Admin/                 @benginio @plaisirrubly29-byte
@@ -18,11 +18,13 @@
 /backend/app/Support/Money.php              @benginio @plaisirrubly29-byte
 /backend/config/permissions.php             @benginio @plaisirrubly29-byte
 /.github/                                   @benginio @plaisirrubly29-byte
+/backend/app/Modules/SportsData/            @benginio @plaisirrubly29-byte
+/backend/app/Modules/Betting/               @benginio @plaisirrubly29-byte
+/frontend/                                  @benginio @plaisirrubly29-byte
 
-# Domaine Benginio — Sports, paris & opérations (relu par Rubly)
-/backend/app/Modules/SportsData/            @plaisirrubly29-byte @benginio
+# Domaine Benginio — catalogue, infra & opérations (relu par Rubly)
 /backend/app/Modules/Catalogue/             @plaisirrubly29-byte @benginio
-/backend/app/Modules/Betting/               @plaisirrubly29-byte @benginio
+/backend/app/Modules/Compliance/            @plaisirrubly29-byte @benginio
 /docker-compose.yml                         @plaisirrubly29-byte @benginio
 /backend/Dockerfile                         @plaisirrubly29-byte @benginio
 
