@@ -29,4 +29,13 @@ return [
     // Garde-fou : plus aucun appel payant quand le quota restant passe sous ce seuil.
     'min_remaining_requests' => (int) env('SPORTS_DATA_MIN_REMAINING', 25),
 
+    // Synchronisation (P3-03). Coût mensuel ≈ nb de compétitions × nb d'exécutions par mois.
+    // Par défaut toutes les 4 h : 1 compétition ≈ 180 crédits/mois (offre gratuite : 500).
+    'sync_cron' => env('SPORTS_DATA_SYNC_CRON', '0 */4 * * *'),
+    'horizon_days' => (int) env('SPORTS_DATA_HORIZON_DAYS', 7),
+    'max_events_per_competition' => (int) env('SPORTS_DATA_MAX_EVENTS', 10),
+
+    // Règle de fraîcheur (P3-04) : au-delà, la cote n'est plus proposée. Doit dépasser l'intervalle de synchro.
+    'max_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_ODDS_AGE', 300),
+
 ];
