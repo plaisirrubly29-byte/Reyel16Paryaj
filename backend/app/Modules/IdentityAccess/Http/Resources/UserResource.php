@@ -23,6 +23,9 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'status' => $this->status->value,
             'roles' => $this->roles->pluck('slug')->values(),
+            // Permissions effectives (via les rôles) : le frontend s'en sert pour afficher le menu admin.
+            // Confort d'affichage uniquement — chaque route reste protégée par le middleware "permission".
+            'permissions' => $this->permissionSlugs()->sort()->values(),
             'is_admin' => $this->isAdmin(),
             // Pour le frontend : rediriger un admin vers l'activation ou la saisie du code MFA.
             'mfa' => [

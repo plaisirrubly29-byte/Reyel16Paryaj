@@ -578,6 +578,10 @@ components:
           type: array
           items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
           description: Vide pour un joueur.
+        permissions:
+          type: array
+          items: { type: string, example: users.view }
+          description: Permissions effectives (config/permissions.php). Sert à afficher le menu admin ; l'API vérifie chaque route.
         is_admin: { type: boolean }
         mfa:
           type: object
