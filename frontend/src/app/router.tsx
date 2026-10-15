@@ -2,19 +2,28 @@ import { createBrowserRouter } from 'react-router-dom';
 import { PublicLayout } from './layouts/PublicLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 import { HomePage } from '../features/catalogue/pages/HomePage';
+import { RequireAuth } from '../features/auth/components/RequireAuth';
+import { AccountPage } from '../features/auth/pages/AccountPage';
+import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
+import { LoginPage } from '../features/auth/pages/LoginPage';
+import { RegisterPage } from '../features/auth/pages/RegisterPage';
+import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
 import { Placeholder } from '../shared/components/Placeholder';
 
-export const router = createBrowserRouter([
+export const routes = [
   {
     element: <PublicLayout />,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'sports', element: <Placeholder title="Sports & matchs" task="P3-06" /> },
       { path: 'events/:id', element: <Placeholder title="Marchés & cotes" task="P3-06" /> },
-      { path: 'login', element: <Placeholder title="Connexion" task="P2-06" /> },
-      { path: 'register', element: <Placeholder title="Inscription" task="P2-06" /> },
-      { path: 'bets', element: <Placeholder title="Mes tickets" task="P4-06" /> },
-      { path: 'wallet', element: <Placeholder title="Portefeuille" task="P5-07" /> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'register', element: <RegisterPage /> },
+      { path: 'forgot-password', element: <ForgotPasswordPage /> },
+      { path: 'reset-password', element: <ResetPasswordPage /> },
+      { path: 'account', element: <RequireAuth><AccountPage /></RequireAuth> },
+      { path: 'bets', element: <RequireAuth><Placeholder title="Mes tickets" task="P4-06" /></RequireAuth> },
+      { path: 'wallet', element: <RequireAuth><Placeholder title="Portefeuille" task="P5-07" /></RequireAuth> },
     ],
   },
   {
@@ -32,4 +41,6 @@ export const router = createBrowserRouter([
     ],
   },
   { path: '*', element: <Placeholder title="Page introuvable" task="—" /> },
-]);
+];
+
+export const router = createBrowserRouter(routes);

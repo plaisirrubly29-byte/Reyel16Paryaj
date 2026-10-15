@@ -1,17 +1,12 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-
-const links = [
-  { to: '/sports', label: 'Sports' },
-  { to: '/bets', label: 'Mes tickets' },
-  { to: '/wallet', label: 'Portefeuille' },
-  { to: '/login', label: 'Connexion' },
-];
+import { useMe } from '../../features/auth/api/auth';
 
 export function PublicLayout() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const [lastPath, setLastPath] = useState(pathname);
+  const { data: user } = useMe();
 
   // Referme le menu mobile après une navigation.
   if (pathname !== lastPath) {
@@ -33,7 +28,20 @@ export function PublicLayout() {
           <span className="sr-only">Menu</span>☰
         </button>
         <nav id="main-nav" className={open ? 'open' : undefined}>
-          {links.map((l) => <NavLink key={l.to} to={l.to}>{l.label}</NavLink>)}
+          <NavLink to="/sports">Sports</NavLink>
+          {user ? (
+            <>
+              <NavLink to="/bets">Mes tickets</NavLink>
+              <NavLink to="/wallet">Portefeuille</NavLink>
+              {user.is_admin && <NavLink to="/admin">Administration</NavLink>}
+              <NavLink to="/account">{user.name}</NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to="/login">Connexion</NavLink>
+              <NavLink to="/register">Inscription</NavLink>
+            </>
+          )}
         </nav>
       </header>
       <div className="demo-banner" role="note">Version de démonstration — fonds fictifs uniquement.</div>
