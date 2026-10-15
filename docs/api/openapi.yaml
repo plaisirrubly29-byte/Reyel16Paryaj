@@ -249,6 +249,34 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { "200": { description: OK }, "403": { description: Permission refusée } }
 
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Journal d'audit (permission audit.view) — la consultation est elle-même journalisée
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: action, in: query, schema: { type: string, example: roles.updated } }
+        - { name: actor_id, in: query, schema: { type: integer } }
+        - { name: subject_type, in: query, schema: { type: string } }
+        - { name: subject_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Entrées, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AuditLog" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
   parameters:
     IdempotencyKey:
@@ -315,6 +343,20 @@ components:
         de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
 
   schemas:
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, example: roles.updated }
+        actor: { type: [object, "null"], properties: { id: { type: string }, email: { type: string } } }
+        subject: { type: [object, "null"], properties: { type: { type: string }, id: { type: string } } }
+        before: { type: [object, "null"] }
+        after: { type: [object, "null"] }
+        reason: { type: [string, "null"] }
+        metadata: { type: [object, "null"] }
+        ip_address: { type: [string, "null"] }
+        request_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
     User:
       type: object
       properties:
