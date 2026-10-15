@@ -52,6 +52,7 @@ export const player = {
   email: 'ana@example.com',
   status: 'active',
   roles: [],
+  permissions: [] as string[],
   is_admin: false,
   mfa: { enabled: false, verified: false, required: false },
   profile: { first_name: null, last_name: null, birth_date: '1995-05-21', phone: null, country: 'HT' },

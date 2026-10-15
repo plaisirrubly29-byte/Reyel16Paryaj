@@ -1,28 +1,40 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { RequireAdmin } from '../../admin/components/RequireAdmin';
+import { visibleSections } from '../../admin/navigation';
+import { useLogout, useMe } from '../../features/auth/api/auth';
 
-// Les permissions sont vérifiées par l'API ; ce menu n'est qu'un confort d'affichage
-// (il sera filtré selon les permissions reçues de l'API en P6-05).
-const sections = [
-  { to: '/admin', label: "Vue d'ensemble", end: true },
-  { to: '/admin/events', label: 'Événements & marchés' },
-  { to: '/admin/settlements', label: 'Résultats & règlement' },
-  { to: '/admin/users', label: 'Utilisateurs' },
-  { to: '/admin/tickets', label: 'Tickets' },
-  { to: '/admin/finance', label: 'Finance' },
-  { to: '/admin/settings', label: 'Paramètres' },
-  { to: '/admin/audit', label: 'Audit & rapports' },
-];
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Super Admin',
+  operations: 'Opérations',
+  finance: 'Finance',
+  support: 'Support',
+  compliance: 'Conformité',
+};
 
 export function AdminLayout() {
+  return (
+    <RequireAdmin>
+      <AdminShell />
+    </RequireAdmin>
+  );
+}
+
+function AdminShell() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const [lastPath, setLastPath] = useState(pathname);
+  const { data: user } = useMe();
+  const logout = useLogout();
+  const navigate = useNavigate();
 
   if (pathname !== lastPath) {
     setLastPath(pathname);
     setOpen(false);
   }
+
+  // Menu filtré selon les permissions reçues de l'API (GET /me).
+  const sections = visibleSections(user?.permissions ?? []);
 
   return (
     <div className="admin-shell">
@@ -39,10 +51,22 @@ export function AdminLayout() {
             <span className="sr-only">Menu</span>☰
           </button>
         </div>
-        <nav id="admin-nav" className={open ? 'open' : undefined}>
+        <nav id="admin-nav" className={open ? 'open' : undefined} aria-label="Administration">
           {sections.map((s) => (
             <NavLink key={s.to} to={s.to} end={s.end}>{s.label}</NavLink>
           ))}
+          <hr />
+          <span className="muted small">
+            {user?.name} · {user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(', ')}
+          </span>
+          <Link to="/">Retour au site</Link>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => logout.mutate(undefined, { onSettled: () => navigate('/login', { replace: true }) })}
+          >
+            Se déconnecter
+          </button>
         </nav>
       </aside>
       <main className="content">
