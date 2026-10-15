@@ -12,13 +12,13 @@
       "name": "Rubly PLAISIR",
       "title": "Chef de projet & développeur full-stack",
       "github": "plaisirrubly29-byte",
-      "focus": "Pilotage (juridique, hébergement, lancement) + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, admin Utilisateurs/Tickets/Finance, CI & Staging"
+      "focus": "Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API, paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging"
     },
     "dev-b": {
       "name": "Benginio Jean-Baptiste",
       "title": "Développeur full-stack",
       "github": "benginio",
-      "focus": "Sports, paris & opérations — Données sportives, Catalogue, Coupon & tickets, admin Événements/Résultats, Docker, logs, E2E, charge, sauvegardes, monitoring, revue de sécurité"
+      "focus": "Socle sports & opérations — Migrations sports et catalogue public, admin Événements, Docker, logs, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring"
     },
     "analyst": {
       "name": "Widsondelne7376",
@@ -263,7 +263,7 @@
         "Composants de base dans src/shared/components",
         "Responsive mobile vérifié"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 1
     },
     {
@@ -429,7 +429,7 @@
       "depends": [
         "P0-02"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 2
     },
     {
@@ -447,7 +447,7 @@
         "P3-01",
         "P3-02"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 2
     },
     {
@@ -464,7 +464,7 @@
       "depends": [
         "P3-03"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 2
     },
     {
@@ -498,7 +498,7 @@
       "depends": [
         "P3-05"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 3
     },
     {
@@ -515,7 +515,7 @@
       "depends": [
         "P3-01"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 3
     },
     {
@@ -550,7 +550,7 @@
         "P5-02",
         "P0-04"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 4
     },
     {
@@ -566,7 +566,7 @@
       "depends": [
         "P4-01"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 3
     },
     {
@@ -584,7 +584,7 @@
         "P4-03",
         "P3-06"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 4
     },
     {
@@ -601,7 +601,7 @@
       "depends": [
         "P4-04"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 4
     },
     {
@@ -617,7 +617,7 @@
       "depends": [
         "P4-03"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 4
     },
     {
@@ -684,7 +684,7 @@
       "depends": [
         "P3-02"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 3
     },
     {
@@ -824,7 +824,7 @@
         "P2-05",
         "P1-05"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 5
     },
     {
@@ -842,7 +842,7 @@
         "P6-05",
         "P6-02"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 5
     },
     {

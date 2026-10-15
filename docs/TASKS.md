@@ -10,8 +10,8 @@
 | `product` | Chef de projet / propriétaire — décisions, conformité, validation | Rubly PLAISIR, Widsondelne7376 |
 | `backend-core` | Backend 1 — Identité, Wallet & Ledger, Règlement, Audit | Rubly PLAISIR |
 | `backend-data` | Backend 2 — Données sportives, Catalogue, Tickets | Benginio Jean-Baptiste, Rubly PLAISIR |
-| `frontend-public` | Frontend 1 — Site public et espace joueur | Benginio Jean-Baptiste, Rubly PLAISIR |
-| `frontend-admin` | Frontend 2 — Panneau d'administration | Benginio Jean-Baptiste, Rubly PLAISIR |
+| `frontend-public` | Frontend 1 — Site public et espace joueur | Rubly PLAISIR |
+| `frontend-admin` | Frontend 2 — Panneau d'administration | Rubly PLAISIR |
 | `devops-qa` | DevOps / QA — CI, environnements, tests E2E, sécurité | Benginio Jean-Baptiste, Rubly PLAISIR |
 
 Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
@@ -40,7 +40,7 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | P1-02 | CI GitHub Actions verte et protection de la branche main | Rubly PLAISIR | 1 | infra | — |
 | P1-03 | Conventions API : format JSON, erreurs, pagination, OpenAPI | Rubly PLAISIR | 1 | core | — |
 | P1-04 | Journalisation structurée et identifiant de requête | Benginio Jean-Baptiste | 1 | core | — |
-| P1-05 | Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API | Benginio Jean-Baptiste | 1 | core | — |
+| P1-05 | Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API | Rubly PLAISIR | 1 | core | — |
 | P1-06 | Déploiement Staging automatisé | Rubly PLAISIR | 4 | infra | P0-07 |
 
 ## Phase 2 — Identité & rôles
@@ -64,11 +64,11 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
 | P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | Benginio Jean-Baptiste | 1 | sports-data | — |
-| P3-02 | Interface SportsDataProvider + faux fournisseur | Benginio Jean-Baptiste | 2 | sports-data | P0-02 |
-| P3-03 | Jobs de synchronisation (queue) avec validation | Benginio Jean-Baptiste | 2 | sports-data | P3-01, P3-02 |
-| P3-04 | Règle de fraîcheur et suspension automatique des marchés | Benginio Jean-Baptiste | 2 | sports-data | P3-03 |
+| P3-02 | Interface SportsDataProvider + faux fournisseur | Rubly PLAISIR | 2 | sports-data | P0-02 |
+| P3-03 | Jobs de synchronisation (queue) avec validation | Rubly PLAISIR | 2 | sports-data | P3-01, P3-02 |
+| P3-04 | Règle de fraîcheur et suspension automatique des marchés | Rubly PLAISIR | 2 | sports-data | P3-03 |
 | P3-05 | API catalogue public | Benginio Jean-Baptiste | 3 | catalogue | P3-04 |
-| P3-06 | Pages sports, compétitions, matchs et cotes | Benginio Jean-Baptiste | 3 | catalogue | P3-05 |
+| P3-06 | Pages sports, compétitions, matchs et cotes | Rubly PLAISIR | 3 | catalogue | P3-05 |
 
 ## Phase 4 — Coupon & tickets simulés
 
@@ -76,13 +76,13 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P4-01 | Migrations tickets et sélections de ticket | Benginio Jean-Baptiste | 3 | betting | P3-01 |
+| P4-01 | Migrations tickets et sélections de ticket | Rubly PLAISIR | 3 | betting | P3-01 |
 | P4-02 | Middleware clé d'idempotence | Rubly PLAISIR | 2 | core | — |
-| P4-03 | POST /bets : revalidation serveur et transaction atomique | Benginio Jean-Baptiste | 4 | betting | P4-01, P4-02, P5-02, P0-04 |
-| P4-04 | GET /bets et GET /bets/{id} | Benginio Jean-Baptiste | 3 | betting | P4-01 |
-| P4-05 | Coupon de pari et confirmation de changement de cote | Benginio Jean-Baptiste | 4 | betting | P4-03, P3-06 |
-| P4-06 | Historique des tickets | Benginio Jean-Baptiste | 4 | betting | P4-04 |
-| P4-07 | Tests d'acceptation tickets | Rubly PLAISIR | 4 | betting | P4-03 |
+| P4-03 | POST /bets : revalidation serveur et transaction atomique | Rubly PLAISIR | 4 | betting | P4-01, P4-02, P5-02, P0-04 |
+| P4-04 | GET /bets et GET /bets/{id} | Rubly PLAISIR | 3 | betting | P4-01 |
+| P4-05 | Coupon de pari et confirmation de changement de cote | Rubly PLAISIR | 4 | betting | P4-03, P3-06 |
+| P4-06 | Historique des tickets | Rubly PLAISIR | 4 | betting | P4-04 |
+| P4-07 | Tests d'acceptation tickets | Benginio Jean-Baptiste | 4 | betting | P4-03 |
 
 ## Phase 5 — Ledger simulé & règlement
 
@@ -93,7 +93,7 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | P5-01 | Migrations wallets et ledger_entries | Rubly PLAISIR | 3 | wallet | P0-05 |
 | P5-02 | Service Ledger : écritures, réservation de mise, compensations | Rubly PLAISIR | 3 | wallet | P5-01 |
 | P5-03 | API portefeuille en lecture | Rubly PLAISIR | 3 | wallet | P5-02 |
-| P5-04 | Migrations résultats/règlements et import de résultats de test | Benginio Jean-Baptiste | 3 | settlement | P3-02 |
+| P5-04 | Migrations résultats/règlements et import de résultats de test | Rubly PLAISIR | 3 | settlement | P3-02 |
 | P5-05 | Service de règlement idempotent | Rubly PLAISIR | 5 | settlement | P5-02, P5-04, P4-03 |
 | P5-06 | Correction de résultat auditée | Rubly PLAISIR | 5 | settlement | P5-05, P6-01 |
 | P5-07 | Page portefeuille | Rubly PLAISIR | 4 | wallet | P5-03 |
@@ -108,8 +108,8 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | P6-02 | API admin événements et marchés | Benginio Jean-Baptiste | 5 | admin | P6-01, P3-05 |
 | P6-03 | API admin utilisateurs | Rubly PLAISIR | 5 | admin | P6-01 |
 | P6-04 | API admin tickets et finance | Rubly PLAISIR | 5 | admin | P6-01, P5-02 |
-| P6-05 | Admin : authentification, layout et vue d'ensemble | Benginio Jean-Baptiste | 5 | admin | P2-05, P1-05 |
-| P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | Benginio Jean-Baptiste | 5 | admin | P6-05, P6-02 |
+| P6-05 | Admin : authentification, layout et vue d'ensemble | Rubly PLAISIR | 5 | admin | P2-05, P1-05 |
+| P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | Rubly PLAISIR | 5 | admin | P6-05, P6-02 |
 | P6-07 | Admin : écrans Utilisateurs et Tickets | Rubly PLAISIR | 6 | admin | P6-05, P6-03, P6-04 |
 | P6-08 | Admin : écrans Finance, Paramètres et Audit | Rubly PLAISIR | 6 | admin | P6-05, P6-04, P6-01 |
 | P6-09 | Matrice des permissions validée par tests API | Benginio Jean-Baptiste | 6 | admin | P6-02, P6-03, P6-04 |
