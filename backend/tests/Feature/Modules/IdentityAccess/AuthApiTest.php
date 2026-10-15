@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\IdentityAccess;
 use App\Models\User;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
+use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -40,6 +41,7 @@ class AuthApiTest extends TestCase
             ->assertJsonPath('data.email', 'joueur@example.com')
             ->assertJsonPath('data.status', 'active')
             ->assertJsonPath('data.roles', [])
+            ->assertJsonPath('data.permissions', [])
             ->assertJsonPath('data.is_admin', false)
             ->assertJsonPath('data.profile.country', 'HT')
             ->assertJsonMissingPath('data.password');
@@ -164,12 +166,13 @@ class AuthApiTest extends TestCase
 
     public function test_me_exposes_roles_for_admins(): void
     {
-        $this->seed(RoleSeeder::class);
+        $this->seed(PermissionSeeder::class);
         $admin = User::factory()->withRole(RoleSlug::Finance)->create();
 
         $this->actingAs($admin)->getJson('/api/v1/me')
             ->assertOk()
             ->assertJsonPath('data.roles', ['finance'])
+            ->assertJsonPath('data.permissions', collect(config('permissions.roles.finance'))->sort()->values()->all())
             ->assertJsonPath('data.is_admin', true);
     }
 }
