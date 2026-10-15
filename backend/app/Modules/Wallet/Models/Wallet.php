@@ -24,6 +24,11 @@ class Wallet extends Model
 
     protected $guarded = ['id'];
 
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'status' => self::STATUS_ACTIVE,
+    ];
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
