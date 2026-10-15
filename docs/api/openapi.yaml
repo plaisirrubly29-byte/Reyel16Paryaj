@@ -38,13 +38,76 @@ paths:
                   time: { type: string, format: date-time }
 
   /auth/register:
-    post: { tags: [Auth], summary: Inscription, x-task: P2-02, responses: { "201": { description: Créé } } }
+    post:
+      tags: [Auth]
+      summary: Inscription (compte joueur) — ouvre la session
+      description: Limité à 5 requêtes/minute par IP. Âge minimum configurable (IDENTITY_MINIMUM_AGE, 18 par défaut).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, password_confirmation, birth_date]
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10, description: "Au moins une lettre et un chiffre" }
+                password_confirmation: { type: string }
+                birth_date: { type: string, format: date, example: "1998-05-21" }
+                country: { type: string, minLength: 2, maxLength: 2, example: HT }
+      responses:
+        "201":
+          description: Compte créé, session ouverte
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/login:
-    post: { tags: [Auth], summary: Connexion, x-task: P2-02, responses: { "200": { description: OK } } }
+    post:
+      tags: [Auth]
+      summary: Connexion
+      description: |
+        Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
+        Limité à 5 tentatives/minute par email+IP et 20/minute par IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Session ouverte
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "422":
+          description: "`invalid_credentials` ou `validation_failed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423":
+          description: "`account_suspended` — compte suspendu, exclu ou fermé"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/logout:
-    post: { tags: [Auth], summary: Déconnexion, x-task: P2-02, responses: { "204": { description: OK } } }
+    post:
+      tags: [Auth]
+      summary: Déconnexion (invalide la session)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Session fermée }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /me:
-    get: { tags: [Auth], summary: Utilisateur connecté, x-task: P2-02, responses: { "200": { description: OK } } }
+    get:
+      tags: [Auth]
+      summary: Utilisateur connecté
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /sports:
     get: { tags: [Catalogue], summary: Liste des sports, x-task: P3-05, responses: { "200": { description: OK } } }
@@ -163,7 +226,41 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: { code: too_many_requests, message: Trop de tentatives. Réessayez plus tard. } }
 
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: reyel-16-payaj-session
+      description: |
+        Mode SPA de Sanctum : appeler `GET /sanctum/csrf-cookie` (hors /api/v1), puis envoyer le cookie
+        de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
+
   schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, example: "42" }
+        name: { type: string }
+        email: { type: string, format: email }
+        status: { type: string, enum: [active, suspended, excluded, closed] }
+        roles:
+          type: array
+          items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+          description: Vide pour un joueur.
+        is_admin: { type: boolean }
+        profile:
+          type: [object, "null"]
+          properties:
+            first_name: { type: [string, "null"] }
+            last_name: { type: [string, "null"] }
+            birth_date: { type: [string, "null"], format: date }
+            phone: { type: [string, "null"] }
+            country: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    UserEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/User" }
     Error:
       type: object
       required: [error]

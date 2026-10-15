@@ -16,6 +16,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
+        $middleware->statefulApi();
+
+        // L'API ne redirige jamais : un invité reçoit 401 "unauthenticated".
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/');
+
         $middleware->alias([
             'idempotent' => RequireIdempotencyKey::class,
         ]);
