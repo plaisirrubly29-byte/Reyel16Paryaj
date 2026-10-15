@@ -9,7 +9,7 @@
 |---|---|---|
 | `product` | Chef de projet / propriétaire — décisions, conformité, validation | Rubly PLAISIR, Widsondelne7376 |
 | `backend-core` | Backend 1 — Identité, Wallet & Ledger, Règlement, Audit | Rubly PLAISIR |
-| `backend-data` | Backend 2 — Données sportives, Catalogue, Tickets | Benginio Jean-Baptiste, Rubly PLAISIR |
+| `backend-data` | Backend 2 — Données sportives, Catalogue, Tickets | Rubly PLAISIR, Benginio Jean-Baptiste |
 | `frontend-public` | Frontend 1 — Site public et espace joueur | Rubly PLAISIR |
 | `frontend-admin` | Frontend 2 — Panneau d'administration | Rubly PLAISIR |
 | `devops-qa` | DevOps / QA — CI, environnements, tests E2E, sécurité | Benginio Jean-Baptiste, Rubly PLAISIR |
@@ -63,11 +63,11 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | Benginio Jean-Baptiste | 1 | sports-data | — |
+| P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | Rubly PLAISIR | 1 | sports-data | — |
 | P3-02 | Interface SportsDataProvider + faux fournisseur | Rubly PLAISIR | 2 | sports-data | P0-02 |
 | P3-03 | Jobs de synchronisation (queue) avec validation | Rubly PLAISIR | 2 | sports-data | P3-01, P3-02 |
 | P3-04 | Règle de fraîcheur et suspension automatique des marchés | Rubly PLAISIR | 2 | sports-data | P3-03 |
-| P3-05 | API catalogue public | Benginio Jean-Baptiste | 3 | catalogue | P3-04 |
+| P3-05 | API catalogue public | Rubly PLAISIR | 3 | catalogue | P3-04 |
 | P3-06 | Pages sports, compétitions, matchs et cotes | Rubly PLAISIR | 3 | catalogue | P3-05 |
 
 ## Phase 4 — Coupon & tickets simulés

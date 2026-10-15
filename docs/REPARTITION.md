@@ -13,8 +13,8 @@ L'analyste conseil n'a aucune tâche : il relit les choix de conception et conse
 
 | Membre | Rôle | GitHub | Domaine | Tâches |
 |---|---|---|---|---|
-| **Rubly PLAISIR** | Chef de projet & développeur full-stack | @plaisirrubly29-byte | Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API, paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging | 38 |
-| **Benginio Jean-Baptiste** | Développeur full-stack | @benginio | Socle sports & opérations — Migrations sports et catalogue public, admin Événements, Docker, logs, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring | 14 |
+| **Rubly PLAISIR** | Chef de projet & développeur full-stack | @plaisirrubly29-byte | Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging | 40 |
+| **Benginio Jean-Baptiste** | Développeur full-stack | @benginio | Infra & opérations — Docker, logs, admin Événements, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring | 12 |
 | **Widsondelne7376** | Analyste — conception | @widsondelne7376-design | Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données | 5 |
 | **Marckendy Fevrier** | Analyste conseil (neutre) | @MarckendyFevrier | Assiste et conseille l’équipe (revue des choix de conception, avis sur les livrables). Aucune tâche assignée. | — |
 
@@ -33,7 +33,7 @@ ex. 1 à 2 semaines). Les deux développeurs avancent dans la même vague en par
 
 ## Rubly PLAISIR — Chef de projet & développeur full-stack (@plaisirrubly29-byte)
 
-_Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API, paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging_
+_Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging_
 
 | Vague | ID | Tâche | Attend (autre responsable) |
 |---|---|---|---|
@@ -43,17 +43,19 @@ _Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur e
 | 1 | P1-03 | Conventions API : format JSON, erreurs, pagination, OpenAPI | — |
 | 1 | P1-05 | Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API | — |
 | 1 | P2-01 | Migrations utilisateurs, profils, rôles et permissions | — |
+| 1 | P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | — |
 | 2 | P2-02 | API inscription, connexion, déconnexion, /me (Sanctum) | — |
 | 2 | P2-03 | Récupération de compte sécurisée | — |
 | 2 | P2-04 | RBAC : middleware, policies et protection contre l'auto-élévation | P0-06 (Widsondelne7376) |
 | 2 | P2-06 | Pages inscription, connexion, profil | — |
 | 2 | P3-02 | Interface SportsDataProvider + faux fournisseur | P0-02 (Widsondelne7376) |
-| 2 | P3-03 | Jobs de synchronisation (queue) avec validation | P3-01 (Benginio Jean-Baptiste) |
+| 2 | P3-03 | Jobs de synchronisation (queue) avec validation | — |
 | 2 | P3-04 | Règle de fraîcheur et suspension automatique des marchés | — |
 | 2 | P4-02 | Middleware clé d'idempotence | — |
 | 3 | P2-05 | MFA pour les rôles administratifs | — |
-| 3 | P3-06 | Pages sports, compétitions, matchs et cotes | P3-05 (Benginio Jean-Baptiste) |
-| 3 | P4-01 | Migrations tickets et sélections de ticket | P3-01 (Benginio Jean-Baptiste) |
+| 3 | P3-05 | API catalogue public | — |
+| 3 | P3-06 | Pages sports, compétitions, matchs et cotes | — |
+| 3 | P4-01 | Migrations tickets et sélections de ticket | — |
 | 3 | P4-04 | GET /bets et GET /bets/{id} | — |
 | 3 | P5-01 | Migrations wallets et ledger_entries | P0-05 (Widsondelne7376) |
 | 3 | P5-02 | Service Ledger : écritures, réservation de mise, compensations | — |
@@ -78,17 +80,15 @@ _Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur e
 
 ## Benginio Jean-Baptiste — Développeur full-stack (@benginio)
 
-_Socle sports & opérations — Migrations sports et catalogue public, admin Événements, Docker, logs, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring_
+_Infra & opérations — Docker, logs, admin Événements, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring_
 
 | Vague | ID | Tâche | Attend (autre responsable) |
 |---|---|---|---|
 | 1 | P1-01 | Valider l'environnement Docker local pour toute l'équipe | — |
 | 1 | P1-04 | Journalisation structurée et identifiant de requête | — |
-| 1 | P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | — |
 | 3 | P2-07 | Tests d'accès et de session | P2-04 (Rubly PLAISIR) |
-| 3 | P3-05 | API catalogue public | P3-04 (Rubly PLAISIR) |
 | 4 | P4-07 | Tests d'acceptation tickets | P4-03 (Rubly PLAISIR) |
-| 5 | P6-02 | API admin événements et marchés | P6-01 (Rubly PLAISIR) |
+| 5 | P6-02 | API admin événements et marchés | P6-01 (Rubly PLAISIR), P3-05 (Rubly PLAISIR) |
 | 6 | P6-09 | Matrice des permissions validée par tests API | P6-03 (Rubly PLAISIR), P6-04 (Rubly PLAISIR) |
 | 6 | P7-02 | Jeu responsable : limites, pause, auto-exclusion | P0-01 (Rubly PLAISIR), P4-03 (Rubly PLAISIR) |
 | 6 | P8-01 | Tests E2E du parcours complet | P5-05 (Rubly PLAISIR), P4-05 (Rubly PLAISIR) |

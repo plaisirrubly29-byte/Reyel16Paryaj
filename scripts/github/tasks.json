@@ -12,13 +12,13 @@
       "name": "Rubly PLAISIR",
       "title": "Chef de projet & développeur full-stack",
       "github": "plaisirrubly29-byte",
-      "focus": "Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API, paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging"
+      "focus": "Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging"
     },
     "dev-b": {
       "name": "Benginio Jean-Baptiste",
       "title": "Développeur full-stack",
       "github": "benginio",
-      "focus": "Socle sports & opérations — Migrations sports et catalogue public, admin Événements, Docker, logs, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring"
+      "focus": "Infra & opérations — Docker, logs, admin Événements, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring"
     },
     "analyst": {
       "name": "Widsondelne7376",
@@ -412,7 +412,7 @@
         "Index événement/statut",
         "Identifiant fournisseur unique par entité"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 1
     },
     {
@@ -481,7 +481,7 @@
       "depends": [
         "P3-04"
       ],
-      "owner": "dev-b",
+      "owner": "dev-a",
       "wave": 3
     },
     {
