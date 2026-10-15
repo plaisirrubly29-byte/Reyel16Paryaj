@@ -1,0 +1,8 @@
+# Apache (XAMPP) : toute adresse qui n'est pas un fichier réel est servie par index.html,
+# puis React Router affiche la bonne page (ex. /admin/users, /reset-password?token=…).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>

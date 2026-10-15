@@ -57,4 +57,5 @@ export const routes = [
   { path: '*', element: <Placeholder title="Page introuvable" task="—" /> },
 ];
 
-export const router = createBrowserRouter(routes);
+// basename = sous-dossier de publication (ex. XAMPP : /dashboard/…/frontend/dist), "/" sinon.
+export const router = createBrowserRouter(routes, { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' });
