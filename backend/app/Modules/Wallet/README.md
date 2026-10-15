@@ -2,7 +2,7 @@
 
 **Namespace :** `App\Modules\Wallet`
 **Livraison :** Phase 5
-**Responsable :** _à assigner_
+**Responsable :** Rubly PLAISIR (@plaisirrubly29-byte)
 
 ## Responsabilités
 
@@ -24,6 +24,22 @@
 
 - `GET /api/v1/wallet`
 - `GET /api/v1/wallet/transactions`
+
+## Utilisation (P5-02)
+
+```php
+$ledger = app(LedgerService::class);
+$wallet = $ledger->walletFor($user);                                   // devise : config('wallet.currency')
+$ledger->reserveStake($wallet, Money::ofMinor(5000, 'HTG'), "bet:{$bet->id}:stake", (string) $bet->id);
+$ledger->payout($wallet, $gain, "bet:{$bet->id}:payout", (string) $bet->id);
+$ledger->reverse($entry, "bet:{$bet->id}:payout:reversal", $motif, $admin);  // correction
+```
+
+- **Référence métier** = clé d'idempotence de l'écriture (`<objet>:<id>:<opération>`) : rejouer une opération
+  (relance de job, double clic) renvoie l'écriture existante, sans double débit ni double paiement.
+- Appeler le service **dans la transaction** de l'opération métier (ex. création du ticket + mise).
+- `insufficient_funds` (422) si la mise dépasse le solde ; `wallet_frozen` (423) si le portefeuille est gelé.
+- Le solde n'est stocké nulle part ailleurs que dans les écritures (`balance_after_minor` sert au contrôle).
 
 ## Règles à respecter
 

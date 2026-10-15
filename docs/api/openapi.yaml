@@ -256,9 +256,48 @@ paths:
       responses: { "200": { description: OK }, "404": { description: Introuvable ou non autorisé } }
 
   /wallet:
-    get: { tags: [Wallet], summary: Solde, x-task: P5-03, responses: { "200": { description: OK } } }
+    get:
+      tags: [Wallet]
+      summary: Solde du portefeuille de l'utilisateur connecté (calculé par le serveur)
+      description: Le frontend affiche ce solde tel quel ; il ne le recalcule jamais.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency: { type: string, example: HTG }
+                      balance: { $ref: "#/components/schemas/Money" }
+                      status: { type: string, enum: [active, frozen] }
+                      simulated: { type: boolean, description: "true en V1 : fonds fictifs" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /wallet/transactions:
-    get: { tags: [Wallet], summary: Historique des écritures, x-task: P5-03, responses: { "200": { description: OK } } }
+    get:
+      tags: [Wallet]
+      summary: Historique des écritures (plus récentes d'abord)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LedgerEntry" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /admin/events/{id}:
     patch:
@@ -432,6 +471,16 @@ components:
         de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
 
   schemas:
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        amount: { $ref: "#/components/schemas/Money" }
+        balance_after: { $ref: "#/components/schemas/Money" }
+        related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
+        description: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
     AuditLog:
       type: object
       properties:
