@@ -13,11 +13,13 @@ import { WalletPage } from '../features/wallet/pages/WalletPage';
 import { RequirePermission } from '../admin/components/RequireAdmin';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { AdminHomePage } from '../admin/pages/AdminHomePage';
+import { UserDetailPage } from '../admin/pages/UserDetailPage';
+import { UsersPage } from '../admin/pages/UsersPage';
 import { Placeholder } from '../shared/components/Placeholder';
 
 /** Écran d'une section admin, protégé par la permission déclarée dans admin/navigation.ts. */
-function section(path: string, element: ReactNode) {
-  const permissions = ADMIN_SECTIONS.find((s) => s.to === `/admin${path ? `/${path}` : ''}`)?.permissions ?? [];
+function section(path: string, element: ReactNode, sectionPath = path.split('/')[0]) {
+  const permissions = ADMIN_SECTIONS.find((s) => s.to === `/admin${sectionPath ? `/${sectionPath}` : ''}`)?.permissions ?? [];
   return { ...(path ? { path } : { index: true }), element: <RequirePermission permissions={permissions}>{element}</RequirePermission> };
 }
 
@@ -44,7 +46,8 @@ export const routes = [
       section('', <AdminHomePage />),
       section('events', <Placeholder title="Événements & marchés" task="P6-06" />),
       section('settlements', <Placeholder title="Résultats & règlement" task="P6-06" />),
-      section('users', <Placeholder title="Utilisateurs" task="P6-07" />),
+      section('users', <UsersPage />),
+      section('users/:id', <UserDetailPage />),
       section('tickets', <Placeholder title="Tickets" task="P6-07" />),
       section('finance', <Placeholder title="Finance" task="P6-08" />),
       section('settings', <Placeholder title="Paramètres" task="P6-08" />),
