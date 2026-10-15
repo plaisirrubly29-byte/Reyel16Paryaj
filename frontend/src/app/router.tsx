@@ -8,6 +8,7 @@ import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
+import { WalletPage } from '../features/wallet/pages/WalletPage';
 import { Placeholder } from '../shared/components/Placeholder';
 
 export const routes = [
@@ -23,7 +24,7 @@ export const routes = [
       { path: 'reset-password', element: <ResetPasswordPage /> },
       { path: 'account', element: <RequireAuth><AccountPage /></RequireAuth> },
       { path: 'bets', element: <RequireAuth><Placeholder title="Mes tickets" task="P4-06" /></RequireAuth> },
-      { path: 'wallet', element: <RequireAuth><Placeholder title="Portefeuille" task="P5-07" /></RequireAuth> },
+      { path: 'wallet', element: <RequireAuth><WalletPage /></RequireAuth> },
     ],
   },
   {
