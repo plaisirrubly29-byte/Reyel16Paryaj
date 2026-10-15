@@ -2,7 +2,7 @@
 
 **Namespace :** `App\Modules\Admin`
 **Livraison :** Phase 6
-**Responsable :** _à assigner_
+**Responsable :** Rubly PLAISIR (utilisateurs, tickets, finance) · Benginio Jean-Baptiste (événements, marchés, résultats)
 
 ## Responsabilités
 
@@ -23,7 +23,7 @@
 
 - `GET/PATCH /api/v1/admin/events/{id}`
 - `GET/PATCH /api/v1/admin/markets/{id}`
-- `GET/PATCH /api/v1/admin/users/{id}`
+- `GET /api/v1/admin/users`, `GET/PATCH /api/v1/admin/users/{id}` (P6-03, livrées)
 
 ## Règles à respecter
 
