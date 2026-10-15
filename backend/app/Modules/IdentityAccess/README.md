@@ -2,7 +2,7 @@
 
 **Namespace :** `App\Modules\IdentityAccess`
 **Livraison :** Phase 2
-**Responsable :** _à assigner_
+**Responsable :** Rubly PLAISIR (@plaisirrubly29-byte)
 
 ## Responsabilités
 
@@ -16,13 +16,20 @@
 - Base de données
 - Notifications
 
-## Tables (modèle de données initial)
+## Tables
 
-- `users`
-- `user_profiles`
-- `roles`
-- `permissions`
-- `user_roles`
+| Table | Rôle |
+|---|---|
+| `users` | Compte : email, mot de passe haché, `status` (`AccountStatus` : active, suspended, excluded, closed) |
+| `user_profiles` | Données personnelles (nom, date de naissance, téléphone, pays) — 1-1 avec `users` |
+| `roles` | Rôles administratifs (`RoleSlug`) — seedés par `RoleSeeder` |
+| `permissions` | Permissions unitaires (`ressource.action`) |
+| `role_permissions` | Rôle → permissions |
+| `user_roles` | Utilisateur → rôles (+ `assigned_by`) |
+
+Un joueur n’a aucun rôle. Le statut ne change jamais par affectation de masse (non `fillable`).
+Comptes de démonstration (local) : `php artisan db:seed` — `joueur@example.com`, `super-admin@example.com`,
+`operations@example.com`, `finance@example.com`, `support@example.com`, `compliance@example.com` (mot de passe `password`).
 
 ## Routes prévues
 

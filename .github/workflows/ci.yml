@@ -50,7 +50,14 @@ jobs:
       - name: Migrations on PostgreSQL
         env:
           DB_HOST: 127.0.0.1
-        run: php artisan migrate --force
+        run: php artisan migrate --force --seed
+
+      - name: Migrations reversible (rollback complet puis re-migration)
+        env:
+          DB_HOST: 127.0.0.1
+        run: |
+          php artisan migrate:reset --force
+          php artisan migrate --force
 
       - name: Tests
         run: php artisan test
