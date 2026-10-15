@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
-const { roles, owners, waves, phases, tasks } = JSON.parse(readFileSync(join(here, 'tasks.json'), 'utf8'));
+const { roles, owners, advisors = [], waves, phases, tasks } = JSON.parse(readFileSync(join(here, 'tasks.json'), 'utf8'));
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');
@@ -33,6 +33,10 @@ const labelsOf = (task) => [
   ...(task.blocked ? ['blocked'] : []),
 ];
 
+const handle = (p) => (p.github ? '@' + p.github : '_à renseigner_');
+const membersOf = (role) =>
+  [...new Set(tasks.filter((t) => t.role === role).map((t) => owners[t.owner].name))].join(', ') || '—';
+
 function writeMarkdown() {
   const lines = [
     '# Plan de tâches — REYEL 16 PAYAJ V1',
@@ -44,7 +48,7 @@ function writeMarkdown() {
     '',
     '| Rôle | Périmètre | Membre(s) |',
     '|---|---|---|',
-    ...Object.entries(roles).map(([k, v]) => `| \`${k}\` | ${v} | |`),
+    ...Object.entries(roles).map(([k, v]) => `| \`${k}\` | ${v} | ${membersOf(k)} |`),
     '',
   ];
   lines.push('Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).', '');
@@ -78,19 +82,24 @@ function handoffs(task) {
 
 function writeRepartition() {
   const lines = [
-    '# Répartition des tâches par développeur',
+    "# Répartition des tâches par membre de l'équipe",
     '',
     '> Généré depuis `scripts/github/tasks.json` — ne pas éditer à la main.',
     '> Pour changer un responsable : modifier `owner` dans tasks.json, puis `node scripts/github/bootstrap.mjs --markdown`.',
     '',
     'Les deux développeurs sont **full-stack** : chacun livre le backend **et** les écrans de son domaine,',
-    'ce qui limite les conflits de fichiers. Les tests croisés (P2-07, P4-07, P6-09) sont confiés à',
-    "l'autre développeur que celui qui a écrit le code.",
+    'ce qui limite les conflits de fichiers. Les tests croisés (P2-07, P4-07, P6-09) et la revue de sécurité (P8-02)',
+    "sont confiés à l'autre développeur que celui qui a écrit le code.",
     '',
-    '| Responsable | GitHub | Domaine | Tâches |',
-    '|---|---|---|---|',
+    "Le chef de projet est aussi développeur : il garde les décisions qui l'engagent (juridique, hébergement, lancement)",
+    "et valide les livrables de conception de l'analyste avant qu'ils ne débloquent les tâches de développement.",
+    "L'analyste conseil n'a aucune tâche : il relit les choix de conception et conseille l'équipe.",
+    '',
+    '| Membre | Rôle | GitHub | Domaine | Tâches |',
+    '|---|---|---|---|---|',
     ...Object.entries(owners).map(([k, o]) =>
-      `| **${o.name}** | ${o.github ? '@' + o.github : '_à renseigner_'} | ${o.focus} | ${tasks.filter((t) => t.owner === k).length} |`),
+      `| **${o.name}** | ${o.title} | ${handle(o)} | ${o.focus} | ${tasks.filter((t) => t.owner === k).length} |`),
+    ...advisors.map((a) => `| **${a.name}** | ${a.title} | ${handle(a)} | ${a.focus} | — |`),
     '',
     '## Vagues',
     '',
@@ -102,13 +111,16 @@ function writeRepartition() {
   ];
   for (const [key, o] of Object.entries(owners)) {
     const mine = tasks.filter((t) => t.owner === key).sort((a, b) => a.wave - b.wave);
-    lines.push(`## ${o.name}${o.github ? ` (@${o.github})` : ''}`, '', `_${o.focus}_`, '');
+    lines.push(`## ${o.name} — ${o.title}${o.github ? ` (@${o.github})` : ''}`, '', `_${o.focus}_`, '');
     lines.push('| Vague | ID | Tâche | Attend (autre responsable) |', '|---|---|---|---|');
     for (const t of mine) {
       const title = t.blocked ? `⛔ ${t.title}` : t.title;
       lines.push(`| ${t.wave} | ${t.id} | ${title} | ${handoffs(t).join(', ') || '—'} |`);
     }
     lines.push('');
+  }
+  for (const a of advisors) {
+    lines.push(`## ${a.name} — ${a.title}${a.github ? ` (@${a.github})` : ''}`, '', a.focus, '');
   }
   const out = join(repoRoot, 'docs', 'REPARTITION.md');
   writeFileSync(out, lines.join('\n'));

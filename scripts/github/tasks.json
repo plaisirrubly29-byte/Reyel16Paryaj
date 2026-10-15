@@ -9,21 +9,32 @@
   },
   "owners": {
     "dev-a": {
-      "name": "Développeur A",
-      "github": "",
-      "focus": "Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, admin Utilisateurs/Tickets/Finance, CI & Staging, sécurité"
+      "name": "Rubly PLAISIR",
+      "title": "Chef de projet & développeur full-stack",
+      "github": "plaisirrubly29-byte",
+      "focus": "Pilotage (juridique, hébergement, lancement) + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, admin Utilisateurs/Tickets/Finance, CI & Staging"
     },
     "dev-b": {
-      "name": "Développeur B",
-      "github": "",
-      "focus": "Sports, paris & opérations — Données sportives, Catalogue, Coupon & tickets, admin Événements/Résultats, Docker, logs, E2E, charge, sauvegardes, monitoring"
+      "name": "Benginio Jean-Baptiste",
+      "title": "Développeur full-stack",
+      "github": "benginio",
+      "focus": "Sports, paris & opérations — Données sportives, Catalogue, Coupon & tickets, admin Événements/Résultats, Docker, logs, E2E, charge, sauvegardes, monitoring, revue de sécurité"
     },
-    "product": {
-      "name": "Chef de projet",
-      "github": "plaisirrubly29-byte",
-      "focus": "Décisions Phase 0, validation, recette et lancement"
+    "analyst": {
+      "name": "Widsondelne7376",
+      "title": "Analyste — conception",
+      "github": "Widsondelne7376",
+      "focus": "Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données"
     }
   },
+  "advisors": [
+    {
+      "name": "Marckendy Fevrier",
+      "title": "Analyste conseil (neutre)",
+      "github": "MarckendyFevrier",
+      "focus": "Assiste et conseille l’équipe (revue des choix de conception, avis sur les livrables). Aucune tâche assignée."
+    }
+  ],
   "waves": {
     "0": "Décisions (en parallèle, à démarrer tout de suite)",
     "1": "Socle",
@@ -97,7 +108,7 @@
         "Décision écrite dans docs/decisions.md",
         "Liste des obligations (âge, KYC, jeu responsable) consignée"
       ],
-      "owner": "product",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -112,7 +123,7 @@
         "Accès sandbox obtenu (clé stockée hors du dépôt)",
         "Documentation de l'API fournisseur liée dans docs/decisions.md"
       ],
-      "owner": "product",
+      "owner": "analyst",
       "wave": 0
     },
     {
@@ -126,7 +137,7 @@
         "Liste fermée des sports et marchés V1",
         "Décision simple/combiné consignée"
       ],
-      "owner": "product",
+      "owner": "analyst",
       "wave": 0
     },
     {
@@ -140,7 +151,7 @@
         "Règles écrites avec exemples chiffrés",
         "Validées par le propriétaire du projet"
       ],
-      "owner": "product",
+      "owner": "analyst",
       "wave": 0
     },
     {
@@ -153,7 +164,7 @@
       "acceptance": [
         "Devise(s), règle d'arrondi, min/max et plafonds consignés"
       ],
-      "owner": "product",
+      "owner": "analyst",
       "wave": 0
     },
     {
@@ -167,7 +178,7 @@
         "Matrice validée",
         "Actions nécessitant une double validation identifiées"
       ],
-      "owner": "product",
+      "owner": "analyst",
       "wave": 0
     },
     {
@@ -180,7 +191,7 @@
       "acceptance": [
         "Choix documenté avec coût estimé"
       ],
-      "owner": "product",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -954,7 +965,7 @@
       "acceptance": [
         "Rapport avec corrections des points bloquants"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 6
     },
     {
@@ -999,7 +1010,7 @@
         "P8-02",
         "P8-04"
       ],
-      "owner": "product",
+      "owner": "dev-a",
       "wave": 6
     },
     {

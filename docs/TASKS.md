@@ -7,12 +7,12 @@
 
 | Rôle | Périmètre | Membre(s) |
 |---|---|---|
-| `product` | Chef de projet / propriétaire — décisions, conformité, validation | |
-| `backend-core` | Backend 1 — Identité, Wallet & Ledger, Règlement, Audit | |
-| `backend-data` | Backend 2 — Données sportives, Catalogue, Tickets | |
-| `frontend-public` | Frontend 1 — Site public et espace joueur | |
-| `frontend-admin` | Frontend 2 — Panneau d'administration | |
-| `devops-qa` | DevOps / QA — CI, environnements, tests E2E, sécurité | |
+| `product` | Chef de projet / propriétaire — décisions, conformité, validation | Rubly PLAISIR, Widsondelne7376 |
+| `backend-core` | Backend 1 — Identité, Wallet & Ledger, Règlement, Audit | Rubly PLAISIR |
+| `backend-data` | Backend 2 — Données sportives, Catalogue, Tickets | Benginio Jean-Baptiste, Rubly PLAISIR |
+| `frontend-public` | Frontend 1 — Site public et espace joueur | Benginio Jean-Baptiste, Rubly PLAISIR |
+| `frontend-admin` | Frontend 2 — Panneau d'administration | Benginio Jean-Baptiste, Rubly PLAISIR |
+| `devops-qa` | DevOps / QA — CI, environnements, tests E2E, sécurité | Benginio Jean-Baptiste, Rubly PLAISIR |
 
 Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
@@ -22,13 +22,13 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P0-01 | Valider le territoire, le cadre juridique et les licences | Chef de projet | 0 | compliance | — |
-| P0-02 | Choisir le fournisseur de données sportives et de cotes | Chef de projet | 0 | sports-data | — |
-| P0-03 | Définir sports, compétitions, marchés et types de paris de la V1 | Chef de projet | 0 | catalogue | — |
-| P0-04 | Politique de changement de cote, annulation, report et correction de résultat | Chef de projet | 0 | betting | — |
-| P0-05 | Devise, arrondi, mises min/max et plafonds de gain | Chef de projet | 0 | wallet | — |
-| P0-06 | Rôles administratifs, double validation et limites d'action | Chef de projet | 0 | admin | — |
-| P0-07 | Hébergement, disponibilité, sauvegardes et rétention | Chef de projet | 0 | infra | — |
+| P0-01 | Valider le territoire, le cadre juridique et les licences | Rubly PLAISIR | 0 | compliance | — |
+| P0-02 | Choisir le fournisseur de données sportives et de cotes | Widsondelne7376 | 0 | sports-data | — |
+| P0-03 | Définir sports, compétitions, marchés et types de paris de la V1 | Widsondelne7376 | 0 | catalogue | — |
+| P0-04 | Politique de changement de cote, annulation, report et correction de résultat | Widsondelne7376 | 0 | betting | — |
+| P0-05 | Devise, arrondi, mises min/max et plafonds de gain | Widsondelne7376 | 0 | wallet | — |
+| P0-06 | Rôles administratifs, double validation et limites d'action | Widsondelne7376 | 0 | admin | — |
+| P0-07 | Hébergement, disponibilité, sauvegardes et rétention | Rubly PLAISIR | 0 | infra | — |
 
 ## Phase 1 — Architecture & socle
 
@@ -36,12 +36,12 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P1-01 | Valider l'environnement Docker local pour toute l'équipe | Développeur B | 1 | infra | — |
-| P1-02 | CI GitHub Actions verte et protection de la branche main | Développeur A | 1 | infra | — |
-| P1-03 | Conventions API : format JSON, erreurs, pagination, OpenAPI | Développeur A | 1 | core | — |
-| P1-04 | Journalisation structurée et identifiant de requête | Développeur B | 1 | core | — |
-| P1-05 | Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API | Développeur B | 1 | core | — |
-| P1-06 | Déploiement Staging automatisé | Développeur A | 4 | infra | P0-07 |
+| P1-01 | Valider l'environnement Docker local pour toute l'équipe | Benginio Jean-Baptiste | 1 | infra | — |
+| P1-02 | CI GitHub Actions verte et protection de la branche main | Rubly PLAISIR | 1 | infra | — |
+| P1-03 | Conventions API : format JSON, erreurs, pagination, OpenAPI | Rubly PLAISIR | 1 | core | — |
+| P1-04 | Journalisation structurée et identifiant de requête | Benginio Jean-Baptiste | 1 | core | — |
+| P1-05 | Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API | Benginio Jean-Baptiste | 1 | core | — |
+| P1-06 | Déploiement Staging automatisé | Rubly PLAISIR | 4 | infra | P0-07 |
 
 ## Phase 2 — Identité & rôles
 
@@ -49,13 +49,13 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P2-01 | Migrations utilisateurs, profils, rôles et permissions | Développeur A | 1 | identity | — |
-| P2-02 | API inscription, connexion, déconnexion, /me (Sanctum) | Développeur A | 2 | identity | P2-01 |
-| P2-03 | Récupération de compte sécurisée | Développeur A | 2 | identity | P2-02 |
-| P2-04 | RBAC : middleware, policies et protection contre l'auto-élévation | Développeur A | 2 | identity | P2-01, P0-06 |
-| P2-05 | MFA pour les rôles administratifs | Développeur A | 3 | identity | P2-04 |
-| P2-06 | Pages inscription, connexion, profil | Développeur A | 2 | identity | P2-02, P1-05 |
-| P2-07 | Tests d'accès et de session | Développeur B | 3 | identity | P2-04 |
+| P2-01 | Migrations utilisateurs, profils, rôles et permissions | Rubly PLAISIR | 1 | identity | — |
+| P2-02 | API inscription, connexion, déconnexion, /me (Sanctum) | Rubly PLAISIR | 2 | identity | P2-01 |
+| P2-03 | Récupération de compte sécurisée | Rubly PLAISIR | 2 | identity | P2-02 |
+| P2-04 | RBAC : middleware, policies et protection contre l'auto-élévation | Rubly PLAISIR | 2 | identity | P2-01, P0-06 |
+| P2-05 | MFA pour les rôles administratifs | Rubly PLAISIR | 3 | identity | P2-04 |
+| P2-06 | Pages inscription, connexion, profil | Rubly PLAISIR | 2 | identity | P2-02, P1-05 |
+| P2-07 | Tests d'accès et de session | Benginio Jean-Baptiste | 3 | identity | P2-04 |
 
 ## Phase 3 — Données sportives
 
@@ -63,12 +63,12 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | Développeur B | 1 | sports-data | — |
-| P3-02 | Interface SportsDataProvider + faux fournisseur | Développeur B | 2 | sports-data | P0-02 |
-| P3-03 | Jobs de synchronisation (queue) avec validation | Développeur B | 2 | sports-data | P3-01, P3-02 |
-| P3-04 | Règle de fraîcheur et suspension automatique des marchés | Développeur B | 2 | sports-data | P3-03 |
-| P3-05 | API catalogue public | Développeur B | 3 | catalogue | P3-04 |
-| P3-06 | Pages sports, compétitions, matchs et cotes | Développeur B | 3 | catalogue | P3-05 |
+| P3-01 | Migrations sports, compétitions, équipes, événements, marchés, sélections, cotes | Benginio Jean-Baptiste | 1 | sports-data | — |
+| P3-02 | Interface SportsDataProvider + faux fournisseur | Benginio Jean-Baptiste | 2 | sports-data | P0-02 |
+| P3-03 | Jobs de synchronisation (queue) avec validation | Benginio Jean-Baptiste | 2 | sports-data | P3-01, P3-02 |
+| P3-04 | Règle de fraîcheur et suspension automatique des marchés | Benginio Jean-Baptiste | 2 | sports-data | P3-03 |
+| P3-05 | API catalogue public | Benginio Jean-Baptiste | 3 | catalogue | P3-04 |
+| P3-06 | Pages sports, compétitions, matchs et cotes | Benginio Jean-Baptiste | 3 | catalogue | P3-05 |
 
 ## Phase 4 — Coupon & tickets simulés
 
@@ -76,13 +76,13 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P4-01 | Migrations tickets et sélections de ticket | Développeur B | 3 | betting | P3-01 |
-| P4-02 | Middleware clé d'idempotence | Développeur A | 2 | core | — |
-| P4-03 | POST /bets : revalidation serveur et transaction atomique | Développeur B | 4 | betting | P4-01, P4-02, P5-02, P0-04 |
-| P4-04 | GET /bets et GET /bets/{id} | Développeur B | 3 | betting | P4-01 |
-| P4-05 | Coupon de pari et confirmation de changement de cote | Développeur B | 4 | betting | P4-03, P3-06 |
-| P4-06 | Historique des tickets | Développeur B | 4 | betting | P4-04 |
-| P4-07 | Tests d'acceptation tickets | Développeur A | 4 | betting | P4-03 |
+| P4-01 | Migrations tickets et sélections de ticket | Benginio Jean-Baptiste | 3 | betting | P3-01 |
+| P4-02 | Middleware clé d'idempotence | Rubly PLAISIR | 2 | core | — |
+| P4-03 | POST /bets : revalidation serveur et transaction atomique | Benginio Jean-Baptiste | 4 | betting | P4-01, P4-02, P5-02, P0-04 |
+| P4-04 | GET /bets et GET /bets/{id} | Benginio Jean-Baptiste | 3 | betting | P4-01 |
+| P4-05 | Coupon de pari et confirmation de changement de cote | Benginio Jean-Baptiste | 4 | betting | P4-03, P3-06 |
+| P4-06 | Historique des tickets | Benginio Jean-Baptiste | 4 | betting | P4-04 |
+| P4-07 | Tests d'acceptation tickets | Rubly PLAISIR | 4 | betting | P4-03 |
 
 ## Phase 5 — Ledger simulé & règlement
 
@@ -90,13 +90,13 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P5-01 | Migrations wallets et ledger_entries | Développeur A | 3 | wallet | P0-05 |
-| P5-02 | Service Ledger : écritures, réservation de mise, compensations | Développeur A | 3 | wallet | P5-01 |
-| P5-03 | API portefeuille en lecture | Développeur A | 3 | wallet | P5-02 |
-| P5-04 | Migrations résultats/règlements et import de résultats de test | Développeur B | 3 | settlement | P3-02 |
-| P5-05 | Service de règlement idempotent | Développeur A | 5 | settlement | P5-02, P5-04, P4-03 |
-| P5-06 | Correction de résultat auditée | Développeur A | 5 | settlement | P5-05, P6-01 |
-| P5-07 | Page portefeuille | Développeur A | 4 | wallet | P5-03 |
+| P5-01 | Migrations wallets et ledger_entries | Rubly PLAISIR | 3 | wallet | P0-05 |
+| P5-02 | Service Ledger : écritures, réservation de mise, compensations | Rubly PLAISIR | 3 | wallet | P5-01 |
+| P5-03 | API portefeuille en lecture | Rubly PLAISIR | 3 | wallet | P5-02 |
+| P5-04 | Migrations résultats/règlements et import de résultats de test | Benginio Jean-Baptiste | 3 | settlement | P3-02 |
+| P5-05 | Service de règlement idempotent | Rubly PLAISIR | 5 | settlement | P5-02, P5-04, P4-03 |
+| P5-06 | Correction de résultat auditée | Rubly PLAISIR | 5 | settlement | P5-05, P6-01 |
+| P5-07 | Page portefeuille | Rubly PLAISIR | 4 | wallet | P5-03 |
 
 ## Phase 6 — Administration
 
@@ -104,15 +104,15 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P6-01 | Journal d'audit (admin_actions / audit_logs) | Développeur A | 3 | audit | P2-04 |
-| P6-02 | API admin événements et marchés | Développeur B | 5 | admin | P6-01, P3-05 |
-| P6-03 | API admin utilisateurs | Développeur A | 5 | admin | P6-01 |
-| P6-04 | API admin tickets et finance | Développeur A | 5 | admin | P6-01, P5-02 |
-| P6-05 | Admin : authentification, layout et vue d'ensemble | Développeur B | 5 | admin | P2-05, P1-05 |
-| P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | Développeur B | 5 | admin | P6-05, P6-02 |
-| P6-07 | Admin : écrans Utilisateurs et Tickets | Développeur A | 6 | admin | P6-05, P6-03, P6-04 |
-| P6-08 | Admin : écrans Finance, Paramètres et Audit | Développeur A | 6 | admin | P6-05, P6-04, P6-01 |
-| P6-09 | Matrice des permissions validée par tests API | Développeur B | 6 | admin | P6-02, P6-03, P6-04 |
+| P6-01 | Journal d'audit (admin_actions / audit_logs) | Rubly PLAISIR | 3 | audit | P2-04 |
+| P6-02 | API admin événements et marchés | Benginio Jean-Baptiste | 5 | admin | P6-01, P3-05 |
+| P6-03 | API admin utilisateurs | Rubly PLAISIR | 5 | admin | P6-01 |
+| P6-04 | API admin tickets et finance | Rubly PLAISIR | 5 | admin | P6-01, P5-02 |
+| P6-05 | Admin : authentification, layout et vue d'ensemble | Benginio Jean-Baptiste | 5 | admin | P2-05, P1-05 |
+| P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | Benginio Jean-Baptiste | 5 | admin | P6-05, P6-02 |
+| P6-07 | Admin : écrans Utilisateurs et Tickets | Rubly PLAISIR | 6 | admin | P6-05, P6-03, P6-04 |
+| P6-08 | Admin : écrans Finance, Paramètres et Audit | Rubly PLAISIR | 6 | admin | P6-05, P6-04, P6-01 |
+| P6-09 | Matrice des permissions validée par tests API | Benginio Jean-Baptiste | 6 | admin | P6-02, P6-03, P6-04 |
 
 ## Phase 7 — Intégrations autorisées
 
@@ -120,8 +120,8 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P7-01 | ⛔ Payments Adapter (BLOQUÉ jusqu'à validation juridique) | Développeur A | 6 | payments | P0-01, P5-02 |
-| P7-02 | Jeu responsable : limites, pause, auto-exclusion | Développeur B | 6 | compliance | P0-01, P4-03 |
+| P7-01 | ⛔ Payments Adapter (BLOQUÉ jusqu'à validation juridique) | Rubly PLAISIR | 6 | payments | P0-01, P5-02 |
+| P7-02 | Jeu responsable : limites, pause, auto-exclusion | Benginio Jean-Baptiste | 6 | compliance | P0-01, P4-03 |
 
 ## Phase 8 — QA & préparation production
 
@@ -129,10 +129,10 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P8-01 | Tests E2E du parcours complet | Développeur B | 6 | qa | P5-05, P4-05 |
-| P8-02 | Revue de sécurité | Développeur A | 6 | qa | — |
-| P8-03 | Test de charge adapté | Développeur B | 6 | qa | — |
-| P8-04 | Sauvegarde/restauration testée et procédure d'incident | Développeur B | 6 | infra | — |
+| P8-01 | Tests E2E du parcours complet | Benginio Jean-Baptiste | 6 | qa | P5-05, P4-05 |
+| P8-02 | Revue de sécurité | Benginio Jean-Baptiste | 6 | qa | — |
+| P8-03 | Test de charge adapté | Benginio Jean-Baptiste | 6 | qa | — |
+| P8-04 | Sauvegarde/restauration testée et procédure d'incident | Benginio Jean-Baptiste | 6 | infra | — |
 
 ## Phase 9 — Lancement contrôlé
 
@@ -140,8 +140,8 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P9-01 | Checklist de lancement et plan de rollback | Chef de projet | 6 | infra | P8-01, P8-02, P8-04 |
-| P9-02 | Monitoring et alertes de production | Développeur B | 6 | infra | — |
+| P9-01 | Checklist de lancement et plan de rollback | Rubly PLAISIR | 6 | infra | P8-01, P8-02, P8-04 |
+| P9-02 | Monitoring et alertes de production | Benginio Jean-Baptiste | 6 | infra | — |
 
 ## Détail des critères d'acceptation
 
