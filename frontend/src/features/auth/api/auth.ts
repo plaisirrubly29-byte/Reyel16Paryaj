@@ -86,7 +86,9 @@ export function useLogout() {
     mutationFn: () => api<null>('/auth/logout', { method: 'POST' }),
     // Session terminée (ou déjà expirée) : on oublie toutes les données de l'utilisateur.
     onSettled: () => {
-      queryClient.clear();
+      // On efface les données du compte, mais on met à jour la session au lieu de la supprimer :
+      // clear() détacherait les composants affichés (en-tête, coupon…), qui garderaient l'ancien utilisateur.
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
       queryClient.setQueryData(ME_KEY, null);
     },
   });

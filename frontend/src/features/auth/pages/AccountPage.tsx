@@ -33,7 +33,8 @@ export function AccountPage() {
         <Button
           variant="secondary"
           loading={logout.isPending}
-          onClick={() => logout.mutate(undefined, { onSettled: () => navigate('/', { replace: true }) })}
+          // On quitte d'abord la page protégée : sinon elle redirigerait vers /login dès la fin de la session.
+          onClick={() => { navigate('/', { replace: true }); logout.mutate(); }}
         >
           Se déconnecter
         </Button>

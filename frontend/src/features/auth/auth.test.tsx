@@ -55,7 +55,7 @@ describe('connexion', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/wallet'));
-    expect(screen.getByRole('link', { name: 'Ana Joueuse' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Mon compte (Ana Joueuse)' })).toBeInTheDocument();
 
     // Requête à effet : jeton CSRF envoyé.
     const loginCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/login'));

@@ -7,6 +7,11 @@ import { formatKickoff } from './format';
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
+/** Bouton de cote dans la liste d'une compétition (les cartes « Top matchs » reprennent les mêmes cotes). */
+async function oddsButton(name: string, competition = 'Premier League') {
+  return within(await screen.findByRole('region', { name: competition })).getByRole('button', { name });
+}
+
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
 
 const event = (id: string, home: string, away: string, odds: [string, string, string] | [string, string], sport = { slug: 'soccer', name: 'Football' }, competition = { id: '1', name: 'Premier League', country: 'Angleterre' }) => ({
@@ -101,18 +106,18 @@ describe("page d'accueil : matchs", () => {
     catalogue();
     renderApp('/');
 
-    await userEvent.click(await screen.findByRole('button', { name: '1 Everton à 2.95' }));
+    await userEvent.click(await oddsButton('1 Everton à 2.95'));
     const slip = screen.getByRole('complementary', { name: 'Coupon' });
     expect(within(slip).getByText('1 · Everton')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '1 Everton à 2.95' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await oddsButton('1 Everton à 2.95')).toHaveAttribute('aria-pressed', 'true');
 
     // Un seul choix par match : X remplace 1.
-    await userEvent.click(screen.getByRole('button', { name: 'X Match nul à 3.60' }));
+    await userEvent.click(await oddsButton('X Match nul à 3.60'));
     expect(within(slip).queryByText('1 · Everton')).toBeNull();
     expect(within(slip).getByText('X · Match nul')).toBeInTheDocument();
 
     // Deux matchs différents : deux sélections.
-    await userEvent.click(screen.getByRole('button', { name: '1 Fulham à 1.70' }));
+    await userEvent.click(await oddsButton('1 Fulham à 1.70'));
     expect(within(slip).getByLabelText('2 sélections')).toBeInTheDocument();
 
     await userEvent.click(within(slip).getByRole('button', { name: 'Retirer Fulham (Fulham – Hull City)' }));
@@ -123,7 +128,7 @@ describe("page d'accueil : matchs", () => {
     catalogue();
     renderApp('/');
 
-    await userEvent.click(await screen.findByRole('button', { name: '2 Chelsea à 2.05' }));
+    await userEvent.click(await oddsButton('2 Chelsea à 2.05'));
 
     const stored = JSON.parse(localStorage.getItem('r16p.betslip') ?? '[]');
     expect(stored).toEqual([expect.objectContaining({ selectionId: 's1a', marketId: 'm1', oddsVersion: 2, odds: '2.05' })]);
@@ -133,7 +138,7 @@ describe("page d'accueil : matchs", () => {
     catalogue();
     renderApp('/');
 
-    await userEvent.click(await screen.findByRole('button', { name: '1 Everton à 2.95' }));
+    await userEvent.click(await oddsButton('1 Everton à 2.95'));
 
     expect(screen.getByRole('link', { name: 'Se connecter pour parier' })).toHaveAttribute('href', '/login');
   });
@@ -153,7 +158,7 @@ describe("page d'accueil : matchs", () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     renderApp('/');
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Les matchs du moment');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Pariez sur vos sports préférés');
     expect(screen.getByRole('link', { name: 'Créer un compte' })).toHaveAttribute('href', '/register');
     // Panne réseau : 2 nouvelles tentatives automatiques (délais croissants) avant d'afficher l'erreur.
     expect(await screen.findByText('Connexion impossible', {}, { timeout: 8000 })).toBeInTheDocument();
@@ -174,13 +179,13 @@ describe('coupon : règles', () => {
     catalogue();
     renderApp('/');
 
-    await userEvent.click(await screen.findByRole('button', { name: '1 Everton à 2.95' }));
+    await userEvent.click(await oddsButton('1 Everton à 2.95'));
 
     const slip = screen.getByRole('complementary', { name: 'Coupon' });
     expect(within(slip).getByText(/Coupon complet : 20 matchs au maximum/)).toBeInTheDocument();
     expect(within(slip).getByLabelText('20 sélections')).toBeInTheDocument();
     expect(within(slip).getByText('1 · Équipe 0')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '1 Everton à 2.95' })).toHaveAttribute('aria-pressed', 'false');
+    expect(await oddsButton('1 Everton à 2.95')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('écarte les matchs déjà commencés et les données invalides au chargement', async () => {
@@ -217,8 +222,8 @@ describe('coupon : règles', () => {
     catalogue();
     renderApp('/');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'X Match nul à 3.60' }));
-    await userEvent.click(screen.getByRole('button', { name: 'X Match nul à 3.75' }));
+    await userEvent.click(await oddsButton('X Match nul à 3.60'));
+    await userEvent.click(await oddsButton('X Match nul à 3.75'));
 
     expect(screen.getByRole('button', { name: 'Retirer Match nul (Everton – Chelsea)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retirer Match nul (Fulham – Hull City)' })).toBeInTheDocument();
@@ -236,14 +241,14 @@ describe('liste des matchs : robustesse et navigation', () => {
         : { status: 200, body: page(EVENTS) }),
     });
     renderApp('/');
-    await screen.findByRole('button', { name: '1 Everton à 2.95' });
+    await oddsButton('1 Everton à 2.95');
 
     // Le rafraîchissement automatique (toutes les 60 s) échoue : erreur 4xx, sans nouvelle tentative.
     fail = true;
     await act(() => currentQueryClient().refetchQueries({ queryKey: ['catalogue', 'events'] }));
 
     expect(await screen.findByText(/Cotes non actualisées/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '1 Everton à 2.95' })).toBeInTheDocument();
+    expect(await oddsButton('1 Everton à 2.95')).toBeInTheDocument();
   });
 
   it("propose « Voir tous les matchs » sur l'accueil quand il y en a plus", async () => {
