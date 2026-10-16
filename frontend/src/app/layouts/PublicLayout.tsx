@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useMe } from '../../features/auth/api/auth';
+import { BetSlipProvider } from '../../features/betting/slip/BetSlipContext';
 import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
@@ -16,6 +17,7 @@ export function PublicLayout() {
   }
 
   return (
+    <BetSlipProvider>
     <div className="shell">
       <header className="topbar">
         <NavLink to="/" className="brand">REYEL 16 PAYAJ</NavLink>
@@ -51,5 +53,6 @@ export function PublicLayout() {
       </main>
       <SiteFooter />
     </div>
+    </BetSlipProvider>
   );
 }

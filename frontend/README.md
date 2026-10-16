@@ -18,10 +18,10 @@ Règle d'or : **le frontend affiche, le serveur décide** (solde, cote acceptée
 (le navigateur ne sait pas exécuter le code TypeScript/React non compilé). Il faut d'abord compiler :
 
 ```bash
-npm run build:xampp        # génère frontend/dist/ (chemin défini dans .env.xampp)
+npm run build:xampp        # génère frontend/dist-xampp/ (chemin défini dans .env.xampp)
 ```
 
-Puis ouvrir http://localhost/dashboard/Reyel16Paryaj/Reyel16Paryaj/frontend/ (redirigé vers `dist/`).
+Puis ouvrir http://localhost/dashboard/Reyel16Paryaj/Reyel16Paryaj/frontend/ (redirigé vers `dist-xampp/`).
 Relancer `npm run build:xampp` après chaque modification. Pour développer, préférer `npm run dev`
 (rechargement instantané). L'API doit tourner à part (`php artisan serve`, PHP 8.3).
 
