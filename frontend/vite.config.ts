@@ -1,13 +1,25 @@
 /// <reference types="vitest/config" />
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
+
+/** Ajoute le .htaccess d'Apache au build XAMPP seulement (un .htaccess dans dist/ bloquerait la redirection dist/ → dist-xampp/). */
+function xamppHtaccess(): Plugin {
+  return {
+    name: 'xampp-htaccess',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: '.htaccess', source: readFileSync('xampp/htaccess', 'utf8') })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.')
 
   return {
-    plugins: [react()],
+    plugins: [react(), mode === 'xampp' && xamppHtaccess()],
     // Chemin de publication. "/" en développement ; sous-dossier pour XAMPP (npm run build:xampp, voir .env.xampp).
     base: env.VITE_BASE || '/',
     // Dossier séparé pour XAMPP : un "npm run build" classique ne peut plus écraser la version servie par Apache.
