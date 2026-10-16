@@ -7,8 +7,9 @@ use App\Modules\SportsData\Models\Event;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Lecture du catalogue public (P3-05) : uniquement les événements à venir qui ont au moins
- * un marché pariable (ouvert ET cote assez récente — règle de fraîcheur, Market::scopeBettable).
+ * Lecture du catalogue public (P3-05) : les événements à venir qui ont au moins un marché ouvert
+ * et coté (Market::scopeDisplayable). Une cote trop ancienne reste affichée mais n'est pas pariable
+ * (règle de fraîcheur, Market::isBettable, exposée par MarketResource en "bettable").
  * Lecture seule des tables du module SportsData.
  */
 class CatalogueQuery
@@ -19,7 +20,7 @@ class CatalogueQuery
         return Event::query()
             ->where('status', EventStatus::Scheduled)
             ->where('starts_at', '>', now())
-            ->whereHas('markets', fn ($q) => $q->bettable())
+            ->whereHas('markets', fn ($q) => $q->displayable())
             ->whereHas('competition', fn ($q) => $q->where('is_active', true)
                 ->whereHas('sport', fn ($s) => $s->where('is_active', true)));
     }
@@ -36,7 +37,7 @@ class CatalogueQuery
             'competition.sport',
             'homeTeam',
             'awayTeam',
-            'markets' => fn ($q) => $q->bettable()
+            'markets' => fn ($q) => $q->displayable()
                 ->when($marketKey, fn ($m) => $m->where('key', $marketKey))
                 ->with(['selections' => fn ($s) => $s->orderByRaw("CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 ELSE 4 END")]),
         ]);

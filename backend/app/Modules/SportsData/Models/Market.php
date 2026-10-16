@@ -45,6 +45,17 @@ class Market extends Model
             ->where('odds_updated_at', '>=', now()->subMinutes((int) config('sports_data.max_odds_age_minutes')));
     }
 
+    /**
+     * Marchés affichés au catalogue : ouverts et déjà cotés, quel que soit l'âge de la cote.
+     * Une cote trop ancienne reste visible mais n'est pas pariable (isBettable).
+     *
+     * @param  Builder<Market>  $query
+     */
+    public function scopeDisplayable(Builder $query): void
+    {
+        $query->where('status', MarketStatus::Open)->whereNotNull('odds_updated_at');
+    }
+
     public function isBettable(): bool
     {
         return $this->status === MarketStatus::Open

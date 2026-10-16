@@ -79,12 +79,18 @@ class CatalogueApiTest extends TestCase
         $this->getJson('/api/v1/events?sport=tennis')->assertJsonCount(0, 'data');
     }
 
-    public function test_stale_odds_hide_every_event(): void
+    public function test_fresh_odds_are_bettable(): void
+    {
+        $this->getJson('/api/v1/events')->assertJsonPath('data.0.markets.0.bettable', true);
+    }
+
+    public function test_stale_odds_keep_events_visible_but_not_bettable(): void
     {
         $this->travel(301)->minutes();
 
-        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(0, 'data');
-        $this->getJson('/api/v1/sports')->assertOk()->assertJsonCount(0, 'data');
+        $response = $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(3, 'data');
+        $this->assertSame([false, false, false], array_map(fn ($e) => $e['markets'][0]['bettable'], $response->json('data')));
+        $this->getJson('/api/v1/sports')->assertOk()->assertJsonCount(2, 'data');
     }
 
     public function test_suspended_market_started_or_finished_events_are_hidden(): void

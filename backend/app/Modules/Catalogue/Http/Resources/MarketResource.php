@@ -21,6 +21,8 @@ class MarketResource extends JsonResource
             // À renvoyer avec la sélection lors du pari : le serveur refuse une version périmée (P4-03).
             'odds_version' => $this->odds_version,
             'odds_updated_at' => $this->odds_updated_at?->toIso8601String(),
+            // false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable.
+            'bettable' => $this->isBettable(),
             'selections' => $this->selections->map(fn ($s) => [
                 'id' => (string) $s->id,
                 'key' => $s->key,
