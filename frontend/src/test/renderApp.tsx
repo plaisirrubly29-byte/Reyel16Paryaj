@@ -1,4 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { vi } from 'vitest';
@@ -34,10 +34,19 @@ export function mockApi(handlers: Record<string, Handler | { status: number; bod
 }
 
 /** Rend l'application complète (routes réelles) à l'URL donnée. */
+let lastQueryClient: QueryClient | null = null;
+
+/** Cache de requêtes de la dernière application rendue (ex. forcer un rafraîchissement dans un test). */
+export function currentQueryClient(): QueryClient {
+  if (!lastQueryClient) throw new Error('renderApp() doit être appelé avant.');
+  return lastQueryClient;
+}
+
 export function renderApp(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
+  lastQueryClient = createQueryClient();
   render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={lastQueryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );

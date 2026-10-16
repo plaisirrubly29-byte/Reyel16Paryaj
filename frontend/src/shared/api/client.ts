@@ -66,17 +66,22 @@ function readCookie(name: string): string | null {
 
 let csrfRequest: Promise<void> | null = null;
 
+/** Origine de l'API : absolue (http://localhost:8000/api/v1) ou relative (/api/v1, via le proxy de Vite). */
+function apiBase(): URL {
+  return new URL(API_URL, window.location.origin);
+}
+
 /** Récupère le cookie CSRF de Sanctum (servi hors du préfixe /api/v1). */
 export function ensureCsrfCookie(force = false): Promise<void> {
   if (!force && readCookie('XSRF-TOKEN')) return Promise.resolve();
-  csrfRequest ??= fetch(new URL('/sanctum/csrf-cookie', API_URL), { credentials: 'include' })
+  csrfRequest ??= fetch(new URL('/sanctum/csrf-cookie', apiBase()), { credentials: 'include' })
     .then(() => undefined)
     .finally(() => { csrfRequest = null; });
   return csrfRequest;
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const url = new URL(`${API_URL}${path}`);
+  const url = new URL(`${API_URL}${path}`, window.location.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
   }
