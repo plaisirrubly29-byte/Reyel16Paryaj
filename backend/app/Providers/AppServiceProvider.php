@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
+use App\Modules\SportsData\Services\CreditBudget;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
@@ -30,6 +31,13 @@ class AppServiceProvider extends ServiceProvider
             ),
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
         });
+
+        // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
+        $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(
+            $app->make(SportsDataProvider::class),
+            $app->make('cache.store'),
+            config('sports_data'),
+        ));
     }
 
     /**

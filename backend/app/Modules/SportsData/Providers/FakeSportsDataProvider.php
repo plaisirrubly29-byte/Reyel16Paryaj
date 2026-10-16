@@ -105,6 +105,11 @@ class FakeSportsDataProvider implements SportsDataProvider
         }, $fixtures[$sportKey] ?? []);
     }
 
+    public function upcomingStarts(string $sportKey): array
+    {
+        return array_map(fn (EventData $e) => $e->startsAt, $this->events($sportKey));
+    }
+
     public function results(string $sportKey, int $daysFrom = 1): array
     {
         $this->guard();

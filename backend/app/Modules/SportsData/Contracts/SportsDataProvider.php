@@ -7,6 +7,7 @@ use App\Modules\SportsData\Data\QuotaData;
 use App\Modules\SportsData\Data\ResultData;
 use App\Modules\SportsData\Data\SportData;
 use App\Modules\SportsData\Exceptions\SportsDataException;
+use Carbon\CarbonImmutable;
 
 /**
  * Accès au fournisseur de données sportives. Le reste de l'application ne connaît que ce contrat :
@@ -35,6 +36,16 @@ interface SportsDataProvider
      * @throws SportsDataException
      */
     public function events(string $sportKey): array;
+
+    /**
+     * Heures de début des événements à venir d'un sport, sans cotes (gratuit chez The Odds API) :
+     * permet de ne pas payer un appel de cotes pour une compétition sans match.
+     *
+     * @return list<CarbonImmutable>
+     *
+     * @throws SportsDataException
+     */
+    public function upcomingStarts(string $sportKey): array;
 
     /**
      * Résultats (terminés ou en cours) des derniers jours.

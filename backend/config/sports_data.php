@@ -39,7 +39,15 @@ return [
     ],
 
     // Garde-fou : plus aucun appel payant quand le quota restant passe sous ce seuil.
+    // C'est aussi la réserve que le budget de crédits ne dépense jamais.
     'min_remaining_requests' => (int) env('SPORTS_DATA_MIN_REMAINING', 25),
+
+    // Budget de crédits (Services/CreditBudget) : les crédits restants sont répartis sur les synchros
+    // prévues d'ici la remise à zéro du quota ; les compétitions en trop sont reportées à la synchro suivante.
+    'budget_enabled' => (bool) env('SPORTS_DATA_BUDGET', true),
+    // Crédits de l'offre par mois (offre gratuite : 500) et jour du mois où le quota repart à zéro.
+    'monthly_credits' => (int) env('SPORTS_DATA_MONTHLY_CREDITS', 500),
+    'quota_reset_day' => (int) env('SPORTS_DATA_QUOTA_RESET_DAY', 1),
 
     // Synchronisation (P3-03). Coût mensuel ≈ nb de compétitions × nb d'exécutions par mois.
     // Par défaut toutes les 4 h : 1 compétition ≈ 180 crédits/mois (offre gratuite : 500).

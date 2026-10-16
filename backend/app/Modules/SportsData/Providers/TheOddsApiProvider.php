@@ -10,6 +10,7 @@ use App\Modules\SportsData\Data\ResultData;
 use App\Modules\SportsData\Data\SelectionData;
 use App\Modules\SportsData\Data\SportData;
 use App\Modules\SportsData\Exceptions\SportsDataException;
+use App\Modules\SportsData\Models\ProviderApiCall;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Http\Client\ConnectionException;
@@ -23,7 +24,8 @@ use Throwable;
  *
  * Quota : chaque appel de cotes coûte (marchés × régions) crédits, /scores coûte 1 (2 avec daysFrom),
  * /sports est gratuit. Le quota restant est lu dans les en-têtes x-requests-* et mémorisé ;
- * sous le seuil "min_remaining_requests", plus aucun appel payant n'est envoyé.
+ * sous le seuil "min_remaining_requests", plus aucun appel payant n'est envoyé. Chaque réponse est
+ * journalisée (ProviderApiCall) pour le budget de crédits (Services/CreditBudget).
  *
  * La clé n'apparaît jamais dans les journaux ni dans les messages d'erreur.
  */
@@ -79,6 +81,21 @@ class TheOddsApiProvider implements SportsDataProvider
         }
 
         return $events;
+    }
+
+    /** /events est gratuit (ne compte pas dans le quota) : liste des matchs sans cotes. */
+    public function upcomingStarts(string $sportKey): array
+    {
+        $payload = $this->get("/sports/{$this->segment($sportKey)}/events", ['dateFormat' => 'iso'], paid: false);
+
+        $starts = [];
+        foreach ($this->list($payload) as $event) {
+            if (isset($event['commence_time'])) {
+                $starts[] = CarbonImmutable::parse($event['commence_time']);
+            }
+        }
+
+        return $starts;
     }
 
     public function results(string $sportKey, int $daysFrom = 1): array
@@ -186,6 +203,7 @@ class TheOddsApiProvider implements SportsDataProvider
         }
 
         $this->rememberQuota($response);
+        $this->record($path, $response);
 
         if ($response->successful()) {
             return $response->json();
@@ -228,6 +246,32 @@ class TheOddsApiProvider implements SportsDataProvider
             'last_cost' => (int) $response->header('x-requests-last'),
             'observed_at' => CarbonImmutable::now()->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Journalise la réponse (sports_data_api_calls) pour le suivi des crédits : chemin générique,
+     * compétition et en-têtes x-requests-*, jamais la clé ni les paramètres. Un échec d'écriture
+     * est journalisé sans interrompre la synchronisation.
+     */
+    private function record(string $path, Response $response): void
+    {
+        try {
+            $competition = preg_match('#^/sports/([a-z0-9_]+)/#', $path, $m) ? $m[1] : null;
+            $header = fn (string $name) => $response->header($name) === '' ? null : (int) $response->header($name);
+
+            ProviderApiCall::create([
+                'provider' => $this->name(),
+                'endpoint' => $competition === null ? $path : str_replace("/{$competition}/", '/{sport}/', $path),
+                'competition' => $competition,
+                'cost' => $header('x-requests-last') ?? 0,
+                'remaining' => $header('x-requests-remaining'),
+                'used' => $header('x-requests-used'),
+                'status' => $response->status(),
+                'called_at' => CarbonImmutable::now(),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('sports_data.api_call_not_recorded', ['provider' => $this->name(), 'path' => $path, 'error' => $this->redact($e->getMessage())]);
+        }
     }
 
     /** Clé de sport insérée dans l'URL : caractères sûrs uniquement. */
