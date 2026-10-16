@@ -24,6 +24,8 @@ export type CatalogueMarket = {
   name: string;
   odds_version: number;
   odds_updated_at: string;
+  /** false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable. */
+  bettable: boolean;
   selections: CatalogueSelection[];
 };
 

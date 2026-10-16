@@ -28,6 +28,7 @@ const event = (id: string, home: string, away: string, odds: [string, string, st
     name: 'Résultat du match (1X2)',
     odds_version: 2,
     odds_updated_at: new Date().toISOString(),
+    bettable: true,
     selections: odds.length === 3
       ? [
           { id: `s${id}h`, key: 'home', label: '1', name: home, odds: odds[0] },
@@ -143,6 +144,22 @@ describe("page d'accueil : matchs", () => {
     expect(screen.getByRole('link', { name: 'Se connecter pour parier' })).toHaveAttribute('href', '/login');
   });
 
+  it('affiche un match à la cote trop ancienne sans permettre de le parier', async () => {
+    const stale = { ...EVENTS[0], markets: [{ ...EVENTS[0].markets[0], bettable: false }] };
+    mockApi({
+      'GET /me': guest,
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([stale, EVENTS[1]]) },
+    });
+    renderApp('/');
+
+    const lockedBtn = await oddsButton('1 Everton à 2.95 (cote en cours de mise à jour)');
+    expect(lockedBtn).toBeDisabled();
+    await userEvent.click(lockedBtn);
+    expect(within(screen.getByRole('complementary', { name: 'Coupon' })).getByLabelText('0 sélection')).toBeInTheDocument();
+    expect(await oddsButton('1 Fulham à 1.70')).toBeEnabled();
+  });
+
   it('annonce l\'absence de match ouvert', async () => {
     mockApi({
       'GET /me': guest,
@@ -251,15 +268,22 @@ describe('liste des matchs : robustesse et navigation', () => {
     expect(await oddsButton('1 Everton à 2.95')).toBeInTheDocument();
   });
 
-  it("propose « Voir tous les matchs » sur l'accueil quand il y en a plus", async () => {
-    mockApi({
+  it("pagine tous les matchs sur l'accueil", async () => {
+    const fetchMock = mockApi({
       'GET /me': guest,
       'GET /sports': { status: 200, body: { data: SPORTS } },
-      'GET /events': { status: 200, body: page(EVENTS, { total: 75, last_page: 3 }) },
+      'GET /events': (_, url) => ({
+        status: 200,
+        body: page(EVENTS, { current_page: Number(url.searchParams.get('page') ?? 1), total: 134, last_page: 3 }),
+      }),
     });
-    renderApp('/');
+    const router = renderApp('/');
 
-    expect(await screen.findByRole('link', { name: 'Voir tous les matchs (75)' })).toHaveAttribute('href', '/sports');
+    expect(await screen.findByRole('heading', { name: 'Tous les matchs' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Suivant' }));
+
+    await waitFor(() => expect(router.state.location.search).toBe('?page=2'));
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('page=2'))).toBe(true);
   });
 
   it('pagine la page Sports et garde la page dans l\'URL', async () => {

@@ -10,13 +10,13 @@ const STEPS = [
   { title: 'Suivez vos tickets', text: 'Résultats et gains calculés par la plateforme.' },
 ];
 
-/** Accueil : bandeau, top matchs, matchs à venir et coupon, puis les informations. */
+/** Accueil : bandeau, top matchs, tous les matchs (paginés) et coupon, puis les informations. */
 export function HomePage() {
   const { data: user } = useMe();
 
   return (
     <div className="stack">
-      <BettingBoard perPage={30}>
+      <BettingBoard title="Tous les matchs" perPage={50} paginate>
         <section className="hero-banner" aria-labelledby="hero-title">
           <div>
             <h1 id="hero-title">{user ? `Bonjour ${user.name.split(' ')[0]}` : 'Pariez sur vos sports préférés'}</h1>
