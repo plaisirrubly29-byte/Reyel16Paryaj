@@ -181,18 +181,26 @@ describe("page d'accueil : matchs", () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     renderApp('/');
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Pariez sur vos sports préférés');
-    expect(screen.getByRole('link', { name: 'Créer un compte' })).toHaveAttribute('href', '/register');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('paris sportifs');
+    expect(screen.getByRole('link', { name: 'Inscription' })).toHaveAttribute('href', '/register');
     // Panne réseau : 2 nouvelles tentatives automatiques (délais croissants) avant d'afficher l'erreur.
     expect(await screen.findByText('Connexion impossible', {}, { timeout: 8000 })).toBeInTheDocument();
   });
 
-  it('propose le portefeuille à un joueur connecté', async () => {
+  it('propose le portefeuille à un joueur connecté et masque « Comment ça marche »', async () => {
     catalogue({ status: 200, body: { data: player } });
     renderApp('/');
 
-    expect(await screen.findByRole('link', { name: 'Mon portefeuille' })).toHaveAttribute('href', '/wallet');
-    expect(screen.queryByRole('link', { name: 'Créer un compte' })).toBeNull();
+    expect(await screen.findByRole('link', { name: 'Portefeuille' })).toHaveAttribute('href', '/wallet');
+    expect(screen.queryByRole('link', { name: 'Inscription' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Comment ça marche' })).toBeNull();
+  });
+
+  it('explique le fonctionnement à un visiteur', async () => {
+    catalogue();
+    renderApp('/');
+
+    expect(await screen.findByRole('heading', { name: 'Comment ça marche' })).toBeInTheDocument();
   });
 });
 
