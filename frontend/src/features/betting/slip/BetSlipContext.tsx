@@ -15,8 +15,10 @@ export type SlipSelection = {
   oddsVersion: number;
   /** Cote affichée au moment du choix (chaîne décimale). */
   odds: string;
-  label: string; // 1 / X / 2
-  pick: string; // nom de la sélection (équipe ou « Match nul »)
+  label: string; // 1 / X / 2, +2.5 / -2.5
+  pick: string; // nom de la sélection (équipe, « Match nul », « Plus de 2.5 »…)
+  /** Nom du marché (« Résultat du match », « Nombre de buts »…) ; absent dans les anciens coupons. */
+  market?: string;
   match: string; // « Domicile – Extérieur »
   startsAt: string;
 };

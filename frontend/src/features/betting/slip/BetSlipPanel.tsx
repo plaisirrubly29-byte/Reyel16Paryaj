@@ -1,6 +1,7 @@
 import { useId, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../../shared/components/Alert';
+import { Icon } from '../../../shared/components/Icon';
 import { useMediaQuery } from '../../../shared/hooks/useMediaQuery';
 import { useMe } from '../../auth/api/auth';
 import { formatKickoff } from '../../catalogue/format';
@@ -35,7 +36,7 @@ export function BetSlipPanel() {
       id="betslip"
     >
       <h2 ref={headingRef} className="betslip-toggle" tabIndex={-1}>
-        <span>Coupon</span>
+        <span className="betslip-title"><Icon name="coupon" size={20} />Coupon</span>
         <span className="betslip-head-right">
           <span className="betslip-count" aria-label={countLabel}>{count}</span>
           {collapsible && (
@@ -50,7 +51,7 @@ export function BetSlipPanel() {
         )}
         {count === 0 ? (
           <div className="betslip-empty">
-            <span className="betslip-empty-icon" aria-hidden="true">✓</span>
+            <span className="betslip-empty-icon" aria-hidden="true"><Icon name="coupon" size={26} /></span>
             <strong>Votre coupon est vide</strong>
             <p className="muted small">Ajoutez des paris en touchant les cotes.</p>
           </div>
@@ -61,10 +62,10 @@ export function BetSlipPanel() {
                 const { day, time } = formatKickoff(s.startsAt);
                 return (
                   <li key={s.selectionId}>
-                    <div>
+                    <div className="betslip-pick">
                       <strong>{s.label} · {s.pick}</strong>
-                      <div className="muted small">{s.match}</div>
-                      <div className="muted small">{day} {time}</div>
+                      <div className="betslip-match">{s.match}</div>
+                      <div className="muted small">{s.market ?? 'Résultat du match'} · {day} {time}</div>
                     </div>
                     <span className="odds-value">{s.odds}</span>
                     <button

@@ -1,7 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useMe } from '../../auth/api/auth';
+import { Icon, type IconName } from '../../../shared/components/Icon';
 import { BettingBoard } from '../components/BettingBoard';
 import { TopMatches } from '../components/TopMatches';
+
+const HIGHLIGHTS: { icon: IconName; text: string }[] = [
+  { icon: 'bolt', text: 'Cotes actualisées chaque jour' },
+  { icon: 'shield', text: 'Cote revérifiée au moment du pari' },
+  { icon: 'wallet', text: 'Démonstration : fonds fictifs' },
+];
 
 const STEPS = [
   { title: 'Créez votre compte', text: 'Une minute suffit. Réservé aux personnes majeures.' },
@@ -18,9 +25,15 @@ export function HomePage() {
     <div className="stack">
       <BettingBoard title="Tous les matchs" perPage={50} paginate>
         <section className="hero-banner" aria-labelledby="hero-title">
-          <div>
+          <div className="hero-text">
+            <span className="hero-eyebrow">Football · Basketball · Baseball</span>
             <h1 id="hero-title">{user ? `Bonjour ${user.name.split(' ')[0]}` : 'Pariez sur vos sports préférés'}</h1>
-            <p>Les meilleures cotes du football et des grands championnats, mises à jour plusieurs fois par jour.</p>
+            <p>Premier League, Ligue des champions, LaLiga, NBA… Les cotes des grands championnats, mises à jour chaque jour.</p>
+            <ul className="hero-highlights">
+              {HIGHLIGHTS.map((h) => (
+                <li key={h.text}><Icon name={h.icon} size={16} />{h.text}</li>
+              ))}
+            </ul>
           </div>
           <div className="hero-actions">
             {user ? (
@@ -53,6 +66,7 @@ export function HomePage() {
       )}
 
       <section className="responsible" aria-labelledby="responsible-title">
+        <span className="responsible-badge" aria-hidden="true">18+</span>
         <h2 id="responsible-title">Jouez de manière responsable</h2>
         <p className="muted small">
           Le jeu doit rester un divertissement. Interdit aux moins de 18 ans. Fixez-vous des limites et faites une pause si besoin.

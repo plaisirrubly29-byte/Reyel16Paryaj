@@ -1,6 +1,8 @@
+import { Link } from 'react-router-dom';
 import type { CatalogueEvent } from '../api/catalogue';
 import { formatKickoff } from '../format';
 import { OddsButtons } from './OddsButtons';
+import { TeamBadge } from './TeamBadge';
 
 /** Ligne de match : heure, équipes et cotes 1 / X / 2 cliquables (ajout au coupon). */
 export function MatchRow({ event }: { event: CatalogueEvent }) {
@@ -9,13 +11,13 @@ export function MatchRow({ event }: { event: CatalogueEvent }) {
   return (
     <li className="match-row">
       <div className="match-time">
-        <span>{day}</span>
         <strong>{time}</strong>
+        <span>{day}</span>
       </div>
-      <div className="match-teams">
-        <span>{event.home_team}</span>
-        <span>{event.away_team}</span>
-      </div>
+      <Link to={`/events/${event.id}`} className="match-teams" title="Voir tous les paris de ce match">
+        <span className="team"><TeamBadge name={event.home_team} /><span className="team-name">{event.home_team}</span></span>
+        <span className="team"><TeamBadge name={event.away_team} /><span className="team-name">{event.away_team}</span></span>
+      </Link>
       <OddsButtons event={event} />
     </li>
   );

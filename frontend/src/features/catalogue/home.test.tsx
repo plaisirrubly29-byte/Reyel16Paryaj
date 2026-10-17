@@ -86,9 +86,15 @@ describe("page d'accueil : matchs", () => {
     expect(within(epl).getByRole('button', { name: '1 Everton à 2.95' })).toBeInTheDocument();
     expect(within(epl).getByRole('button', { name: 'X Match nul à 3.60' })).toBeInTheDocument();
     expect(within(epl).getByRole('button', { name: '2 Chelsea à 2.05' })).toBeInTheDocument();
+    // Repère visuel du favori : la cote la plus basse du match (2.05 < 2.95 < 3.60).
+    expect(within(epl).getByRole('button', { name: '2 Chelsea à 2.05' })).toHaveClass('favorite');
+    expect(within(epl).getByRole('button', { name: '1 Everton à 2.95' })).not.toHaveClass('favorite');
 
     const nba = screen.getByRole('region', { name: 'NBA' });
     expect(within(nba).getAllByRole('button')).toHaveLength(2); // pas de match nul au basket
+
+    // Les équipes mènent à la page du match (tous ses paris).
+    expect(within(epl).getByText('Everton').closest('a')).toHaveAttribute('href', '/events/1');
   });
 
   it('filtre par sport et garde le choix dans l\'URL', async () => {
