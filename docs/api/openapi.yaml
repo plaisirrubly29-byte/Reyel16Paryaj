@@ -48,10 +48,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, email, password, password_confirmation, birth_date]
+              required: [name, phone, password, password_confirmation, birth_date]
               properties:
                 name: { type: string, maxLength: 100 }
-                email: { type: string, format: email }
+                phone: { type: string, description: "Numéro haïtien local, 8 chiffres (espaces/tirets et préfixe +509/509 acceptés)", example: "+509 3412-3456" }
+                email: { type: string, format: email, nullable: true, description: "Optionnel." }
                 password: { type: string, minLength: 10, description: "Au moins une lettre et un chiffre" }
                 password_confirmation: { type: string }
                 birth_date: { type: string, format: date, example: "1998-05-21" }
@@ -68,16 +69,16 @@ paths:
       summary: Connexion
       description: |
         Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
-        Limité à 5 tentatives/minute par email+IP et 20/minute par IP.
+        Limité à 5 tentatives/minute par téléphone+IP et 20/minute par IP.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required: [phone, password]
               properties:
-                email: { type: string, format: email }
+                phone: { type: string, example: "34123456" }
                 password: { type: string }
       responses:
         "200":
@@ -198,7 +199,7 @@ components:
             error:
               code: validation_failed
               message: Les données envoyées sont invalides.
-              details: { email: ["Le champ email est obligatoire."] }
+              details: { phone: ["Le champ phone est obligatoire."] }
     Unauthenticated:
       description: Authentification requise
       content:
@@ -241,7 +242,8 @@ components:
       properties:
         id: { type: string, example: "42" }
         name: { type: string }
-        email: { type: string, format: email }
+        phone: { type: string, example: "34123456", description: "Identifiant de connexion, 8 chiffres." }
+        email: { type: [string, "null"], format: email }
         status: { type: string, enum: [active, suspended, excluded, closed] }
         roles:
           type: array
@@ -254,7 +256,6 @@ components:
             first_name: { type: [string, "null"] }
             last_name: { type: [string, "null"] }
             birth_date: { type: [string, "null"], format: date }
-            phone: { type: [string, "null"] }
             country: { type: [string, "null"] }
         created_at: { type: string, format: date-time }
     UserEnvelope:

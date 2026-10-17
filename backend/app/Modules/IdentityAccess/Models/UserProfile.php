@@ -15,10 +15,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $first_name
  * @property string|null $last_name
  * @property Carbon|null $birth_date
- * @property string|null $phone
  * @property string|null $country
  */
-#[Fillable(['first_name', 'last_name', 'birth_date', 'phone', 'country'])]
+#[Fillable(['first_name', 'last_name', 'birth_date', 'country'])]
 class UserProfile extends Model
 {
     protected function casts(): array

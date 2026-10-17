@@ -12,8 +12,14 @@ return [
 
     // Limitation des tentatives de connexion.
     'login' => [
-        'max_attempts_per_email' => 5, // par minute, par couple email + IP
+        'max_attempts_per_phone' => 5, // par minute, par couple téléphone + IP
         'max_attempts_per_ip' => 20, // par minute, toutes adresses confondues
+    ],
+
+    // Numéro de téléphone haïtien local : identifiant de connexion (voir RegisterRequest::normalizePhone).
+    'phone' => [
+        'country_code' => '509',
+        'length' => 8,
     ],
 
 ];

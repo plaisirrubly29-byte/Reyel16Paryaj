@@ -13,14 +13,18 @@ class AuthService
     /**
      * Crée un compte joueur actif (sans rôle) et son profil.
      *
-     * @param  array{name: string, email: string, password: string, birth_date: string, country?: string|null}  $data
+     * @param  array{name: string, phone: string, email?: string|null, password: string, birth_date: string, country?: string|null}  $data
      */
     public function register(array $data): User
     {
         return DB::transaction(function () use ($data) {
+            // Email absent => NULL explicite (pas de chaîne vide, qui romprait l'unicité "nullable").
+            $email = isset($data['email']) && $data['email'] !== '' ? Str::lower($data['email']) : null;
+
             $user = User::create([
                 'name' => $data['name'],
-                'email' => Str::lower($data['email']),
+                'phone' => $data['phone'],
+                'email' => $email,
                 'password' => $data['password'],
             ]);
 
@@ -39,9 +43,9 @@ class AuthService
      *
      * @throws ApiException invalid_credentials | account_suspended
      */
-    public function verifyCredentials(string $email, string $password): User
+    public function verifyCredentials(string $phone, string $password): User
     {
-        $user = User::where('email', Str::lower($email))->first();
+        $user = User::where('phone', $phone)->first();
 
         // Hachage factice si le compte n'existe pas : le temps de réponse ne trahit pas son existence.
         $valid = Hash::check($password, $user?->password ?? $this->dummyHash());
