@@ -454,14 +454,7 @@ a.match-teams:hover .team-name, a.match-card-teams:hover .team-name { color: var
 .betslip-head-right { display: inline-flex; align-items: center; gap: 0.5rem; }
 .betslip-close { display: none; }
 
-/* Comment ça marche, jeu responsable */
 .home-section { display: flex; flex-direction: column; gap: 1rem; }
-.steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; list-style: none; padding: 0; margin: 0; }
-.steps-grid .card { gap: 0.6rem; }
-.step-number {
-  display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 11px;
-  background: var(--accent-soft); color: var(--accent); font-weight: 800;
-}
 .responsible {
   display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 1rem; row-gap: 0.2rem; align-items: center;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 1.1rem 1.35rem;

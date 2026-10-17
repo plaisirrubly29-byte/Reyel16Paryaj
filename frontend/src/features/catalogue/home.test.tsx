@@ -187,20 +187,12 @@ describe("page d'accueil : matchs", () => {
     expect(await screen.findByText('Connexion impossible', {}, { timeout: 8000 })).toBeInTheDocument();
   });
 
-  it('propose le portefeuille à un joueur connecté et masque « Comment ça marche »', async () => {
+  it('propose le portefeuille à un joueur connecté', async () => {
     catalogue({ status: 200, body: { data: player } });
     renderApp('/');
 
     expect(await screen.findByRole('link', { name: 'Portefeuille' })).toHaveAttribute('href', '/wallet');
     expect(screen.queryByRole('link', { name: 'Inscription' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Comment ça marche' })).toBeNull();
-  });
-
-  it('explique le fonctionnement à un visiteur', async () => {
-    catalogue();
-    renderApp('/');
-
-    expect(await screen.findByRole('heading', { name: 'Comment ça marche' })).toBeInTheDocument();
   });
 });
 
