@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { PublicLayout } from './layouts/PublicLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 import { HomePage } from '../features/catalogue/pages/HomePage';
+import { MatchPage } from '../features/catalogue/pages/MatchPage';
 import { SportsPage } from '../features/catalogue/pages/SportsPage';
 import { RequireAuth } from '../features/auth/components/RequireAuth';
 import { AccountPage } from '../features/auth/pages/AccountPage';
@@ -30,7 +31,7 @@ export const routes = [
     children: [
       { index: true, element: <HomePage /> },
       { path: 'sports', element: <SportsPage /> },
-      { path: 'events/:id', element: <Placeholder title="Marchés & cotes" task="P3-06" /> },
+      { path: 'events/:id', element: <MatchPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },

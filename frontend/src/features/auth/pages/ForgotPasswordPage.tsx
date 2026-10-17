@@ -6,6 +6,7 @@ import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
 import { useForgotPassword } from '../api/auth';
+import { AuthShell } from '../components/AuthShell';
 
 export function ForgotPasswordPage() {
   const forgot = useForgotPassword();
@@ -19,15 +20,16 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <section className="auth-card stack">
-      <h1>Mot de passe oublié</h1>
-
+    <AuthShell
+      title="Mot de passe oublié"
+      subtitle={forgot.isSuccess ? undefined : 'Indiquez votre email : vous recevrez un lien valable 30 minutes.'}
+      icon="mail"
+    >
       {forgot.isSuccess ? (
         // Message identique que le compte existe ou non (fourni par le serveur).
         <Alert tone="success">{forgot.data.data.message}</Alert>
       ) : (
         <>
-          <p className="muted">Indiquez votre email : vous recevrez un lien valable 30 minutes.</p>
           {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
           <form className="stack" onSubmit={submit} noValidate>
             <TextField
@@ -35,6 +37,7 @@ export function ForgotPasswordPage() {
               type="email"
               name="email"
               autoComplete="email"
+              icon="mail"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -45,7 +48,7 @@ export function ForgotPasswordPage() {
         </>
       )}
 
-      <p className="muted"><Link to="/login">Retour à la connexion</Link></p>
-    </section>
+      <p className="auth-foot"><Link to="/login">Retour à la connexion</Link></p>
+    </AuthShell>
   );
 }

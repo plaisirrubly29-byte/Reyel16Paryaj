@@ -1,11 +1,11 @@
 import { BettingBoard } from '../components/BettingBoard';
 
-/** Tous les matchs ouverts aux paris, filtrables par sport. */
+/** Tous les matchs ouverts aux paris, filtrables par sport ou compétition. */
 export function SportsPage() {
   return (
-    <section className="stack">
-      <h1>Sports & matchs</h1>
-      <BettingBoard perPage={40} paginate />
-    </section>
+    <div className="stack">
+      <h1 className="sr-only">Sports & matchs</h1>
+      <BettingBoard title="Tous les matchs" perPage={40} paginate />
+    </div>
   );
 }

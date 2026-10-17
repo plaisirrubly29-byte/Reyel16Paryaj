@@ -6,6 +6,7 @@ import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
 import { useResetPassword } from '../api/auth';
+import { AuthShell } from '../components/AuthShell';
 
 /** Page ouverte depuis le lien reçu par email : /reset-password?token=…&email=… */
 export function ResetPasswordPage() {
@@ -19,11 +20,10 @@ export function ResetPasswordPage() {
 
   if (!token || !email) {
     return (
-      <section className="auth-card stack">
-        <h1>Lien invalide</h1>
+      <AuthShell title="Lien invalide" icon="shield">
         <Alert tone="error">Ce lien de réinitialisation est incomplet.</Alert>
-        <p><Link to="/forgot-password">Demander un nouveau lien</Link></p>
-      </section>
+        <p className="auth-foot"><Link to="/forgot-password">Demander un nouveau lien</Link></p>
+      </AuthShell>
     );
   }
 
@@ -33,13 +33,11 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <section className="auth-card stack">
-      <h1>Nouveau mot de passe</h1>
-
+    <AuthShell title="Nouveau mot de passe" subtitle={reset.isSuccess ? undefined : `Compte : ${email}`} icon="lock">
       {reset.isSuccess ? (
         <>
           <Alert tone="success">{reset.data.data.message}</Alert>
-          <p><Link to="/login">Se connecter</Link></p>
+          <p className="auth-foot"><Link to="/login">Se connecter</Link></p>
         </>
       ) : (
         <>
@@ -51,12 +49,12 @@ export function ResetPasswordPage() {
             error && error.code !== 'validation_failed' && <ErrorAlert error={error} />
           )}
           <form className="stack" onSubmit={submit} noValidate>
-            <p className="muted">Compte : {email}</p>
             <TextField
               label="Nouveau mot de passe"
               type="password"
               name="password"
               autoComplete="new-password"
+              icon="lock"
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -68,6 +66,7 @@ export function ResetPasswordPage() {
               type="password"
               name="password_confirmation"
               autoComplete="new-password"
+              icon="lock"
               required
               value={form.password_confirmation}
               onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })}
@@ -76,6 +75,6 @@ export function ResetPasswordPage() {
           </form>
         </>
       )}
-    </section>
+    </AuthShell>
   );
 }

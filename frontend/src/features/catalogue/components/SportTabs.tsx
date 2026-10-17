@@ -1,3 +1,5 @@
+import { Icon } from '../../../shared/components/Icon';
+import { sportIcon } from '../../../shared/components/sportIcon';
 import { useSports } from '../api/catalogue';
 
 type Props = { active?: string; onChange: (sport: string | undefined) => void };
@@ -13,7 +15,7 @@ export function SportTabs({ active, onChange }: Props) {
   return (
     <nav className="sport-tabs" aria-label="Sports">
       <button type="button" className={!active ? 'active' : undefined} aria-pressed={!active} onClick={() => onChange(undefined)}>
-        Tous <span className="count">{total}</span>
+        <Icon name="trophy" size={16} /> Tous <span className="count">{total}</span>
       </button>
       {list.map((s) => (
         <button
@@ -23,7 +25,7 @@ export function SportTabs({ active, onChange }: Props) {
           aria-pressed={active === s.slug}
           onClick={() => onChange(s.slug)}
         >
-          {s.name} <span className="count">{s.events_count}</span>
+          <Icon name={sportIcon(s.slug)} size={16} /> {s.name} <span className="count">{s.events_count}</span>
         </button>
       ))}
     </nav>

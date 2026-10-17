@@ -24,6 +24,10 @@ export type CatalogueMarket = {
   name: string;
   odds_version: number;
   odds_updated_at: string;
+  /** Ligne du marché « Nombre de buts » (ex. "2.5") ; null pour le 1X2. */
+  line?: string | null;
+  /** false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable. */
+  bettable: boolean;
   selections: CatalogueSelection[];
 };
 
@@ -45,6 +49,15 @@ export function useSports() {
   return useQuery({
     queryKey: ['catalogue', 'sports'],
     queryFn: async ({ signal }) => (await api<Envelope<CatalogueSport[]>>('/sports', { signal })).data,
+    refetchInterval: REFRESH_MS,
+  });
+}
+
+/** GET /events/{id}/markets — un match avec tous ses marchés affichés (404 s'il n'est plus proposé). */
+export function useEventMarkets(id: string) {
+  return useQuery({
+    queryKey: ['catalogue', 'event', id],
+    queryFn: async ({ signal }) => (await api<Envelope<CatalogueEvent>>(`/events/${encodeURIComponent(id)}/markets`, { signal })).data,
     refetchInterval: REFRESH_MS,
   });
 }

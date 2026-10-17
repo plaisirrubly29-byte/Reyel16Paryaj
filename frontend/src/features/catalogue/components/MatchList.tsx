@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Alert } from '../../../shared/components/Alert';
+import { Icon } from '../../../shared/components/Icon';
+import { sportIcon } from '../../../shared/components/sportIcon';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Pagination } from '../../../shared/components/Pagination';
 import { Spinner } from '../../../shared/components/Spinner';
@@ -34,6 +36,7 @@ export function MatchList({ sport, competition, perPage, page = 1, onPage }: Pro
 
       {list.length === 0 ? (
         <p className="empty-state">
+          <span className="empty-icon" aria-hidden="true"><Icon name="clock" size={26} /></span>
           Aucun match ouvert aux paris pour le moment. Les cotes sont mises à jour plusieurs fois par jour : revenez bientôt.
         </p>
       ) : (
@@ -41,9 +44,11 @@ export function MatchList({ sport, competition, perPage, page = 1, onPage }: Pro
           {groupByCompetition(list).map(({ competition: c, events: items }) => (
             <section key={c.id} className="match-group" aria-label={c.name}>
               <header className="match-group-head">
-                <span className="sport-chip">{items[0].sport.name}</span>
-                <h3>{c.name}</h3>
-                {c.country && <span className="muted small">{c.country}</span>}
+                <span className="group-icon" aria-hidden="true"><Icon name={sportIcon(items[0].sport.slug)} size={18} /></span>
+                <div className="group-title">
+                  <h3>{c.name}</h3>
+                  <span className="group-sub">{items[0].sport.name}{c.country && ` · ${c.country}`}</span>
+                </div>
                 <span className="odds-head" aria-hidden="true"><span>1</span><span>X</span><span>2</span></span>
               </header>
               <ul className="match-rows">

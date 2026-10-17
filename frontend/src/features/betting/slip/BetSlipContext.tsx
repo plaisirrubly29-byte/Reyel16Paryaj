@@ -15,8 +15,10 @@ export type SlipSelection = {
   oddsVersion: number;
   /** Cote affichée au moment du choix (chaîne décimale). */
   odds: string;
-  label: string; // 1 / X / 2
-  pick: string; // nom de la sélection (équipe ou « Match nul »)
+  label: string; // 1 / X / 2, +2.5 / -2.5
+  pick: string; // nom de la sélection (équipe, « Match nul », « Plus de 2.5 »…)
+  /** Nom du marché (« Résultat du match », « Nombre de buts »…) ; absent dans les anciens coupons. */
+  market?: string;
   match: string; // « Domicile – Extérieur »
   startsAt: string;
 };
@@ -35,6 +37,9 @@ type BetSlip = {
   clear: () => void;
   /** Vrai juste après un ajout refusé parce que le coupon est complet. */
   full: boolean;
+  /** Panneau du coupon ouvert (mobile : ouvert depuis la barre d'onglets). */
+  panelOpen: boolean;
+  setPanelOpen: (open: boolean) => void;
 };
 
 const STORAGE_KEY = 'r16p.betslip';
@@ -67,6 +72,7 @@ function load(): SlipSelection[] {
 export function BetSlipProvider({ children }: { children: ReactNode }) {
   const [selections, setSelections] = useState<SlipSelection[]>(load);
   const [full, setFull] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const { data: user, isSuccess } = useMe();
   const previousUserId = useRef<string | null | undefined>(undefined);
 
@@ -127,11 +133,13 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
   const value = useMemo<BetSlip>(() => ({
     selections,
     full,
+    panelOpen,
+    setPanelOpen,
     has: (id) => selections.some((s) => s.selectionId === id),
     toggle,
     remove: (id) => { setFull(false); setSelections((current) => current.filter((s) => s.selectionId !== id)); },
     clear: () => { setFull(false); setSelections([]); },
-  }), [selections, full, toggle]);
+  }), [selections, full, panelOpen, toggle]);
 
   return <BetSlipContext.Provider value={value}>{children}</BetSlipContext.Provider>;
 }
