@@ -1,13 +1,16 @@
 import { useId, type InputHTMLAttributes } from 'react';
+import { Icon, type IconName } from './Icon';
 
 type Props = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   /** Message d'erreur (ex. ApiError.fieldErrors[name]). */
   error?: string;
   hint?: string;
+  /** Icône décorative affichée au début du champ. */
+  icon?: IconName;
 };
 
-export function TextField({ label, error, hint, id, className, ...rest }: Props) {
+export function TextField({ label, error, hint, id, className, icon, ...rest }: Props) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const describedBy = [error && `${inputId}-error`, hint && `${inputId}-hint`].filter(Boolean).join(' ') || undefined;
@@ -15,7 +18,10 @@ export function TextField({ label, error, hint, id, className, ...rest }: Props)
   return (
     <div className={['field', error && 'field-invalid', className].filter(Boolean).join(' ')}>
       <label htmlFor={inputId}>{label}</label>
-      <input id={inputId} aria-invalid={error ? true : undefined} aria-describedby={describedBy} {...rest} />
+      <div className={icon ? 'field-control' : undefined}>
+        {icon && <Icon name={icon} size={18} />}
+        <input id={inputId} aria-invalid={error ? true : undefined} aria-describedby={describedBy} {...rest} />
+      </div>
       {hint && !error && <small id={`${inputId}-hint`} className="field-hint">{hint}</small>}
       {error && <small id={`${inputId}-error`} className="field-error" role="alert">{error}</small>}
     </div>

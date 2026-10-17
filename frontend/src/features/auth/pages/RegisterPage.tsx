@@ -5,6 +5,7 @@ import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
 import { useRegister, type RegisterInput } from '../api/auth';
+import { AuthShell } from '../components/AuthShell';
 
 const empty: RegisterInput = {
   name: '',
@@ -31,40 +32,42 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="auth-card stack">
-      <h1>Créer un compte</h1>
-      <p className="muted">Version de démonstration : les mises se font avec des fonds fictifs.</p>
-
+    <AuthShell title="Créer un compte" subtitle="Version de démonstration : les mises se font avec des fonds fictifs." icon="user">
       {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
       <form className="stack" onSubmit={submit} noValidate>
-        <TextField label="Nom" name="name" autoComplete="name" required value={form.name} onChange={set('name')} error={fieldErrors.name} />
-        <TextField label="Email" type="email" name="email" autoComplete="email" required value={form.email} onChange={set('email')} error={fieldErrors.email} />
-        <TextField
-          label="Date de naissance"
-          type="date"
-          name="birth_date"
-          autoComplete="bday"
-          required
-          value={form.birth_date}
-          onChange={set('birth_date')}
-          error={fieldErrors.birth_date}
-          hint="Vous devez être majeur pour ouvrir un compte."
-        />
-        <TextField
-          label="Pays (code à 2 lettres)"
-          name="country"
-          autoComplete="country"
-          maxLength={2}
-          value={form.country ?? ''}
-          onChange={set('country')}
-          error={fieldErrors.country}
-        />
+        <TextField label="Nom" name="name" autoComplete="name" icon="user" required value={form.name} onChange={set('name')} error={fieldErrors.name} />
+        <TextField label="Email" type="email" name="email" autoComplete="email" icon="mail" required value={form.email} onChange={set('email')} error={fieldErrors.email} />
+        <div className="field-row">
+          <TextField
+            label="Date de naissance"
+            type="date"
+            name="birth_date"
+            autoComplete="bday"
+            icon="calendar"
+            required
+            value={form.birth_date}
+            onChange={set('birth_date')}
+            error={fieldErrors.birth_date}
+            hint="Vous devez être majeur pour ouvrir un compte."
+          />
+          <TextField
+            label="Pays (code à 2 lettres)"
+            name="country"
+            autoComplete="country"
+            icon="flag"
+            maxLength={2}
+            value={form.country ?? ''}
+            onChange={set('country')}
+            error={fieldErrors.country}
+          />
+        </div>
         <TextField
           label="Mot de passe"
           type="password"
           name="password"
           autoComplete="new-password"
+          icon="lock"
           required
           value={form.password}
           onChange={set('password')}
@@ -76,6 +79,7 @@ export function RegisterPage() {
           type="password"
           name="password_confirmation"
           autoComplete="new-password"
+          icon="lock"
           required
           value={form.password_confirmation}
           onChange={set('password_confirmation')}
@@ -83,7 +87,7 @@ export function RegisterPage() {
         <Button type="submit" loading={register.isPending} block>Créer mon compte</Button>
       </form>
 
-      <p className="muted">Déjà inscrit ? <Link to="/login">Se connecter</Link></p>
-    </section>
+      <p className="auth-foot">Déjà inscrit ? <Link to="/login">Se connecter</Link></p>
+    </AuthShell>
   );
 }

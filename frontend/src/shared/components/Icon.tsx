@@ -15,6 +15,10 @@ const PATHS = {
   shield: 'M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6zM9 12l2 2 4-4',
   bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
   chevron: 'M9 6l6 6-6 6',
+  mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+  lock: 'M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5zM12 15v3',
+  calendar: 'M4 9h16M7 3v4M17 3v4M5 6h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM8 14h.01M12 14h.01M16 14h.01',
+  flag: 'M5 21V4M5 4h13l-3 4 3 4H5',
 } as const;
 
 export type IconName = keyof typeof PATHS;
