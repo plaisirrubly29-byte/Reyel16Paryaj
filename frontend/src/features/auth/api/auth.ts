@@ -5,7 +5,10 @@ import { api, ApiError, type Envelope } from '../../../shared/api/client';
 export type User = {
   id: string;
   name: string;
-  email: string;
+  /** Identifiant de connexion : numéro local haïtien à 8 chiffres, sans l'indicatif. */
+  phone: string;
+  /** Facultatif : ne sert plus à se connecter. */
+  email: string | null;
   status: 'active' | 'suspended' | 'excluded' | 'closed';
   roles: string[];
   /** Permissions effectives : servent seulement à adapter l'affichage, l'API vérifie chaque route. */
@@ -16,17 +19,19 @@ export type User = {
     first_name: string | null;
     last_name: string | null;
     birth_date: string | null;
-    phone: string | null;
     country: string | null;
   } | null;
   created_at: string;
 };
 
-export type LoginInput = { email: string; password: string };
+/** Numéro local à 8 chiffres (sans l'indicatif +509, ajouté par le serveur). */
+export type LoginInput = { phone: string; password: string };
 
 export type RegisterInput = {
   name: string;
-  email: string;
+  phone: string;
+  /** Facultatif : aucune fonction n'en dépend pour le moment. */
+  email?: string;
   password: string;
   password_confirmation: string;
   birth_date: string;

@@ -23,7 +23,7 @@ describe('routes protégées', () => {
     renderApp('/account');
 
     expect(await screen.findByRole('heading', { name: 'Mon compte' })).toBeInTheDocument();
-    expect(screen.getByText('ana@example.com')).toBeInTheDocument();
+    expect(screen.getByText('+509 34123456')).toBeInTheDocument();
   });
 });
 
@@ -35,7 +35,7 @@ describe('connexion', () => {
     });
     renderApp('/login');
 
-    await userEvent.type(await screen.findByLabelText('Email'), 'ana@example.com');
+    await userEvent.type(await screen.findByLabelText('Numéro de téléphone'), '34123456');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'mauvais');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
@@ -50,7 +50,7 @@ describe('connexion', () => {
     });
     const router = renderApp('/login?redirect=%2Fwallet');
 
-    await userEvent.type(await screen.findByLabelText('Email'), 'ana@example.com');
+    await userEvent.type(await screen.findByLabelText('Numéro de téléphone'), '34123456');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
@@ -60,6 +60,17 @@ describe('connexion', () => {
     // Requête à effet : jeton CSRF envoyé.
     const loginCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/login'));
     expect((loginCall?.[1]?.headers as Record<string, string>)['X-XSRF-TOKEN']).toBe('test');
+  });
+
+  it('affiche l\'indicatif +509 et ne garde que les chiffres saisis', async () => {
+    mockApi({ 'GET /me': guest });
+    renderApp('/login');
+
+    const phone = await screen.findByLabelText('Numéro de téléphone');
+    expect(screen.getByText('+509')).toBeInTheDocument();
+
+    await userEvent.type(phone, '34-12 ab 34 56');
+    expect(phone).toHaveValue('34123456');
   });
 
   it('ne suit jamais une redirection vers un autre site', () => {
@@ -81,7 +92,7 @@ describe('inscription', () => {
           error: {
             code: 'validation_failed',
             message: 'Les données envoyées sont invalides.',
-            details: { birth_date: ['Vous devez avoir au moins 18 ans pour ouvrir un compte.'], email: ['Cet email est déjà utilisé.'] },
+            details: { birth_date: ['Vous devez avoir au moins 18 ans pour ouvrir un compte.'], phone: ['Ce numéro est déjà utilisé.'] },
           },
         },
       },
@@ -91,7 +102,27 @@ describe('inscription', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Créer mon compte' }));
 
     expect(await screen.findByText('Vous devez avoir au moins 18 ans pour ouvrir un compte.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Email')).toHaveAccessibleDescription('Cet email est déjà utilisé.');
+    expect(screen.getByLabelText('Numéro de téléphone')).toHaveAccessibleDescription('Ce numéro est déjà utilisé.');
+  });
+
+  it('n\'envoie pas d\'email vide : il reste facultatif', async () => {
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/register': { status: 201, body: { data: player } },
+    });
+    renderApp('/register');
+
+    await userEvent.type(await screen.findByLabelText('Nom'), 'Ana Joueuse');
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
+    await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
+    const body = JSON.parse(String(registerCall?.[1]?.body));
+    expect(body.phone).toBe('34123456');
+    expect(body).not.toHaveProperty('email');
   });
 });
 

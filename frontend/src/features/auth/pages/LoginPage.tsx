@@ -6,12 +6,13 @@ import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
 import { safeRedirect, useLogin } from '../api/auth';
 import { AuthShell } from '../components/AuthShell';
+import { digitsOnly } from '../phone';
 
 export function LoginPage() {
   const login = useLogin();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ phone: '', password: '' });
 
   const error = login.error instanceof ApiError ? login.error : null;
   const fieldErrors = error?.fieldErrors ?? {};
@@ -34,15 +35,18 @@ export function LoginPage() {
 
       <form className="stack" onSubmit={submit} noValidate>
         <TextField
-          label="Email"
-          type="email"
-          name="email"
-          autoComplete="email"
-          icon="mail"
+          label="Numéro de téléphone"
+          type="tel"
+          inputMode="numeric"
+          name="phone"
+          autoComplete="tel-national"
+          prefix="+509"
+          maxLength={8}
+          placeholder="34 12 34 56"
           required
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          error={fieldErrors.email}
+          value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })}
+          error={fieldErrors.phone}
         />
         <TextField
           label="Mot de passe"

@@ -6,9 +6,11 @@ import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
 import { useRegister, type RegisterInput } from '../api/auth';
 import { AuthShell } from '../components/AuthShell';
+import { digitsOnly } from '../phone';
 
 const empty: RegisterInput = {
   name: '',
+  phone: '',
   email: '',
   password: '',
   password_confirmation: '',
@@ -27,8 +29,10 @@ export function RegisterPage() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    // Un email vide n'est pas envoyé : il reste facultatif côté serveur.
+    const { email, ...rest } = form;
     // L'âge minimum et la politique de mot de passe sont vérifiés par le serveur.
-    register.mutate(form, { onSuccess: () => navigate('/account', { replace: true }) });
+    register.mutate(email ? form : rest, { onSuccess: () => navigate('/account', { replace: true }) });
   }
 
   return (
@@ -37,7 +41,31 @@ export function RegisterPage() {
 
       <form className="stack" onSubmit={submit} noValidate>
         <TextField label="Nom" name="name" autoComplete="name" icon="user" required value={form.name} onChange={set('name')} error={fieldErrors.name} />
-        <TextField label="Email" type="email" name="email" autoComplete="email" icon="mail" required value={form.email} onChange={set('email')} error={fieldErrors.email} />
+        <TextField
+          label="Numéro de téléphone"
+          type="tel"
+          inputMode="numeric"
+          name="phone"
+          autoComplete="tel-national"
+          prefix="+509"
+          maxLength={8}
+          placeholder="34 12 34 56"
+          required
+          value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })}
+          error={fieldErrors.phone}
+          hint="Sert à vous connecter : votre numéro local, sans l'indicatif."
+        />
+        <TextField
+          label="Email (optionnel)"
+          type="email"
+          name="email"
+          autoComplete="email"
+          icon="mail"
+          value={form.email ?? ''}
+          onChange={set('email')}
+          error={fieldErrors.email}
+        />
         <div className="field-row">
           <TextField
             label="Date de naissance"

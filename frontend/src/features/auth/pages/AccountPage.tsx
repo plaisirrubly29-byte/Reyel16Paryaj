@@ -19,8 +19,10 @@ export function AccountPage() {
       <dl className="details">
         <dt>Nom</dt>
         <dd>{fullName || user.name}</dd>
+        <dt>Téléphone</dt>
+        <dd>+509 {user.phone}</dd>
         <dt>Email</dt>
-        <dd>{user.email}</dd>
+        <dd>{user.email ?? '—'}</dd>
         <dt>Date de naissance</dt>
         <dd>{user.profile?.birth_date ? new Date(`${user.profile.birth_date}T00:00:00`).toLocaleDateString('fr-FR') : '—'}</dd>
         <dt>Pays</dt>

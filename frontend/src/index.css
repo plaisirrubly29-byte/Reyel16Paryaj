@@ -246,6 +246,11 @@ p { margin: 0; }
     background: var(--accent-soft); color: var(--accent); margin-bottom: 0.2rem;
   }
   .auth-card-head { align-items: center; text-align: center; }
+  /* Composition centrée sur mobile : libellés et indications au milieu de la carte
+     (les champs restent pleine largeur et le texte saisi reste à gauche, lisible). */
+  .auth-shell .auth-card .field label,
+  .auth-shell .auth-card .field-hint,
+  .auth-shell .auth-card .field-error { text-align: center; }
 }
 @media (max-width: 480px) {
   .auth-page { padding: 0.75rem 0; }
@@ -258,6 +263,13 @@ p { margin: 0; }
 .field-control svg { position: absolute; left: 0.85rem; color: var(--muted); pointer-events: none; }
 .field-control input { padding-left: 2.7rem; }
 .field-control:focus-within svg { color: var(--accent); }
+/* Indicatif fixe (ex. « +509 ») devant un numéro de téléphone local. */
+.field-prefix {
+  position: absolute; left: 0.95rem; display: inline-flex; align-items: center;
+  color: var(--text); font-weight: 700; font-size: 0.95rem; pointer-events: none;
+}
+.field-prefix::after { content: ''; width: 1px; height: 1.15rem; background: var(--border-strong); margin-left: 0.6rem; }
+.field-control input.has-prefix { padding-left: 4.1rem; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
 @media (max-width: 480px) { .field-row { grid-template-columns: 1fr; } }
 .details { display: grid; grid-template-columns: max-content 1fr; gap: 0.6rem 1.5rem; margin: 0; }
