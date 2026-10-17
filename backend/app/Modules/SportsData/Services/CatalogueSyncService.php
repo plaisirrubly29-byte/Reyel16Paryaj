@@ -23,8 +23,9 @@ use Throwable;
  *
  * - Un seul appel au fournisseur par compétition (coût : marchés × régions crédits).
  * - Idempotent : rejouer les mêmes données ne crée rien ; la version de cote n'augmente
- *   que si une cote change, avec un historique (odds_snapshots).
- * - Validation avant écriture ; un événement invalide est ignoré et journalisé.
+ *   que si une cote ou la ligne (totals) change, avec un historique (odds_snapshots).
+ * - Validation avant écriture ; un événement invalide est ignoré et journalisé (un marché
+ *   facultatif invalide n'est qu'ignoré, l'événement est gardé).
  * - En cas d'échec du fournisseur, rien n'est modifié : les cotes vieillissent et le catalogue
  *   les masque (règle de fraîcheur, Market::scopeBettable).
  */
@@ -48,8 +49,17 @@ class CatalogueSyncService
         'handball' => 'Handball',
     ];
 
+    /**
+     * Marchés synchronisés, dans l'ordre. Le 1X2 (h2h) est obligatoire : invalide, il fait rejeter l'événement.
+     * Les autres (totals : plus/moins de N buts ou points) sont facultatifs : invalides, ils sont ignorés.
+     */
+    private const MARKETS = ['h2h', 'totals'];
+
     /** Clés de sélection du marché 1X2 (h2h). */
     private const DRAW_NAMES = ['draw', 'tie', 'nul', 'match nul'];
+
+    /** Clés de sélection du marché totals. */
+    private const TOTALS_NAMES = ['over' => 'over', 'under' => 'under'];
 
     public function __construct(private readonly SportsDataProvider $provider) {}
 
@@ -119,9 +129,27 @@ class CatalogueSyncService
 
         $isNew ? $report->eventsCreated++ : $report->eventsUpdated++;
 
-        $market = $this->pickMarket($data, 'h2h');
-        if ($market !== null && $this->syncMarket($event, $data, $market)) {
-            $report->oddsChanged++;
+        foreach (self::MARKETS as $key) {
+            $market = $this->pickMarket($data, $key);
+            if ($market === null) {
+                continue;
+            }
+
+            try {
+                [$selections, $line] = $this->selections($data, $market);
+            } catch (\InvalidArgumentException $e) {
+                if ($key === 'h2h') {
+                    throw $e;
+                }
+
+                Log::warning('sports_data.market_rejected', ['id' => $data->externalId, 'market' => $key, 'error' => $e->getMessage()]);
+
+                continue;
+            }
+
+            if ($this->syncMarket($event, $market, $selections, $line)) {
+                $report->oddsChanged++;
+            }
         }
     }
 
@@ -134,10 +162,19 @@ class CatalogueSyncService
             ['name' => self::SPORT_NAMES[$slug] ?? ucfirst($slug)],
         );
 
-        return Competition::firstOrCreate(
+        $label = config("sports_data.competition_labels.{$data->sportKey}");
+
+        $competition = Competition::firstOrCreate(
             ['provider' => $this->provider->name(), 'external_key' => $data->sportKey],
-            ['sport_id' => $sport->id, 'name' => $data->competition],
+            ['sport_id' => $sport->id, 'name' => $label['name'] ?? $data->competition, 'country' => $label['country'] ?? null],
         );
+
+        // Un libellé configuré l'emporte sur le code du fournisseur (ex. "EPL" → "Premier League").
+        if ($label !== null && ($competition->name !== $label['name'] || $competition->country !== ($label['country'] ?? null))) {
+            $competition->update(['name' => $label['name'], 'country' => $label['country'] ?? null]);
+        }
+
+        return $competition;
     }
 
     /** Marché du bookmaker de référence (déjà filtré par le fournisseur s'il est configuré), sinon le premier. */
@@ -152,12 +189,34 @@ class CatalogueSyncService
         return null;
     }
 
-    /** @return bool true si les cotes ont changé (nouvelle version) */
-    private function syncMarket(Event $event, EventData $data, MarketData $source): bool
+    /**
+     * Sélections validées d'un marché, par clé, et sa ligne (null pour le 1X2).
+     *
+     * @return array{0: array<string, array{name: string, odds: string}>, 1: ?string}
+     *
+     * @throws \InvalidArgumentException marché invalide
+     */
+    private function selections(EventData $data, MarketData $source): array
+    {
+        return match ($source->key) {
+            'h2h' => [$this->h2hSelections($data, $source), null],
+            'totals' => $this->totalsSelections($source),
+            default => throw new \InvalidArgumentException("Marché non pris en charge : {$source->key}"),
+        };
+    }
+
+    /** @return array<string, array{name: string, odds: string}> */
+    private function h2hSelections(EventData $data, MarketData $source): array
     {
         $odds = [];
         foreach ($source->selections as $selection) {
-            $key = $this->selectionKey($selection->name, $data);
+            $normalized = mb_strtolower(trim($selection->name));
+            $key = match (true) {
+                $normalized === mb_strtolower(trim($data->homeTeam)) => 'home',
+                $normalized === mb_strtolower(trim($data->awayTeam)) => 'away',
+                in_array($normalized, self::DRAW_NAMES, true) => 'draw',
+                default => throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}"),
+            };
             $odds[$key] = ['name' => $key === 'draw' ? 'Match nul' : $selection->name, 'odds' => $selection->odds];
         }
 
@@ -165,6 +224,58 @@ class CatalogueSyncService
             throw new \InvalidArgumentException('Marché 1X2 incomplet (équipe à domicile ou à l\'extérieur absente).');
         }
 
+        return $odds;
+    }
+
+    /**
+     * Plus/moins : exactement un "Over" et un "Under" sur la même ligne.
+     *
+     * @return array{0: array<string, array{name: string, odds: string}>, 1: string}
+     */
+    private function totalsSelections(MarketData $source): array
+    {
+        $byKey = [];
+        foreach ($source->selections as $selection) {
+            $key = self::TOTALS_NAMES[mb_strtolower(trim($selection->name))]
+                ?? throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+
+            if (isset($byKey[$key])) {
+                throw new \InvalidArgumentException("Sélection en double : {$selection->name}");
+            }
+            $byKey[$key] = $selection;
+        }
+
+        if (! isset($byKey['over'], $byKey['under'])) {
+            throw new \InvalidArgumentException('Marché totals incomplet (plus ou moins absent).');
+        }
+
+        $line = $this->line($byKey['over']->point);
+        if ($line === null || $line !== $this->line($byKey['under']->point)) {
+            throw new \InvalidArgumentException('Ligne du marché totals absente, invalide ou différente entre plus et moins.');
+        }
+
+        return [[
+            'over' => ['name' => "Plus de {$line}", 'odds' => $byKey['over']->odds],
+            'under' => ['name' => "Moins de {$line}", 'odds' => $byKey['under']->odds],
+        ], $line];
+    }
+
+    /** Ligne en chaîne décimale positive sans zéros inutiles ("2.50" → "2.5", "3.0" → "3") ; null si invalide. */
+    private function line(?string $point): ?string
+    {
+        if ($point === null || ! preg_match('/^\d{1,4}(\.\d{1,2})?$/', $point) || bccomp($point, '0', 2) <= 0) {
+            return null;
+        }
+
+        return rtrim(rtrim(bcadd($point, '0', 2), '0'), '.');
+    }
+
+    /**
+     * @param  array<string, array{name: string, odds: string}>  $odds
+     * @return bool true si les cotes ou la ligne ont changé (nouvelle version)
+     */
+    private function syncMarket(Event $event, MarketData $source, array $odds, ?string $line): bool
+    {
         /** @var Market $market */
         $market = $event->markets()->firstOrNew(['key' => $source->key]);
 
@@ -179,7 +290,8 @@ class CatalogueSyncService
         $incoming = array_map(fn ($s) => $this->normalize($s['odds']), $odds);
         ksort($current);
         ksort($incoming);
-        $changed = $current !== $incoming;
+        // Un changement de ligne (ex. 2.5 → 3.5) change le pari même à cotes égales : nouvelle version.
+        $changed = $current !== $incoming || ($market->exists && $market->line !== $line);
 
         if (! $market->exists) {
             $market->odds_version = 1;
@@ -195,6 +307,7 @@ class CatalogueSyncService
         }
 
         $market->fill([
+            'line' => $line,
             'source_bookmaker' => $source->bookmaker,
             'odds_updated_at' => $source->updatedAt,
         ])->save();
@@ -210,6 +323,7 @@ class CatalogueSyncService
                 'selection_id' => $model->id,
                 'odds_version' => $market->odds_version,
                 'odds' => $selection['odds'],
+                'line' => $line,
                 'provider_updated_at' => $source->updatedAt,
             ]);
         }
@@ -218,18 +332,6 @@ class CatalogueSyncService
         $market->selections()->whereNotIn('key', array_keys($odds))->delete();
 
         return true;
-    }
-
-    private function selectionKey(string $name, EventData $data): string
-    {
-        $normalized = mb_strtolower(trim($name));
-
-        return match (true) {
-            $normalized === mb_strtolower(trim($data->homeTeam)) => 'home',
-            $normalized === mb_strtolower(trim($data->awayTeam)) => 'away',
-            in_array($normalized, self::DRAW_NAMES, true) => 'draw',
-            default => throw new \InvalidArgumentException("Sélection inconnue : {$name}"),
-        };
     }
 
     private function normalize(string $odds): string

@@ -4,16 +4,21 @@ namespace Tests\Feature\Modules\SportsData;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Exceptions\SportsDataException;
+use App\Modules\SportsData\Models\ProviderApiCall;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class TheOddsApiProviderTest extends TestCase
 {
+    use RefreshDatabase;
+
     private const KEY = 'cle-de-test-secrete';
 
     protected function setUp(): void
@@ -121,6 +126,32 @@ class TheOddsApiProviderTest extends TestCase
             && $r['regions'] === 'eu' && $r['markets'] === 'h2h' && $r['oddsFormat'] === 'decimal');
     }
 
+    public function test_totals_market_keeps_its_line(): void
+    {
+        config(['sports_data.theodds.markets' => 'h2h,totals']);
+        $this->app->forgetInstance(SportsDataProvider::class);
+        $payload = $this->oddsPayload();
+        $payload[0]['bookmakers'][0]['markets'][] = [
+            'key' => 'totals',
+            'last_update' => '2026-10-15T20:09:30Z',
+            'outcomes' => [
+                ['name' => 'Over', 'price' => 1.85, 'point' => 2.5],
+                ['name' => 'Under', 'price' => 1.95, 'point' => 2.5],
+            ],
+        ];
+        Http::fake(['*' => Http::response($payload, 200, $this->quotaHeaders(last: 2))]);
+
+        $markets = $this->provider()->events('soccer_epl')[0]->markets;
+
+        $this->assertSame('totals', $markets[1]->key);
+        $this->assertSame(
+            [['Over', '1.85', '2.5'], ['Under', '1.95', '2.5']],
+            array_map(fn ($s) => [$s->name, $s->odds, $s->point], $markets[1]->selections),
+        );
+        $this->assertNull($markets[0]->selections[0]->point);
+        Http::assertSent(fn (Request $r) => $r['markets'] === 'h2h,totals');
+    }
+
     public function test_reference_bookmaker_filters_markets(): void
     {
         config(['sports_data.theodds.reference_bookmaker' => 'unibet_fr']);
@@ -207,6 +238,25 @@ class TheOddsApiProviderTest extends TestCase
         $this->assertCount(1, $this->provider()->sports()); // l'appel gratuit reste possible
     }
 
+    public function test_upcoming_starts_use_the_free_events_endpoint_even_below_the_threshold(): void
+    {
+        Http::fake([
+            '*/sports?*' => Http::response([], 200, $this->quotaHeaders(10, 490, 0)),
+            '*/sports/soccer_epl/events?*' => Http::response([
+                ['id' => 'a', 'sport_key' => 'soccer_epl', 'commence_time' => '2026-10-18T14:00:00Z', 'home_team' => 'Arsenal', 'away_team' => 'Chelsea'],
+                ['id' => 'b', 'sport_key' => 'soccer_epl', 'home_team' => 'Sans', 'away_team' => 'Date'],
+            ], 200, $this->quotaHeaders(10, 490, 0)),
+        ]);
+
+        $this->provider()->sports(); // quota connu : 10 restants, sous le seuil
+
+        $starts = $this->provider()->upcomingStarts('soccer_epl');
+
+        $this->assertCount(1, $starts);
+        $this->assertSame('2026-10-18T14:00:00+00:00', $starts[0]->toIso8601String());
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sports/soccer_epl/events') && ! str_contains($request->url(), 'markets='));
+    }
+
     public function test_provider_errors_are_classified(): void
     {
         $cases = [
@@ -245,6 +295,38 @@ class TheOddsApiProviderTest extends TestCase
         }
     }
 
+    public function test_paid_calls_are_never_retried_on_network_failure(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            $attempts++;
+            throw new ConnectionException('cURL error 28: Operation timed out');
+        });
+
+        try {
+            $this->provider()->events('soccer_epl');
+        } catch (SportsDataException $e) {
+            $this->assertSame(SportsDataException::UNAVAILABLE, $e->reason);
+        }
+
+        $this->assertSame(1, $attempts, 'Un appel payant a été rejoué (crédit gaspillé).');
+    }
+
+    public function test_free_calls_are_retried_on_network_failure(): void
+    {
+        $attempts = 0;
+        Http::fake(function () use (&$attempts) {
+            if (++$attempts < 3) {
+                throw new ConnectionException('cURL error 28: Operation timed out');
+            }
+
+            return Http::response([], 200);
+        });
+
+        $this->assertSame([], $this->provider()->sports());
+        $this->assertSame(3, $attempts);
+    }
+
     public function test_missing_key_is_refused_before_any_call(): void
     {
         config(['sports_data.theodds.key' => null]);
@@ -279,6 +361,43 @@ class TheOddsApiProviderTest extends TestCase
 
         $this->expectException(SportsDataException::class);
         $this->provider()->events('soccer_epl');
+    }
+
+    public function test_every_response_is_journaled_without_the_key(): void
+    {
+        Http::fake([
+            '*/sports?*' => Http::response([], 200, $this->quotaHeaders(499, 1, 0)),
+            '*/odds?*' => Http::response($this->oddsPayload(), 200, $this->quotaHeaders(498, 2, 1)),
+            '*/scores?*' => Http::response(['message' => 'erreur'], 500, $this->quotaHeaders(496, 4, 2)),
+        ]);
+
+        $this->provider()->sports();
+        $this->provider()->events('soccer_epl');
+        try {
+            $this->provider()->results('soccer_epl', 2);
+        } catch (SportsDataException) {
+        }
+
+        $calls = ProviderApiCall::orderBy('id')->get();
+        $this->assertSame(
+            [
+                ['theodds', '/sports', null, 0, 499, 1, 200],
+                ['theodds', '/sports/{sport}/odds', 'soccer_epl', 1, 498, 2, 200],
+                ['theodds', '/sports/{sport}/scores', 'soccer_epl', 2, 496, 4, 500],
+            ],
+            $calls->map(fn ($c) => [$c->provider, $c->endpoint, $c->competition, $c->cost, $c->remaining, $c->used, $c->status])->all(),
+        );
+        $this->assertNotNull($calls[0]->called_at);
+        $this->assertStringNotContainsString(self::KEY, json_encode(ProviderApiCall::all()->toArray()));
+    }
+
+    public function test_journal_failure_does_not_break_the_call(): void
+    {
+        Schema::drop('sports_data_api_calls');
+        Http::fake(['*' => Http::response($this->oddsPayload(), 200, $this->quotaHeaders())]);
+
+        $this->assertCount(1, $this->provider()->events('soccer_epl'));
+        $this->assertSame(499, $this->provider()->quota()->remaining);
     }
 
     public function test_check_command_uses_only_the_free_endpoint(): void

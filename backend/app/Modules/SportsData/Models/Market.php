@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $event_id
  * @property string $key
+ * @property string|null $line ligne du marché totals (ex. "2.5"), null pour le 1X2
  * @property MarketStatus $status
  * @property string|null $suspension_reason
  * @property int $odds_version
@@ -43,6 +44,17 @@ class Market extends Model
         $query->where('status', MarketStatus::Open)
             ->whereNotNull('odds_updated_at')
             ->where('odds_updated_at', '>=', now()->subMinutes((int) config('sports_data.max_odds_age_minutes')));
+    }
+
+    /**
+     * Marchés affichés au catalogue : ouverts et déjà cotés, quel que soit l'âge de la cote.
+     * Une cote trop ancienne reste visible mais n'est pas pariable (isBettable).
+     *
+     * @param  Builder<Market>  $query
+     */
+    public function scopeDisplayable(Builder $query): void
+    {
+        $query->where('status', MarketStatus::Open)->whereNotNull('odds_updated_at');
     }
 
     public function isBettable(): bool

@@ -17,13 +17,18 @@ use Carbon\CarbonImmutable;
  * Les dates sont relatives à "maintenant" pour toujours avoir des matchs à venir.
  *
  * En test : $fake->failWith(SportsDataException::UNAVAILABLE) simule une panne ;
- * $fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.85']) simule un changement de cote.
+ * $fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.85']) simule un changement de cote ;
+ * $fake->setOdds('fake-1', 'totals', ['Over' => '1.70', 'Under' => '2.10'], '3.5') un changement de ligne.
+ * Les matchs de football ont un 1X2 (h2h) et un plus/moins 2.5 buts (totals) ; la NBA n'a que le h2h.
  */
 class FakeSportsDataProvider implements SportsDataProvider
 {
+    /** Ligne par défaut du marché totals. */
+    private const TOTALS_LINE = '2.5';
+
     private ?string $failure = null;
 
-    /** @var array<string, array<string, array<string, string>>> */
+    /** @var array<string, array<string, array{odds: array<string, string>, point: ?string}>> */
     private array $oddsOverrides = [];
 
     private ?CarbonImmutable $updatedAtOverride = null;
@@ -40,10 +45,13 @@ class FakeSportsDataProvider implements SportsDataProvider
         return $this;
     }
 
-    /** @param array<string, string> $odds */
-    public function setOdds(string $eventId, string $market, array $odds): static
+    /**
+     * @param  array<string, string>  $odds  cotes par nom de sélection
+     * @param  ?string  $point  ligne (totals) ; null = ligne par défaut
+     */
+    public function setOdds(string $eventId, string $market, array $odds, ?string $point = null): static
     {
-        $this->oddsOverrides[$eventId][$market] = $odds;
+        $this->oddsOverrides[$eventId][$market] = ['odds' => $odds, 'point' => $point];
 
         return $this;
     }
@@ -76,17 +84,24 @@ class FakeSportsDataProvider implements SportsDataProvider
 
         $fixtures = [
             'soccer_epl' => [
-                ['fake-1', 'Arsenal', 'Chelsea', $now->addDay()->setTime(15, 0), ['Arsenal' => '2.10', 'Chelsea' => '3.40', 'Draw' => '3.25']],
-                ['fake-2', 'Liverpool', 'Everton', $now->addDays(2)->setTime(17, 30), ['Liverpool' => '1.55', 'Everton' => '5.75', 'Draw' => '4.20']],
+                ['fake-1', 'Arsenal', 'Chelsea', $now->addDay()->setTime(15, 0), [
+                    'h2h' => ['Arsenal' => '2.10', 'Chelsea' => '3.40', 'Draw' => '3.25'],
+                    'totals' => ['Over' => '1.80', 'Under' => '2.00'],
+                ]],
+                ['fake-2', 'Liverpool', 'Everton', $now->addDays(2)->setTime(17, 30), [
+                    'h2h' => ['Liverpool' => '1.55', 'Everton' => '5.75', 'Draw' => '4.20'],
+                    'totals' => ['Over' => '1.65', 'Under' => '2.20'],
+                ]],
             ],
             'basketball_nba' => [
-                ['fake-3', 'Boston Celtics', 'Miami Heat', $now->addDay()->setTime(23, 30), ['Boston Celtics' => '1.45', 'Miami Heat' => '2.80']],
+                ['fake-3', 'Boston Celtics', 'Miami Heat', $now->addDay()->setTime(23, 30), [
+                    'h2h' => ['Boston Celtics' => '1.45', 'Miami Heat' => '2.80'],
+                ]],
             ],
         ];
 
         return array_map(function (array $f) use ($sportKey, $updatedAt) {
-            [$id, $home, $away, $startsAt, $odds] = $f;
-            $odds = $this->oddsOverrides[$id]['h2h'] ?? $odds;
+            [$id, $home, $away, $startsAt, $markets] = $f;
 
             return new EventData(
                 externalId: $id,
@@ -95,14 +110,29 @@ class FakeSportsDataProvider implements SportsDataProvider
                 homeTeam: $home,
                 awayTeam: $away,
                 startsAt: $startsAt,
-                markets: [new MarketData(
-                    key: 'h2h',
-                    bookmaker: 'fakebook',
-                    updatedAt: $updatedAt,
-                    selections: array_map(fn ($name, $price) => new SelectionData($name, $price), array_keys($odds), $odds),
-                )],
+                markets: array_map(fn (string $key, array $odds) => $this->market($id, $key, $odds, $updatedAt), array_keys($markets), $markets),
             );
         }, $fixtures[$sportKey] ?? []);
+    }
+
+    /** @param array<string, string> $odds */
+    private function market(string $eventId, string $key, array $odds, CarbonImmutable $updatedAt): MarketData
+    {
+        $override = $this->oddsOverrides[$eventId][$key] ?? null;
+        $odds = $override['odds'] ?? $odds;
+        $point = $key === 'totals' ? ($override['point'] ?? self::TOTALS_LINE) : null;
+
+        return new MarketData(
+            key: $key,
+            bookmaker: 'fakebook',
+            updatedAt: $updatedAt,
+            selections: array_map(fn ($name, $price) => new SelectionData($name, $price, $point), array_keys($odds), $odds),
+        );
+    }
+
+    public function upcomingStarts(string $sportKey): array
+    {
+        return array_map(fn (EventData $e) => $e->startsAt, $this->events($sportKey));
     }
 
     public function results(string $sportKey, int $daysFrom = 1): array
