@@ -16,6 +16,15 @@ return new class extends Migration
             $table->string('status', 20)->default('active')->after('password')->index();
             $table->timestamp('status_changed_at')->nullable()->after('status');
             $table->timestamp('last_login_at')->nullable()->after('remember_token');
+            // Identifiant de connexion (numéro haïtien local, 8 chiffres, sans l'indicatif 509).
+            $table->string('phone', 8)->unique()->after('email');
+        });
+
+        // L'email devient optionnel : le téléphone est l'identifiant de connexion.
+        // `unique()` reste correct avec des valeurs NULL multiples : SQLite comme MySQL/PostgreSQL
+        // n'indexent pas NULL comme une valeur égale à elle-même, donc plusieurs comptes sans email cohabitent.
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('email')->nullable()->change();
         });
 
         Schema::create('user_profiles', function (Blueprint $table) {
@@ -24,7 +33,6 @@ return new class extends Migration
             $table->string('first_name', 100)->nullable();
             $table->string('last_name', 100)->nullable();
             $table->date('birth_date')->nullable();
-            $table->string('phone', 30)->nullable();
             $table->char('country', 2)->nullable(); // ISO 3166-1 alpha-2
             $table->timestamps();
         });
@@ -72,7 +80,8 @@ return new class extends Migration
 
         Schema::table('users', function (Blueprint $table) {
             $table->dropIndex(['status']);
-            $table->dropColumn(['status', 'status_changed_at', 'last_login_at']);
+            $table->dropColumn(['status', 'status_changed_at', 'last_login_at', 'phone']);
+            $table->string('email')->nullable(false)->change();
         });
     }
 };

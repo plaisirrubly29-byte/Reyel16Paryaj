@@ -5,5 +5,5 @@ extends:
 rules:
   struct: error
   no-unresolved-refs: error
-  security-defined: off # à activer avec la section securitySchemes (P2-02)
+  security-defined: off # routes publiques non marquées ; les routes protégées déclarent sessionCookie
   no-unused-components: off # composants partagés ajoutés avant les routes qui les utilisent
