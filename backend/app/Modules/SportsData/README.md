@@ -42,13 +42,30 @@
 $provider = app(SportsDataProvider::class);
 $provider->sports();                 // gratuit
 $provider->upcomingStarts('soccer_epl'); // gratuit (/events : heures de début, sans cotes)
-$provider->events('soccer_epl');     // coût = marchés × régions (1 crédit avec h2h + eu)
+$provider->events('soccer_epl');     // coût = marchés × régions (2 crédits avec h2h,totals + eu)
 $provider->results('soccer_epl', 2); // 2 crédits (1 sans daysFrom)
 ```
 
 - **Quota** : offre gratuite = 500 crédits/mois. Le quota restant est lu dans les en-têtes `x-requests-*`
   et mémorisé ; sous `SPORTS_DATA_MIN_REMAINING`, les appels payants sont refusés (`quota_exhausted`).
 - **Diagnostic sans coût** : `php artisan sports-data:check` (connexion, sports configurés, quota).
+
+## Marchés synchronisés
+
+`SPORTS_DATA_MARKETS=h2h,totals` (`.env.example` ; `h2h` seul par défaut dans la config). Chaque marché demandé
+coûte 1 crédit par région : `h2h,totals` + `eu` = **2 crédits par compétition et par synchro** (le budget en tient
+compte automatiquement).
+
+| Marché | Sélections (`key` → nom stocké) | Ligne (`markets.line`) | Règle |
+|---|---|---|---|
+| `h2h` (1X2) | `home`, `draw` → « Match nul », `away` | `null` | Obligatoire : invalide, l'événement est rejeté (`sports_data.event_rejected`) |
+| `totals` (plus/moins) | `over` → « Plus de 2.5 », `under` → « Moins de 2.5 » | `"2.5"` (chaîne, sans zéros inutiles) | Facultatif : exactement un `Over` et un `Under` sur la même ligne ; sinon le marché est ignoré (`sports_data.market_rejected`) sans rejeter l'événement |
+
+- Un changement de ligne (ex. 2.5 → 3.5) compte comme un changement de cote : `odds_version` + 1 et historique
+  (`odds_snapshots.line` garde la ligne de chaque version), même à cotes égales.
+- Le faux fournisseur publie un plus/moins 2.5 buts sur les matchs de football (pas sur la NBA).
+- Catalogue : la liste `/api/v1/events` ne montre que le 1X2 ; le détail `/api/v1/events/{id}/markets` renvoie
+  le 1X2 puis le plus/moins (« Nombre de buts » au football, « Total de points » ailleurs ; libellés `+2.5` / `-2.5`).
 
 ## Crédits et budget
 

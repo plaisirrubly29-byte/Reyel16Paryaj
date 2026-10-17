@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $selection_id
  * @property int $odds_version
  * @property string $odds
+ * @property string|null $line ligne du marché à cette version (totals), null pour le 1X2
  */
 class OddsSnapshot extends Model
 {

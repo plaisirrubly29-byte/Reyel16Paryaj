@@ -19,7 +19,8 @@ class CatalogueController extends Controller
     /** Sports ayant des matchs ouverts, avec leurs compétitions et le nombre de matchs. */
     public function sports(): JsonResponse
     {
-        $counts = $this->catalogue->visibleEvents()
+        // Mêmes matchs que la liste (1X2 affichable) : les compteurs correspondent à ce qui est listé.
+        $counts = $this->catalogue->visibleEvents('h2h')
             ->selectRaw('competition_id, COUNT(*) as events_count')
             ->groupBy('competition_id')
             ->pluck('events_count', 'competition_id');
@@ -53,7 +54,7 @@ class CatalogueController extends Controller
     {
         $data = $request->validate(['sport' => ['nullable', 'string', 'max:50']]);
 
-        $ids = $this->catalogue->visibleEvents()->distinct()->pluck('competition_id');
+        $ids = $this->catalogue->visibleEvents('h2h')->distinct()->pluck('competition_id');
 
         $competitions = Competition::with('sport')
             ->whereIn('id', $ids)
@@ -74,7 +75,8 @@ class CatalogueController extends Controller
             'date' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
-        $query = $this->catalogue->visibleEvents()
+        // Un match dont seul le plus/moins est affichable n'a rien à montrer en liste (1X2 uniquement).
+        $query = $this->catalogue->visibleEvents('h2h')
             ->when($data['sport'] ?? null, fn ($q, $slug) => $q->whereHas('competition.sport', fn ($s) => $s->where('slug', $slug)))
             ->when($data['competition'] ?? null, fn ($q, $id) => $q->where('competition_id', $id))
             ->when($data['date'] ?? null, fn ($q, $date) => $q->whereDate('starts_at', $date))
@@ -88,7 +90,7 @@ class CatalogueController extends Controller
         return EventResource::collection($events);
     }
 
-    /** Détail d'un match avec tous ses marchés pariables ; 404 s'il n'est plus proposé. */
+    /** Détail d'un match avec tous ses marchés affichables (1X2 puis plus/moins) ; 404 s'il n'est plus proposé. */
     public function markets(string $id): EventResource
     {
         $event = $this->catalogue->withDisplayRelations($this->catalogue->visibleEvents())

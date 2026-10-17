@@ -16,6 +16,7 @@ use App\Modules\SportsData\Services\CatalogueSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class CatalogueSyncTest extends TestCase
@@ -41,6 +42,11 @@ class CatalogueSyncTest extends TestCase
     private function h2h(string $externalId): Market
     {
         return Event::where('external_id', $externalId)->firstOrFail()->markets()->where('key', 'h2h')->firstOrFail();
+    }
+
+    private function totals(string $externalId): Market
+    {
+        return Event::where('external_id', $externalId)->firstOrFail()->markets()->where('key', 'totals')->firstOrFail();
     }
 
     public function test_first_sync_creates_sport_competition_teams_events_and_odds(): void
@@ -173,12 +179,95 @@ class CatalogueSyncTest extends TestCase
     public function test_stale_odds_are_not_bettable(): void
     {
         $this->sync();
-        $this->assertSame(2, Market::bettable()->count());
+        $this->assertSame(4, Market::bettable()->count()); // 2 matchs × (1X2 + plus/moins)
 
         $this->travel(301)->minutes();
 
         $this->assertSame(0, Market::bettable()->count());
         $this->assertFalse($this->h2h('fake-1')->isBettable());
+    }
+
+    public function test_totals_market_is_synced_with_its_line(): void
+    {
+        $this->sync();
+
+        $market = $this->totals('fake-1');
+        $this->assertSame('2.5', $market->line);
+        $this->assertSame(1, $market->odds_version);
+        $this->assertSame(
+            ['over' => ['Plus de 2.5', '1.800'], 'under' => ['Moins de 2.5', '2.000']],
+            $market->selections()->orderBy('key')->get()->mapWithKeys(fn ($s) => [$s->key => [$s->name, $s->odds]])->all(),
+        );
+        $this->assertSame(['2.5', '2.5'], OddsSnapshot::whereIn('selection_id', $market->selections()->pluck('id'))->pluck('line')->all());
+        $this->assertNull($this->h2h('fake-1')->line);
+
+        // Le basket du faux fournisseur n'a pas de plus/moins.
+        $this->sync('basketball_nba');
+        $this->assertSame(['h2h'], Event::where('external_id', 'fake-3')->firstOrFail()->markets()->pluck('key')->all());
+    }
+
+    public function test_a_line_change_is_a_new_odds_version_even_with_equal_prices(): void
+    {
+        $this->sync();
+
+        $this->fake->setOdds('fake-1', 'totals', ['Over' => '1.80', 'Under' => '2.00'], '3.50')
+            ->setOddsUpdatedAt(CarbonImmutable::now());
+        $report = $this->sync();
+
+        $market = $this->totals('fake-1');
+        $this->assertSame(1, $report->oddsChanged);
+        $this->assertSame(2, $market->odds_version);
+        $this->assertSame('3.5', $market->line);
+        $this->assertSame('Plus de 3.5', $market->selections()->where('key', 'over')->value('name'));
+        $this->assertSame(1, $this->h2h('fake-1')->odds_version);
+
+        $over = $market->selections()->where('key', 'over')->firstOrFail();
+        $this->assertSame(['1' => '2.5', '2' => '3.5'], $over->snapshots()->orderBy('odds_version')->pluck('line', 'odds_version')->all());
+
+        // Rejouer la même ligne ne crée pas de version.
+        $this->sync();
+        $this->assertSame(2, $this->totals('fake-1')->odds_version);
+    }
+
+    public function test_a_totals_price_change_bumps_only_the_totals_version(): void
+    {
+        $this->sync();
+
+        $this->fake->setOdds('fake-2', 'totals', ['Over' => '1.70', 'Under' => '2.10'])->setOddsUpdatedAt(CarbonImmutable::now());
+        $this->sync();
+
+        $this->assertSame(2, $this->totals('fake-2')->odds_version);
+        $this->assertSame('1.700', $this->totals('fake-2')->selections()->where('key', 'over')->value('odds'));
+        $this->assertSame(1, $this->h2h('fake-2')->odds_version);
+    }
+
+    public function test_an_invalid_totals_market_is_skipped_without_rejecting_the_event(): void
+    {
+        Log::spy();
+        $this->fake->setOdds('fake-1', 'totals', ['Over' => '1.80', 'Under' => '2.00'], '0') // ligne invalide
+            ->setOdds('fake-2', 'totals', ['Over' => '1.65', 'Draw' => '2.20']);              // sélection inconnue
+
+        $report = $this->sync();
+
+        $this->assertSame(2, $report->eventsCreated);
+        $this->assertSame(0, $report->skipped);
+        foreach (['fake-1', 'fake-2'] as $id) {
+            $this->assertSame(1, $this->h2h($id)->odds_version);
+            $this->assertFalse(Event::where('external_id', $id)->firstOrFail()->markets()->where('key', 'totals')->exists());
+            Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context = []) => $message === 'sports_data.market_rejected'
+                && $context['id'] === $id && $context['market'] === 'totals')->once();
+        }
+    }
+
+    public function test_an_invalid_h2h_market_still_rejects_the_event(): void
+    {
+        $this->fake->setOdds('fake-1', 'h2h', ['Arsenal' => '2.10', 'Inconnu' => '3.40']);
+
+        $report = $this->sync();
+
+        $this->assertSame(1, $report->skipped);
+        $this->assertNull(Event::where('external_id', 'fake-1')->first());
+        $this->assertSame(0, Market::whereHas('event', fn ($q) => $q->where('external_id', 'fake-1'))->count());
     }
 
     public function test_sync_command_reports_each_competition(): void

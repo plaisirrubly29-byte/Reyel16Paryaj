@@ -16,6 +16,8 @@ return [
         'timeout' => (int) env('SPORTS_DATA_TIMEOUT', 30),
 
         // Coût d'un appel de cotes = nombre de marchés × nombre de régions (en crédits).
+        // Marchés pris en charge : h2h (1X2) et totals (plus/moins, "Nombre de buts").
+        // "h2h,totals" avec la région "eu" = 2 crédits par compétition et par synchro.
         'regions' => env('SPORTS_DATA_REGIONS', 'eu'),
         'markets' => env('SPORTS_DATA_MARKETS', 'h2h'),
 
@@ -49,8 +51,8 @@ return [
     'monthly_credits' => (int) env('SPORTS_DATA_MONTHLY_CREDITS', 500),
     'quota_reset_day' => (int) env('SPORTS_DATA_QUOTA_RESET_DAY', 1),
 
-    // Synchronisation (P3-03). Coût mensuel ≈ nb de compétitions × nb d'exécutions par mois.
-    // Par défaut toutes les 4 h : 1 compétition ≈ 180 crédits/mois (offre gratuite : 500).
+    // Synchronisation (P3-03). Coût mensuel ≈ nb de compétitions × nb d'exécutions par mois × marchés × régions.
+    // Par défaut toutes les 4 h : 1 compétition ≈ 180 crédits/mois en h2h, ≈ 360 en h2h,totals (offre gratuite : 500).
     'sync_cron' => env('SPORTS_DATA_SYNC_CRON', '0 */4 * * *'),
     'horizon_days' => (int) env('SPORTS_DATA_HORIZON_DAYS', 7),
     'max_events_per_competition' => (int) env('SPORTS_DATA_MAX_EVENTS', 10),

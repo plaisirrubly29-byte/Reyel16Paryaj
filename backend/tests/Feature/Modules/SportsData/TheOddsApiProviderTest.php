@@ -126,6 +126,32 @@ class TheOddsApiProviderTest extends TestCase
             && $r['regions'] === 'eu' && $r['markets'] === 'h2h' && $r['oddsFormat'] === 'decimal');
     }
 
+    public function test_totals_market_keeps_its_line(): void
+    {
+        config(['sports_data.theodds.markets' => 'h2h,totals']);
+        $this->app->forgetInstance(SportsDataProvider::class);
+        $payload = $this->oddsPayload();
+        $payload[0]['bookmakers'][0]['markets'][] = [
+            'key' => 'totals',
+            'last_update' => '2026-10-15T20:09:30Z',
+            'outcomes' => [
+                ['name' => 'Over', 'price' => 1.85, 'point' => 2.5],
+                ['name' => 'Under', 'price' => 1.95, 'point' => 2.5],
+            ],
+        ];
+        Http::fake(['*' => Http::response($payload, 200, $this->quotaHeaders(last: 2))]);
+
+        $markets = $this->provider()->events('soccer_epl')[0]->markets;
+
+        $this->assertSame('totals', $markets[1]->key);
+        $this->assertSame(
+            [['Over', '1.85', '2.5'], ['Under', '1.95', '2.5']],
+            array_map(fn ($s) => [$s->name, $s->odds, $s->point], $markets[1]->selections),
+        );
+        $this->assertNull($markets[0]->selections[0]->point);
+        Http::assertSent(fn (Request $r) => $r['markets'] === 'h2h,totals');
+    }
+
     public function test_reference_bookmaker_filters_markets(): void
     {
         config(['sports_data.theodds.reference_bookmaker' => 'unibet_fr']);

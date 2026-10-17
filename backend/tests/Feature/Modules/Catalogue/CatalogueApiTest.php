@@ -50,7 +50,9 @@ class CatalogueApiTest extends TestCase
         $first = $response->json('data.0');
         $this->assertSame('Arsenal', $first['home_team']);
         $this->assertSame('Football', $first['sport']['name']);
-        $this->assertSame('h2h', $first['markets'][0]['key']);
+        // La liste ne montre que le 1X2, même quand le match a un plus/moins.
+        $this->assertSame([['h2h'], ['h2h'], ['h2h']], array_map(fn ($e) => array_column($e['markets'], 'key'), $response->json('data')));
+        $this->assertNull($first['markets'][0]['line']);
         $this->assertSame(1, $first['markets'][0]['odds_version']);
         $this->assertSame(
             [['1', 'Arsenal', '2.10'], ['X', 'Match nul', '3.25'], ['2', 'Chelsea', '3.40']],
@@ -111,6 +113,47 @@ class CatalogueApiTest extends TestCase
             ->assertJsonPath('data.home_team', 'Liverpool')
             ->assertJsonPath('data.markets.0.name', 'Résultat du match (1X2)')
             ->assertJsonCount(3, 'data.markets.0.selections');
+    }
+
+    public function test_event_detail_returns_1x2_then_totals_with_its_line(): void
+    {
+        $id = $this->event('fake-1')->id;
+
+        $markets = $this->getJson("/api/v1/events/{$id}/markets")->assertOk()->json('data.markets');
+
+        $this->assertSame(['h2h', 'totals'], array_column($markets, 'key'));
+        $this->assertSame(['Résultat du match (1X2)', 'Nombre de buts'], array_column($markets, 'name'));
+        $this->assertSame([null, '2.5'], array_column($markets, 'line'));
+        $this->assertTrue($markets[1]['bettable']);
+        $this->assertSame(1, $markets[1]['odds_version']);
+        $this->assertSame(
+            [['over', '+2.5', 'Plus de 2.5', '1.80'], ['under', '-2.5', 'Moins de 2.5', '2.00']],
+            array_map(fn ($s) => [$s['key'], $s['label'], $s['name'], $s['odds']], $markets[1]['selections']),
+        );
+    }
+
+    public function test_totals_outside_football_is_a_points_total(): void
+    {
+        $event = $this->event('fake-3');
+        $market = $event->markets()->create(['key' => 'totals', 'line' => '215.5', 'odds_updated_at' => now()]);
+        $market->selections()->create(['key' => 'under', 'name' => 'Moins de 215.5', 'odds' => '1.90']);
+        $market->selections()->create(['key' => 'over', 'name' => 'Plus de 215.5', 'odds' => '1.90']);
+
+        $this->getJson("/api/v1/events/{$event->id}/markets")
+            ->assertOk()
+            ->assertJsonPath('data.markets.1.name', 'Total de points')
+            ->assertJsonPath('data.markets.1.selections.0.label', '+215.5')
+            ->assertJsonPath('data.markets.1.selections.1.label', '-215.5');
+    }
+
+    public function test_an_event_with_only_totals_displayable_is_not_listed(): void
+    {
+        $event = $this->event('fake-1');
+        $event->markets()->where('key', 'h2h')->update(['status' => MarketStatus::Suspended, 'suspension_reason' => 'Décision opérateur']);
+
+        $this->getJson('/api/v1/events?sport=soccer')->assertJsonCount(1, 'data')->assertJsonPath('data.0.home_team', 'Liverpool');
+        $this->getJson('/api/v1/sports')->assertJsonPath('data.0.events_count', 1);
+        $this->getJson("/api/v1/events/{$event->id}/markets")->assertOk()->assertJsonPath('data.markets.0.key', 'totals');
     }
 
     public function test_hidden_or_unknown_event_returns_404(): void

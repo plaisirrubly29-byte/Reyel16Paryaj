@@ -26,7 +26,9 @@ class EventResource extends JsonResource
             'away_team' => $this->awayTeam->name,
             'starts_at' => $this->starts_at->toIso8601String(),
             'status' => $this->status->value,
-            'markets' => MarketResource::collection($this->markets),
+            // Le libellé d'un marché dépend du sport ("Nombre de buts" au football) : on rattache l'événement
+            // déjà chargé (avec compétition et sport) pour éviter une requête par marché.
+            'markets' => MarketResource::collection($this->markets->each->setRelation('event', $this->resource)),
         ];
     }
 }

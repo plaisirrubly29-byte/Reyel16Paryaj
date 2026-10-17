@@ -14,19 +14,23 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class CatalogueQuery
 {
-    /** @return Builder<Event> */
-    public function visibleEvents(): Builder
+    /**
+     * @param  ?string  $marketKey  n'exiger que ce marché (ex. "h2h" pour la liste, qui n'affiche que le 1X2)
+     * @return Builder<Event>
+     */
+    public function visibleEvents(?string $marketKey = null): Builder
     {
         return Event::query()
             ->where('status', EventStatus::Scheduled)
             ->where('starts_at', '>', now())
-            ->whereHas('markets', fn ($q) => $q->displayable())
+            ->whereHas('markets', fn ($q) => $q->displayable()->when($marketKey, fn ($m) => $m->where('key', $marketKey)))
             ->whereHas('competition', fn ($q) => $q->where('is_active', true)
                 ->whereHas('sport', fn ($s) => $s->where('is_active', true)));
     }
 
     /**
-     * Charge l'affichage d'un match : compétition, sport, équipes et marchés pariables.
+     * Charge l'affichage d'un match : compétition, sport, équipes et marchés affichables,
+     * dans un ordre stable (1X2 puis plus/moins ; 1, X, 2 puis plus, moins).
      *
      * @param  Builder<Event>  $query
      * @return Builder<Event>
@@ -39,7 +43,9 @@ class CatalogueQuery
             'awayTeam',
             'markets' => fn ($q) => $q->displayable()
                 ->when($marketKey, fn ($m) => $m->where('key', $marketKey))
-                ->with(['selections' => fn ($s) => $s->orderByRaw("CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 ELSE 4 END")]),
+                ->orderByRaw("CASE \"key\" WHEN 'h2h' THEN 1 WHEN 'totals' THEN 2 ELSE 3 END")
+                ->orderBy('id')
+                ->with(['selections' => fn ($s) => $s->orderByRaw("CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 WHEN 'over' THEN 4 WHEN 'under' THEN 5 ELSE 6 END")]),
         ]);
     }
 }

@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $event_id
  * @property string $key
+ * @property string|null $line ligne du marché totals (ex. "2.5"), null pour le 1X2
  * @property MarketStatus $status
  * @property string|null $suspension_reason
  * @property int $odds_version
