@@ -29,6 +29,8 @@ class UserFactory extends Factory
     {
         return [
             'name' => fake()->name(),
+            // Numéro haïtien local (8 chiffres) : identifiant de connexion.
+            'phone' => fake()->unique()->numerify('########'),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),

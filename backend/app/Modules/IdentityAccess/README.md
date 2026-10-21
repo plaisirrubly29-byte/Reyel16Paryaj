@@ -20,8 +20,8 @@
 
 | Table | Rôle |
 |---|---|
-| `users` | Compte : email, mot de passe haché, `status` (`AccountStatus` : active, suspended, excluded, closed) |
-| `user_profiles` | Données personnelles (nom, date de naissance, téléphone, pays) — 1-1 avec `users` |
+| `users` | Compte : téléphone (identifiant de connexion, 8 chiffres), email optionnel, mot de passe haché, `status` (`AccountStatus` : active, suspended, excluded, closed) |
+| `user_profiles` | Données personnelles (nom, date de naissance, pays) — 1-1 avec `users` |
 | `roles` | Rôles administratifs (`RoleSlug`) — seedés par `RoleSeeder` |
 | `permissions` | Permissions unitaires (`ressource.action`) |
 | `role_permissions` | Rôle → permissions |

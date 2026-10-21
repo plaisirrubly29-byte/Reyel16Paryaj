@@ -31,6 +31,7 @@ class IdentitySchemaTest extends TestCase
     {
         $user = User::create([
             'name' => 'Joueur',
+            'phone' => '34123456',
             'email' => 'j@example.com',
             'password' => 'secret-password',
             'status' => 'closed',
