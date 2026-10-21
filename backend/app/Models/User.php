@@ -22,14 +22,15 @@ use Illuminate\Support\Collection;
 /**
  * @property int $id
  * @property string $name
- * @property string $email
+ * @property string|null $email
+ * @property string $phone
  * @property AccountStatus $status
  * @property string|null $mfa_secret
  * @property Carbon|null $mfa_confirmed_at
  * @property list<string>|null $mfa_recovery_codes
  * @property int|null $mfa_last_used_step
  */
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'phone', 'password'])]
 #[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
 class User extends Authenticatable
 {

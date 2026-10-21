@@ -20,6 +20,7 @@ class UserResource extends JsonResource
         return [
             'id' => (string) $this->id,
             'name' => $this->name,
+            'phone' => $this->phone,
             'email' => $this->email,
             'status' => $this->status->value,
             'roles' => $this->roles->pluck('slug')->values(),
@@ -37,7 +38,6 @@ class UserResource extends JsonResource
                 'first_name' => $this->profile?->first_name,
                 'last_name' => $this->profile?->last_name,
                 'birth_date' => $this->profile?->birth_date?->toDateString(),
-                'phone' => $this->profile?->phone,
                 'country' => $this->profile?->country,
             ]),
             'created_at' => $this->created_at?->toIso8601String(),

@@ -59,10 +59,10 @@ class AppServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         RateLimiter::for('login', function (Request $request) {
-            $email = Str::lower((string) $request->input('email'));
+            $phone = (string) $request->input('phone');
 
             return [
-                Limit::perMinute(config('identity.login.max_attempts_per_email'))->by('login:'.$email.'|'.$request->ip()),
+                Limit::perMinute(config('identity.login.max_attempts_per_phone'))->by('login:'.$phone.'|'.$request->ip()),
                 Limit::perMinute(config('identity.login.max_attempts_per_ip'))->by('login-ip:'.$request->ip()),
             ];
         });
