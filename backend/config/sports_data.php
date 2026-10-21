@@ -36,8 +36,31 @@ return [
         'soccer_italy_serie_a' => ['name' => 'Serie A', 'country' => 'Italie'],
         'soccer_germany_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Allemagne'],
         'soccer_uefa_champs_league' => ['name' => 'Ligue des champions', 'country' => 'Europe'],
+        'soccer_uefa_europa_league' => ['name' => 'Ligue Europa', 'country' => 'Europe'],
+        'soccer_uefa_europa_conference_league' => ['name' => 'Ligue Europa Conférence', 'country' => 'Europe'],
+        'soccer_uefa_nations_league' => ['name' => 'Ligue des nations', 'country' => 'Europe'],
+        'soccer_conmebol_copa_libertadores' => ['name' => 'Copa Libertadores', 'country' => 'Amérique du Sud'],
+        'soccer_conmebol_copa_sudamericana' => ['name' => 'Copa Sudamericana', 'country' => 'Amérique du Sud'],
+        'soccer_efl_champ' => ['name' => 'Championship', 'country' => 'Angleterre'],
+        'soccer_france_ligue_two' => ['name' => 'Ligue 2', 'country' => 'France'],
+        'soccer_brazil_campeonato' => ['name' => 'Brasileirão Série A', 'country' => 'Brésil'],
+        'soccer_usa_mls' => ['name' => 'MLS', 'country' => 'États-Unis'],
+        'soccer_saudi_arabia_pro_league' => ['name' => 'Saudi Pro League', 'country' => 'Arabie saoudite'],
+        'soccer_mexico_ligamx' => ['name' => 'Liga MX', 'country' => 'Mexique'],
         'basketball_nba' => ['name' => 'NBA', 'country' => 'États-Unis'],
+        'basketball_euroleague' => ['name' => 'Euroligue', 'country' => 'Europe'],
         'baseball_mlb' => ['name' => 'MLB', 'country' => 'États-Unis'],
+        'americanfootball_nfl' => ['name' => 'NFL', 'country' => 'États-Unis'],
+        'icehockey_nhl' => ['name' => 'NHL', 'country' => 'États-Unis'],
+    ],
+
+    // « Top compétitions » : affichées en premier, dans cet ordre (les autres suivent par ordre alphabétique).
+    'featured_competitions' => [
+        'soccer_uefa_champs_league', 'soccer_uefa_europa_league', 'soccer_uefa_europa_conference_league',
+        'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'soccer_germany_bundesliga', 'soccer_france_ligue_one',
+        'soccer_conmebol_copa_libertadores', 'soccer_conmebol_copa_sudamericana', 'soccer_uefa_nations_league',
+        'soccer_brazil_campeonato', 'soccer_usa_mls', 'soccer_saudi_arabia_pro_league', 'soccer_efl_champ',
+        'basketball_nba', 'basketball_euroleague', 'americanfootball_nfl', 'icehockey_nhl', 'baseball_mlb',
     ],
 
     // Garde-fou : plus aucun appel payant quand le quota restant passe sous ce seuil.

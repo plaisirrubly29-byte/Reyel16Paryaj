@@ -3,13 +3,14 @@
 namespace App\Modules\SportsData\Console;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
+use App\Modules\SportsData\Exceptions\SportsDataException;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\SportsData\Services\CreditBudget;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Synchronise matchs et cotes des compétitions configurées (SPORTS_DATA_SPORTS).
+ * Synchronise matchs et cotes des compétitions configurées (SPORTS_DATA_SPORTS, ou "*" pour toutes les actives).
  * Planifiée selon SPORTS_DATA_SYNC_CRON ; peut être lancée à la main.
  * Coût : 1 appel par compétition (marchés × régions crédits chez The Odds API).
  *
@@ -29,6 +30,19 @@ class SyncCatalogueCommand extends Command
     {
         $competitions = array_values($this->option('competition') ?: config('sports_data.sports'));
         $failed = false;
+
+        // "*" : toutes les compétitions actives du fournisseur (liste gratuite /sports), hors paris « vainqueur final ».
+        if (in_array('*', $competitions, true)) {
+            try {
+                $competitions = collect($provider->sports())
+                    ->filter(fn ($s) => $s->active && ! $s->hasOutrights)
+                    ->pluck('key')->sort()->values()->all();
+            } catch (SportsDataException $e) {
+                $this->error("Liste des compétitions indisponible : {$e->getMessage()}");
+
+                return self::FAILURE;
+            }
+        }
 
         $this->info("Fournisseur : {$provider->name()} — compétitions : ".implode(', ', $competitions));
 

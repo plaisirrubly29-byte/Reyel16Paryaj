@@ -62,8 +62,8 @@ class TotpTest extends TestCase
 
     public function test_provisioning_uri(): void
     {
-        $uri = Totp::provisioningUri('ABC', 'admin@example.com', 'REYEL 16 PAYAJ');
+        $uri = Totp::provisioningUri('ABC', 'admin@example.com', 'REYEL 16 PARYAJ');
 
-        $this->assertStringStartsWith('otpauth://totp/REYEL%2016%20PAYAJ:admin%40example.com?secret=ABC&issuer=REYEL%2016%20PAYAJ', $uri);
+        $this->assertStringStartsWith('otpauth://totp/REYEL%2016%20PARYAJ:admin%40example.com?secret=ABC&issuer=REYEL%2016%20PARYAJ', $uri);
     }
 }

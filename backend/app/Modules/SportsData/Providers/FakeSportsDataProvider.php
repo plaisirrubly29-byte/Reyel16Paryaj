@@ -86,11 +86,15 @@ class FakeSportsDataProvider implements SportsDataProvider
             'soccer_epl' => [
                 ['fake-1', 'Arsenal', 'Chelsea', $now->addDay()->setTime(15, 0), [
                     'h2h' => ['Arsenal' => '2.10', 'Chelsea' => '3.40', 'Draw' => '3.25'],
+                    'double_chance' => ['Arsenal/Draw' => '1.27', 'Arsenal/Chelsea' => '1.30', 'Draw/Chelsea' => '1.66'],
                     'totals' => ['Over' => '1.80', 'Under' => '2.00'],
+                    'btts' => ['Yes' => '1.70', 'No' => '2.05'],
                 ]],
                 ['fake-2', 'Liverpool', 'Everton', $now->addDays(2)->setTime(17, 30), [
                     'h2h' => ['Liverpool' => '1.55', 'Everton' => '5.75', 'Draw' => '4.20'],
+                    'double_chance' => ['Liverpool or Draw' => '1.13', 'Liverpool or Everton' => '1.22', 'Draw or Everton' => '2.43'],
                     'totals' => ['Over' => '1.65', 'Under' => '2.20'],
+                    'btts' => ['Yes' => '1.75', 'No' => '1.95'],
                 ]],
             ],
             'basketball_nba' => [

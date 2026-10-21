@@ -3,6 +3,7 @@
 namespace Tests\Feature\Modules\SportsData;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
+use App\Modules\SportsData\Data\EventData;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Exceptions\SportsDataException;
@@ -179,7 +180,7 @@ class CatalogueSyncTest extends TestCase
     public function test_stale_odds_are_not_bettable(): void
     {
         $this->sync();
-        $this->assertSame(4, Market::bettable()->count()); // 2 matchs × (1X2 + plus/moins)
+        $this->assertSame(8, Market::bettable()->count()); // 2 matchs × (1X2, double chance, plus/moins, les deux marquent)
 
         $this->travel(301)->minutes();
 
@@ -259,6 +260,41 @@ class CatalogueSyncTest extends TestCase
         }
     }
 
+    public function test_double_chance_and_btts_are_synced_whatever_the_provider_naming(): void
+    {
+        // Paires dans le désordre, séparateurs variés, nul en français : mêmes clés 1X / 12 / X2.
+        $this->fake->setOdds('fake-1', 'double_chance', ['Draw / Arsenal' => '1.27', 'Chelsea or Arsenal' => '1.30', 'Chelsea ou nul' => '1.66'])
+            ->setOdds('fake-1', 'btts', ['Oui' => '1.70', 'Non' => '2.05']);
+
+        $this->sync();
+
+        $markets = Event::where('external_id', 'fake-1')->firstOrFail()->markets()->with('selections')->get()->keyBy('key');
+        $this->assertSame(
+            ['draw_away' => 'Nul ou Chelsea', 'home_away' => 'Arsenal ou Chelsea', 'home_draw' => 'Arsenal ou nul'],
+            $markets['double_chance']->selections->sortBy('key')->pluck('name', 'key')->all(),
+        );
+        $this->assertSame('1.270', $markets['double_chance']->selections->firstWhere('key', 'home_draw')->odds);
+        $this->assertSame(['no' => 'Non', 'yes' => 'Oui'], $markets['btts']->selections->sortBy('key')->pluck('name', 'key')->all());
+        $this->assertNull($markets['btts']->line);
+    }
+
+    public function test_invalid_double_chance_or_btts_markets_are_skipped_without_rejecting_the_event(): void
+    {
+        Log::spy();
+        $this->fake->setOdds('fake-1', 'double_chance', ['Arsenal/Draw' => '1.27', 'Draw/Arsenal' => '1.30']) // doublon
+            ->setOdds('fake-1', 'btts', ['Yes' => '1.70', 'Peut-être' => '2.05'])                            // sélection inconnue
+            ->setOdds('fake-2', 'double_chance', ['Liverpool' => '1.13', 'Liverpool or Inconnu' => '1.22']);  // paires invalides
+
+        $report = $this->sync();
+
+        $this->assertSame(0, $report->skipped);
+        $this->assertSame(1, $this->h2h('fake-1')->odds_version);
+        $this->assertFalse(Market::where('key', 'double_chance')->whereHas('event', fn ($q) => $q->whereIn('external_id', ['fake-1', 'fake-2']))->exists());
+        $this->assertFalse(Market::where('key', 'btts')->whereHas('event', fn ($q) => $q->where('external_id', 'fake-1'))->exists());
+        $this->assertTrue(Market::where('key', 'btts')->whereHas('event', fn ($q) => $q->where('external_id', 'fake-2'))->exists());
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context = []) => $message === 'sports_data.market_rejected')->times(3);
+    }
+
     public function test_an_invalid_h2h_market_still_rejects_the_event(): void
     {
         $this->fake->setOdds('fake-1', 'h2h', ['Arsenal' => '2.10', 'Inconnu' => '3.40']);
@@ -280,6 +316,41 @@ class CatalogueSyncTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame(3, Event::count());
+    }
+
+    public function test_a_star_syncs_every_active_competition_except_outrights(): void
+    {
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions : basketball_nba, soccer_epl')
+            ->doesntExpectOutputToContain('soccer_fifa_world_cup_winner')
+            ->assertSuccessful();
+
+        $this->assertSame(3, Event::count());
+    }
+
+    public function test_competition_name_and_country_come_from_the_provider_title_without_a_configured_label(): void
+    {
+        config(['sports_data.competition_labels' => []]);
+        // Titres réels de The Odds API : « Ligue 1 - France » (pays traduit), « NBA » (sans pays).
+        $this->app->instance(SportsDataProvider::class, new class extends FakeSportsDataProvider
+        {
+            public function events(string $sportKey): array
+            {
+                return array_map(fn (EventData $e) => new EventData(
+                    $e->externalId, $e->sportKey, $sportKey === 'soccer_epl' ? 'Premier League - England' : $e->competition,
+                    $e->homeTeam, $e->awayTeam, $e->startsAt, $e->markets,
+                ), parent::events($sportKey));
+            }
+        });
+
+        $this->sync('soccer_epl');
+        $this->sync('basketball_nba');
+
+        $label = fn (string $key) => Competition::where('external_key', $key)->firstOrFail()->only(['name', 'country']);
+        $this->assertSame(['name' => 'Premier League', 'country' => 'Angleterre'], $label('soccer_epl'));
+        $this->assertSame(['name' => 'NBA', 'country' => null], $label('basketball_nba'));
     }
 
     public function test_sync_is_scheduled_with_the_configured_frequency(): void

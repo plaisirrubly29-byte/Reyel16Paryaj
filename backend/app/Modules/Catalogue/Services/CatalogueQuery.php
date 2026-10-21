@@ -30,7 +30,7 @@ class CatalogueQuery
 
     /**
      * Charge l'affichage d'un match : compétition, sport, équipes et marchés affichables,
-     * dans un ordre stable (1X2 puis plus/moins ; 1, X, 2 puis plus, moins).
+     * dans un ordre stable (1X2, double chance, plus/moins, les deux marquent ; 1, X, 2 ; 1X, 12, X2 ; plus, moins ; oui, non).
      *
      * @param  Builder<Event>  $query
      * @return Builder<Event>
@@ -43,9 +43,12 @@ class CatalogueQuery
             'awayTeam',
             'markets' => fn ($q) => $q->displayable()
                 ->when($marketKey, fn ($m) => $m->where('key', $marketKey))
-                ->orderByRaw("CASE \"key\" WHEN 'h2h' THEN 1 WHEN 'totals' THEN 2 ELSE 3 END")
+                ->orderByRaw("CASE \"key\" WHEN 'h2h' THEN 1 WHEN 'double_chance' THEN 2 WHEN 'totals' THEN 3 WHEN 'btts' THEN 4 ELSE 5 END")
                 ->orderBy('id')
-                ->with(['selections' => fn ($s) => $s->orderByRaw("CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 WHEN 'over' THEN 4 WHEN 'under' THEN 5 ELSE 6 END")]),
+                ->with(['selections' => fn ($s) => $s->orderByRaw(
+                    "CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 WHEN 'home_draw' THEN 4 WHEN 'home_away' THEN 5"
+                    ." WHEN 'draw_away' THEN 6 WHEN 'over' THEN 7 WHEN 'under' THEN 8 WHEN 'yes' THEN 9 WHEN 'no' THEN 10 ELSE 11 END"
+                )]),
         ]);
     }
 }

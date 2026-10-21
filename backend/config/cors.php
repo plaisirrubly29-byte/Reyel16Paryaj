@@ -20,7 +20,8 @@ return [
     'allowed_methods' => ['*'],
 
     // Seul le frontend first-party est autorisé (cookies de session Sanctum).
-    'allowed_origins' => array_filter(explode(',', (string) env('FRONTEND_URL', 'http://localhost:5173'))),
+    // CORS_ALLOWED_ORIGINS (liste séparée par des virgules) ajoute d'autres origines, ex. le build XAMPP sur http://localhost.
+    'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', (string) env('CORS_ALLOWED_ORIGINS', env('FRONTEND_URL', 'http://localhost:5173')))))),
 
     'allowed_origins_patterns' => [],
 

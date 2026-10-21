@@ -47,19 +47,38 @@ class CatalogueSyncService
         'rugbyunion' => 'Rugby',
         'cricket' => 'Cricket',
         'handball' => 'Handball',
+        'aussierules' => 'Football australien',
+    ];
+
+    /** Pays des titres du fournisseur (« Ligue 1 - France », « La Liga - Spain »), affichés en français. */
+    private const COUNTRY_NAMES = [
+        'Argentina' => 'Argentine', 'Australia' => 'Australie', 'Austria' => 'Autriche', 'Belgium' => 'Belgique',
+        'Brazil' => 'Brésil', 'Chile' => 'Chili', 'China' => 'Chine', 'Denmark' => 'Danemark', 'England' => 'Angleterre',
+        'Finland' => 'Finlande', 'France' => 'France', 'Germany' => 'Allemagne', 'Greece' => 'Grèce', 'Ireland' => 'Irlande',
+        'Italy' => 'Italie', 'Japan' => 'Japon', 'Korea' => 'Corée du Sud', 'Mexico' => 'Mexique', 'Netherlands' => 'Pays-Bas',
+        'Norway' => 'Norvège', 'Poland' => 'Pologne', 'Portugal' => 'Portugal', 'Russia' => 'Russie', 'Saudi Arabia' => 'Arabie saoudite',
+        'Scotland' => 'Écosse', 'Spain' => 'Espagne', 'Sweden' => 'Suède', 'Switzerland' => 'Suisse', 'Turkey' => 'Turquie',
+        'USA' => 'États-Unis', 'Uruguay' => 'Uruguay',
     ];
 
     /**
      * Marchés synchronisés, dans l'ordre. Le 1X2 (h2h) est obligatoire : invalide, il fait rejeter l'événement.
-     * Les autres (totals : plus/moins de N buts ou points) sont facultatifs : invalides, ils sont ignorés.
+     * Les autres sont facultatifs (invalides, ils sont ignorés) : double chance (1X, 12, X2),
+     * totals (plus/moins de N buts ou points) et btts (les deux équipes marquent : oui / non).
      */
-    private const MARKETS = ['h2h', 'totals'];
+    private const MARKETS = ['h2h', 'double_chance', 'totals', 'btts'];
 
     /** Clés de sélection du marché 1X2 (h2h). */
     private const DRAW_NAMES = ['draw', 'tie', 'nul', 'match nul'];
 
     /** Clés de sélection du marché totals. */
     private const TOTALS_NAMES = ['over' => 'over', 'under' => 'under'];
+
+    /** Clés de sélection du marché btts. */
+    private const BTTS_NAMES = ['yes' => 'yes', 'oui' => 'yes', 'no' => 'no', 'non' => 'no'];
+
+    /** Sélections de la double chance : paire d'issues (dans l'ordre domicile, nul, extérieur) => clé. */
+    private const DOUBLE_CHANCE_KEYS = ['home+draw' => 'home_draw', 'home+away' => 'home_away', 'draw+away' => 'draw_away'];
 
     public function __construct(private readonly SportsDataProvider $provider) {}
 
@@ -162,19 +181,36 @@ class CatalogueSyncService
             ['name' => self::SPORT_NAMES[$slug] ?? ucfirst($slug)],
         );
 
-        $label = config("sports_data.competition_labels.{$data->sportKey}");
+        // Un libellé configuré l'emporte sur le titre du fournisseur (ex. "EPL" → "Premier League").
+        $label = config("sports_data.competition_labels.{$data->sportKey}") ?? $this->providerLabel($data->competition);
 
         $competition = Competition::firstOrCreate(
             ['provider' => $this->provider->name(), 'external_key' => $data->sportKey],
-            ['sport_id' => $sport->id, 'name' => $label['name'] ?? $data->competition, 'country' => $label['country'] ?? null],
+            ['sport_id' => $sport->id, 'name' => $label['name'], 'country' => $label['country'] ?? null],
         );
 
-        // Un libellé configuré l'emporte sur le code du fournisseur (ex. "EPL" → "Premier League").
-        if ($label !== null && ($competition->name !== $label['name'] || $competition->country !== ($label['country'] ?? null))) {
+        if ($competition->name !== $label['name'] || $competition->country !== ($label['country'] ?? null)) {
             $competition->update(['name' => $label['name'], 'country' => $label['country'] ?? null]);
         }
 
         return $competition;
+    }
+
+    /**
+     * Nom et pays tirés du titre du fournisseur : « Ligue 1 - France » → Ligue 1 / France,
+     * « La Liga - Spain » → La Liga / Espagne ; sans pays reconnaissable, le titre entier.
+     *
+     * @return array{name: string, country: ?string}
+     */
+    private function providerLabel(string $title): array
+    {
+        $title = trim($title);
+
+        if (preg_match('/^(.+?)\s+-\s+([^-]+)$/u', $title, $m) && isset(self::COUNTRY_NAMES[trim($m[2])])) {
+            return ['name' => trim($m[1]), 'country' => self::COUNTRY_NAMES[trim($m[2])]];
+        }
+
+        return ['name' => $title, 'country' => null];
     }
 
     /** Marché du bookmaker de référence (déjà filtré par le fournisseur s'il est configuré), sinon le premier. */
@@ -200,8 +236,23 @@ class CatalogueSyncService
     {
         return match ($source->key) {
             'h2h' => [$this->h2hSelections($data, $source), null],
+            'double_chance' => [$this->doubleChanceSelections($data, $source), null],
             'totals' => $this->totalsSelections($source),
+            'btts' => [$this->bttsSelections($source), null],
             default => throw new \InvalidArgumentException("Marché non pris en charge : {$source->key}"),
+        };
+    }
+
+    /** Issue du match désignée par un nom de sélection : "home", "away" ou "draw". */
+    private function outcome(EventData $data, string $name): string
+    {
+        $normalized = mb_strtolower(trim($name));
+
+        return match (true) {
+            $normalized === mb_strtolower(trim($data->homeTeam)) => 'home',
+            $normalized === mb_strtolower(trim($data->awayTeam)) => 'away',
+            in_array($normalized, self::DRAW_NAMES, true) => 'draw',
+            default => throw new \InvalidArgumentException("Sélection inconnue : {$name}"),
         };
     }
 
@@ -210,18 +261,77 @@ class CatalogueSyncService
     {
         $odds = [];
         foreach ($source->selections as $selection) {
-            $normalized = mb_strtolower(trim($selection->name));
-            $key = match (true) {
-                $normalized === mb_strtolower(trim($data->homeTeam)) => 'home',
-                $normalized === mb_strtolower(trim($data->awayTeam)) => 'away',
-                in_array($normalized, self::DRAW_NAMES, true) => 'draw',
-                default => throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}"),
-            };
+            $key = $this->outcome($data, $selection->name);
             $odds[$key] = ['name' => $key === 'draw' ? 'Match nul' : $selection->name, 'odds' => $selection->odds];
         }
 
         if (! isset($odds['home'], $odds['away'])) {
             throw new \InvalidArgumentException('Marché 1X2 incomplet (équipe à domicile ou à l\'extérieur absente).');
+        }
+
+        return $odds;
+    }
+
+    /**
+     * Double chance : chaque sélection couvre deux issues, nommées « Arsenal/Draw », « Arsenal or Chelsea »…
+     * Au moins deux des trois paires (1X, 12, X2), sans doublon.
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function doubleChanceSelections(EventData $data, MarketData $source): array
+    {
+        $order = ['home' => 0, 'draw' => 1, 'away' => 2];
+        $names = [
+            'home_draw' => "{$data->homeTeam} ou nul",
+            'home_away' => "{$data->homeTeam} ou {$data->awayTeam}",
+            'draw_away' => "Nul ou {$data->awayTeam}",
+        ];
+
+        $odds = [];
+        foreach ($source->selections as $selection) {
+            $parts = preg_split('/\s*(?:\/|\s(?:or|ou)\s)\s*/iu', trim($selection->name)) ?: [];
+            if (count($parts) !== 2) {
+                throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+            }
+
+            $pair = array_map(fn ($part) => $this->outcome($data, $part), $parts);
+            usort($pair, fn ($a, $b) => $order[$a] <=> $order[$b]);
+            $key = self::DOUBLE_CHANCE_KEYS[implode('+', $pair)]
+                ?? throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+
+            if (isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection en double : {$selection->name}");
+            }
+            $odds[$key] = ['name' => $names[$key], 'odds' => $selection->odds];
+        }
+
+        if (count($odds) < 2) {
+            throw new \InvalidArgumentException('Marché double chance incomplet.');
+        }
+
+        return $odds;
+    }
+
+    /**
+     * Les deux équipes marquent : exactement un « Oui » et un « Non ».
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function bttsSelections(MarketData $source): array
+    {
+        $odds = [];
+        foreach ($source->selections as $selection) {
+            $key = self::BTTS_NAMES[mb_strtolower(trim($selection->name))]
+                ?? throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+
+            if (isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection en double : {$selection->name}");
+            }
+            $odds[$key] = ['name' => $key === 'yes' ? 'Oui' : 'Non', 'odds' => $selection->odds];
+        }
+
+        if (! isset($odds['yes'], $odds['no'])) {
+            throw new \InvalidArgumentException('Marché btts incomplet (oui ou non absent).');
         }
 
         return $odds;

@@ -43,8 +43,8 @@ class SportsDataTest extends TestCase
         $this->assertCount(2, $events);
         $this->assertTrue($events[0]->startsAt->isFuture());
         $this->assertSame(['2.10', '3.40', '3.25'], array_map(fn ($s) => $s->odds, $events[0]->markets[0]->selections));
-        $this->assertSame('totals', $events[0]->markets[1]->key);
-        $this->assertSame([['Over', '1.80', '2.5'], ['Under', '2.00', '2.5']], array_map(fn ($s) => [$s->name, $s->odds, $s->point], $events[0]->markets[1]->selections));
+        $this->assertSame(['h2h', 'double_chance', 'totals', 'btts'], array_map(fn ($m) => $m->key, $events[0]->markets));
+        $this->assertSame([['Over', '1.80', '2.5'], ['Under', '2.00', '2.5']], array_map(fn ($s) => [$s->name, $s->odds, $s->point], $events[0]->markets[2]->selections));
         $this->assertSame(['h2h'], array_map(fn ($m) => $m->key, $fake->events('basketball_nba')[0]->markets));
         $this->assertSame([], $fake->events('cricket_inconnu'));
         $this->assertNull($fake->quota());

@@ -25,7 +25,13 @@ class CatalogueController extends Controller
             ->groupBy('competition_id')
             ->pluck('events_count', 'competition_id');
 
-        $competitions = Competition::with('sport')->whereIn('id', $counts->keys())->orderBy('name')->get();
+        // Top compétitions d'abord (config sports_data.featured_competitions), puis les autres par nom.
+        $featured = array_flip((array) config('sports_data.featured_competitions', []));
+        $competitions = Competition::with('sport')->whereIn('id', $counts->keys())->get()
+            ->sortBy([
+                fn ($a, $b) => ($featured[$a->external_key] ?? PHP_INT_MAX) <=> ($featured[$b->external_key] ?? PHP_INT_MAX),
+                fn ($a, $b) => strnatcasecmp($a->name, $b->name),
+            ])->values();
 
         $sports = $competitions->groupBy('sport_id')->map(function ($items) use ($counts) {
             /** @var Sport $sport */
@@ -66,16 +72,21 @@ class CatalogueController extends Controller
         return response()->json(['data' => $competitions]);
     }
 
-    /** Matchs à venir, triés par heure de début, avec leur marché principal (1X2). */
+    /**
+     * Matchs à venir, triés par heure de début, avec un seul marché affiché : le 1X2 par défaut, ou celui demandé
+     * (?market=double_chance|totals|btts). Un match qui n'a pas ce marché est listé sans cotes (markets vide).
+     */
     public function events(Request $request): AnonymousResourceCollection
     {
         $data = $request->validate([
             'sport' => ['nullable', 'string', 'max:50'],
             'competition' => ['nullable', 'integer'],
             'date' => ['nullable', 'date_format:Y-m-d'],
+            'market' => ['nullable', 'in:h2h,double_chance,totals,btts'],
         ]);
 
-        // Un match dont seul le plus/moins est affichable n'a rien à montrer en liste (1X2 uniquement).
+        // Les matchs listés sont ceux qui ont un 1X2 affichable, quel que soit le marché affiché :
+        // la liste et les compteurs de GET /sports restent identiques d'un marché à l'autre.
         $query = $this->catalogue->visibleEvents('h2h')
             ->when($data['sport'] ?? null, fn ($q, $slug) => $q->whereHas('competition.sport', fn ($s) => $s->where('slug', $slug)))
             ->when($data['competition'] ?? null, fn ($q, $id) => $q->where('competition_id', $id))
@@ -83,7 +94,7 @@ class CatalogueController extends Controller
             ->orderBy('starts_at')
             ->orderBy('id');
 
-        $events = $this->catalogue->withDisplayRelations($query, 'h2h')
+        $events = $this->catalogue->withDisplayRelations($query, $data['market'] ?? 'h2h')
             ->paginate($this->perPage($request))
             ->withQueryString();
 

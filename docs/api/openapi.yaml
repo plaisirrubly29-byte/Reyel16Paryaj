@@ -263,7 +263,7 @@ paths:
   /events:
     get:
       tags: [Catalogue]
-      summary: Matchs à venir avec leur marché principal (1X2), triés par heure de début
+      summary: Matchs à venir avec un marché affiché (1X2 par défaut), triés par heure de début
       description: |
         Public. Un match n'apparaît que s'il est programmé, pas encore commencé et qu'un marché est ouvert
         avec une cote assez récente (SPORTS_DATA_MAX_ODDS_AGE). Cotes en chaînes décimales.
@@ -271,6 +271,10 @@ paths:
         - { name: sport, in: query, schema: { type: string, example: soccer } }
         - { name: competition, in: query, schema: { type: integer } }
         - { name: date, in: query, schema: { type: string, format: date } }
+        - name: market
+          in: query
+          description: Marché affiché dans la liste. Un match qui ne le propose pas est listé avec `markets` vide.
+          schema: { type: string, enum: [h2h, double_chance, totals, btts], default: h2h }
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
       responses:
@@ -437,7 +441,7 @@ paths:
       description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: search, in: query, description: "Email, nom ou identifiant", schema: { type: string } }
+        - { name: search, in: query, description: "Email, nom, téléphone ou identifiant", schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
         - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
         - $ref: "#/components/parameters/Page"
@@ -584,7 +588,7 @@ components:
     sessionCookie:
       type: apiKey
       in: cookie
-      name: reyel-16-payaj-session
+      name: reyel-16-paryaj-session
       description: |
         Mode SPA de Sanctum : appeler `GET /sanctum/csrf-cookie` (hors /api/v1), puis envoyer le cookie
         de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
@@ -605,7 +609,8 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        email: { type: string }
+        phone: { type: string, example: "34123456" }
+        email: { type: [string, "null"] }
         status: { type: string, enum: [active, suspended, excluded, closed] }
         status_changed_at: { type: [string, "null"], format: date-time }
         is_admin: { type: boolean }
@@ -716,7 +721,7 @@ components:
             type: object
             properties:
               id: { type: string }
-              key: { type: string, example: h2h }
+              key: { type: string, enum: [h2h, double_chance, totals, btts] }
               name: { type: string, example: Résultat du match (1X2) }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
@@ -726,8 +731,8 @@ components:
                   type: object
                   properties:
                     id: { type: string }
-                    key: { type: string, enum: [home, draw, away] }
-                    label: { type: string, enum: ["1", "X", "2"] }
+                    key: { type: string, enum: [home, draw, away, home_draw, home_away, draw_away, over, under, yes, no] }
+                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
     Money:

@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Marché du catalogue : 1X2 (h2h) ou plus/moins (totals, avec sa ligne, ex. "2.5").
+ * Marché du catalogue : 1X2 (h2h), double chance, plus/moins (totals, avec sa ligne, ex. "2.5") ou les deux équipes marquent (btts).
  * L'événement (compétition et sport chargés) est rattaché par EventResource pour le libellé.
  *
  * @mixin Market
@@ -35,8 +35,13 @@ class MarketResource extends JsonResource
                     'home' => '1',
                     'draw' => 'X',
                     'away' => '2',
+                    'home_draw' => '1X',
+                    'home_away' => '12',
+                    'draw_away' => 'X2',
                     'over' => "+{$this->line}",
                     'under' => "-{$this->line}",
+                    'yes' => 'Oui',
+                    'no' => 'Non',
                     default => $s->key,
                 },
                 'name' => $s->name,
@@ -50,6 +55,8 @@ class MarketResource extends JsonResource
     {
         return match ($this->key) {
             'h2h' => 'Résultat du match (1X2)',
+            'double_chance' => 'Double chance',
+            'btts' => 'Les deux équipes marquent',
             'totals' => $this->event?->competition?->sport?->slug === 'soccer' ? 'Nombre de buts' : 'Total de points',
             default => $this->key,
         };
