@@ -223,18 +223,78 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /sports:
-    get: { tags: [Catalogue], summary: Liste des sports, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Sports ayant des matchs ouverts, avec leurs compétitions
+      description: Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        slug: { type: string, example: soccer }
+                        name: { type: string, example: Football }
+                        events_count: { type: integer }
+                        competitions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string }
+                              name: { type: string, example: EPL }
+                              country: { type: [string, "null"] }
+                              events_count: { type: integer }
   /competitions:
-    get: { tags: [Catalogue], summary: Liste des compétitions, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Compétitions ayant des matchs ouverts
+      parameters:
+        - { name: sport, in: query, schema: { type: string, example: soccer } }
+      responses:
+        "200": { description: OK }
   /events:
-    get: { tags: [Catalogue], summary: Événements ouverts, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Matchs à venir avec leur marché principal (1X2), triés par heure de début
+      description: |
+        Public. Un match n'apparaît que s'il est programmé, pas encore commencé et qu'un marché est ouvert
+        avec une cote assez récente (SPORTS_DATA_MAX_ODDS_AGE). Cotes en chaînes décimales.
+      parameters:
+        - { name: sport, in: query, schema: { type: string, example: soccer } }
+        - { name: competition, in: query, schema: { type: integer } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/CatalogueEvent" } }
+                  links: { type: object }
+                  meta: { type: object }
+        "422": { description: Paramètres invalides }
   /events/{id}/markets:
     get:
       tags: [Catalogue]
-      summary: Marchés et cotes disponibles d'un événement
-      x-task: P3-05
+      summary: Détail d'un match et de tous ses marchés pariables
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
+        "404": { description: Match inconnu ou plus proposé }
 
   /bets:
     post:
@@ -640,6 +700,36 @@ components:
         from: { type: [integer, "null"] }
         to: { type: [integer, "null"] }
         path: { type: string }
+    CatalogueEvent:
+      type: object
+      properties:
+        id: { type: string }
+        sport: { type: object, properties: { slug: { type: string }, name: { type: string } } }
+        competition: { type: object, properties: { id: { type: string }, name: { type: string }, country: { type: [string, "null"] } } }
+        home_team: { type: string }
+        away_team: { type: string }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled] }
+        markets:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              key: { type: string, example: h2h }
+              name: { type: string, example: Résultat du match (1X2) }
+              odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
+              odds_updated_at: { type: string, format: date-time }
+              selections:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    key: { type: string, enum: [home, draw, away] }
+                    label: { type: string, enum: ["1", "X", "2"] }
+                    name: { type: string, example: Arsenal }
+                    odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
