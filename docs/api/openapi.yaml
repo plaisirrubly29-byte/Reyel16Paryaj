@@ -52,7 +52,7 @@ paths:
               properties:
                 name: { type: string, maxLength: 100 }
                 phone: { type: string, description: "Numéro haïtien local, 8 chiffres (espaces/tirets et préfixe +509/509 acceptés)", example: "+509 3412-3456" }
-                email: { type: string, format: email, nullable: true, description: "Optionnel." }
+                email: { type: [string, "null"], format: email, description: "Optionnel." }
                 password: { type: string, minLength: 10, description: "Au moins une lettre et un chiffre" }
                 password_confirmation: { type: string }
                 birth_date: { type: string, format: date, example: "1998-05-21" }
