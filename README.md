@@ -29,18 +29,30 @@ alimentés par une API de données sportives (matchs, cotes, résultats).
 
 ### Option A — Docker (recommandé)
 
-Prérequis : Docker Desktop.
+Prérequis : Docker Desktop (Windows : backend WSL 2), ports 5432, 6379, 8000 et 5173 libres.
 
 ```bash
-cp backend/.env.example backend/.env
 docker compose up -d --build
-docker compose exec backend composer install
-docker compose exec backend php artisan key:generate
-docker compose exec backend php artisan migrate
 ```
 
+Au démarrage, le service `backend` ([`backend/docker/dev-entrypoint.sh`](backend/docker/dev-entrypoint.sh))
+crée `backend/.env` depuis `.env.example`, lance `composer install`, génère `APP_KEY` et applique les migrations
+si nécessaire. Le premier lancement prend quelques minutes ; suivre avec `docker compose logs -f backend`.
+La `queue` démarre une fois le backend prêt (`docker compose ps` → `healthy`).
+
 - API : http://localhost:8000/api/v1/health
-- Frontend : http://localhost:5173 — admin : http://localhost:5173/admin
+- Frontend : http://localhost:5173 — la page d'accueil doit afficher « API : ok (v1) »
+- Admin : http://localhost:5173/admin
+
+Dépannage :
+
+| Symptôme | Solution |
+|---|---|
+| Port déjà utilisé (WAMP/XAMPP : PostgreSQL, Redis…) | Arrêter le service local ou changer le port gauche dans `docker-compose.yml` |
+| Frontend « API : injoignable » | `FRONTEND_URL` dans `backend/.env` doit correspondre à l'URL du frontend (CORS) |
+| Modification de `backend/.env` non prise en compte | `docker compose restart backend queue` |
+| Requêtes lentes sous Windows | Cloner le dépôt dans le système de fichiers WSL (`\\wsl$\...`) plutôt que sur `C:\` |
+| Repartir de zéro (base comprise) | `docker compose down -v && docker compose up -d --build` |
 
 ### Option B — Installation locale
 
