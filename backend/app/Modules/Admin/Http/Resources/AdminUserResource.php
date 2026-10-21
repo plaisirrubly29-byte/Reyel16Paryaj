@@ -22,6 +22,7 @@ class AdminUserResource extends JsonResource
         return [
             'id' => (string) $this->id,
             'name' => $this->name,
+            'phone' => $this->phone,
             'email' => $this->email,
             'status' => $this->status->value,
             'status_changed_at' => $this->status_changed_at?->toIso8601String(),
@@ -35,7 +36,6 @@ class AdminUserResource extends JsonResource
                     'first_name' => $this->profile?->first_name,
                     'last_name' => $this->profile?->last_name,
                     'birth_date' => $this->profile?->birth_date?->toDateString(),
-                    'phone' => $this->profile?->phone,
                     'country' => $this->profile?->country,
                 ],
             ]),

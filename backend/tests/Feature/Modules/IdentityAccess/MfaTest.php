@@ -30,7 +30,7 @@ class MfaTest extends TestCase
 
     private function login(User $user): void
     {
-        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => 'motdepasse123'])->assertOk();
+        $this->postJson('/api/v1/auth/login', ['phone' => $user->phone, 'password' => 'motdepasse123'])->assertOk();
     }
 
     private function currentCode(User $user): string

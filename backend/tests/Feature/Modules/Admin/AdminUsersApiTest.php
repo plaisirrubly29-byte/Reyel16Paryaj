@@ -23,8 +23,8 @@ class AdminUsersApiTest extends TestCase
         parent::setUp();
 
         $this->seed(PermissionSeeder::class);
-        $this->player = User::factory()->create(['name' => 'Ana Joueuse', 'email' => 'ana@example.com']);
-        $this->player->profile()->create(['first_name' => 'Ana', 'birth_date' => '1990-04-02', 'phone' => '+50900000000']);
+        $this->player = User::factory()->create(['name' => 'Ana Joueuse', 'email' => 'ana.joueuse@example.com', 'phone' => '34123456']);
+        $this->player->profile()->create(['first_name' => 'Ana', 'birth_date' => '1990-04-02']);
     }
 
     private function admin(RoleSlug $role): User
@@ -45,7 +45,8 @@ class AdminUsersApiTest extends TestCase
         $this->actingAsVerifiedAdmin($this->admin(RoleSlug::Support))
             ->getJson("/api/v1/admin/users/{$this->player->id}")
             ->assertOk()
-            ->assertJsonPath('data.email', 'ana@example.com')
+            ->assertJsonPath('data.email', 'ana.joueuse@example.com')
+            ->assertJsonPath('data.phone', '34123456')
             ->assertJsonMissingPath('data.profile')
             ->assertJsonMissingPath('data.roles');
 
@@ -60,7 +61,7 @@ class AdminUsersApiTest extends TestCase
             ->getJson("/api/v1/admin/users/{$this->player->id}")
             ->assertOk()
             ->assertJsonPath('data.profile.birth_date', '1990-04-02')
-            ->assertJsonPath('data.profile.phone', '+50900000000');
+            ->assertJsonPath('data.phone', '34123456');
 
         $log = AuditLog::where('action', AuditAction::UserPersonalDataViewed)->sole();
         $this->assertSame($compliance->id, $log->actor_id);
@@ -80,13 +81,18 @@ class AdminUsersApiTest extends TestCase
         User::factory()->withStatus(AccountStatus::Suspended)->create(['email' => 'suspendu@example.com']);
         $support = $this->admin(RoleSlug::Support);
 
-        $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?search=ANA@')
+        $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?search=ANA.JOUEUSE@')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', (string) $this->player->id);
 
-        $this->actingAsVerifiedAdmin($support)->getJson("/api/v1/admin/users?search={$this->player->id}")
+        $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?search='.urlencode('+509 3412-3456'))
+            ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', (string) $this->player->id);
+
+        // Un email généré peut contenir le même chiffre : on vérifie la présence, pas le rang.
+        $byId = $this->actingAsVerifiedAdmin($support)->getJson("/api/v1/admin/users?search={$this->player->id}");
+        $this->assertContains((string) $this->player->id, $byId->json('data.*.id'));
 
         $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?status=suspended')
             ->assertJsonCount(1, 'data')
