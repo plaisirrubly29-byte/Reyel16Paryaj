@@ -36,6 +36,7 @@ export function LoginPage() {
       <form className="stack" onSubmit={submit} noValidate>
         <TextField
           label="Numéro de téléphone"
+          labelHidden
           type="tel"
           inputMode="numeric"
           name="phone"
@@ -50,10 +51,12 @@ export function LoginPage() {
         />
         <TextField
           label="Mot de passe"
+          labelHidden
           type="password"
           name="password"
           autoComplete="current-password"
           icon="lock"
+          placeholder="Votre mot de passe"
           required
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}

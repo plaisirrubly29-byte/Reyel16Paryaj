@@ -1,23 +1,25 @@
+import { BRAND_LOGO_URL } from '../../../app/layouts/BrandLogo';
 import { BettingBoard } from '../components/BettingBoard';
 import { TopMatches } from '../components/TopMatches';
 
-/** Accueil : top matchs, tous les matchs (paginés) et coupon, puis les informations. */
+/** Accueil : bandeau (logo et devise), top matchs, puis matchs à venir ou en direct, avec le coupon à droite. */
 export function HomePage() {
   return (
-    <div className="stack">
-      <h1 className="sr-only">REYEL 16 PAYAJ — paris sportifs</h1>
+    <>
+      <h1 className="sr-only">REYEL 16 PARYAJ — paris sportifs</h1>
 
       <BettingBoard title="Tous les matchs" perPage={50} paginate>
+        <section className="hero" aria-label="Bienvenue">
+          <div className="hero-text">
+            <p className="hero-kicker">Football · Basketball · Baseball</p>
+            <p className="hero-title">Parye sou espò ou renmen</p>
+            <p className="hero-motto"><span>Pi fasil</span><span>Pi rapid</span><span>Pi sekirite</span></p>
+            <p className="hero-sub">Cotes mises à jour toute la journée.</p>
+          </div>
+          <img className="hero-logo" src={BRAND_LOGO_URL} alt="" width={151} height={190} />
+        </section>
         <TopMatches />
       </BettingBoard>
-
-      <section className="responsible" aria-labelledby="responsible-title">
-        <span className="responsible-badge" aria-hidden="true">18+</span>
-        <h2 id="responsible-title">Jouez de manière responsable</h2>
-        <p className="muted small">
-          Le jeu doit rester un divertissement. Interdit aux moins de 18 ans. Fixez-vous des limites et faites une pause si besoin.
-        </p>
-      </section>
-    </div>
+    </>
   );
 }

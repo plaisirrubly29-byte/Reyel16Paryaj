@@ -32,6 +32,20 @@ const MATCH = {
         { id: 's5', key: 'under', label: '-2.5', name: 'Moins de 2.5', odds: '2.00' },
       ],
     },
+    {
+      id: 'm3', key: 'player_goalscorer', name: 'Buteur', line: null, odds_version: 1, odds_updated_at: inHours(0), bettable: true,
+      selections: [
+        { id: 's6', key: 'player', label: 'Oui', name: 'Kylian Mbappé marque', odds: '2.20' },
+        { id: 's7', key: 'player', label: 'Oui', name: 'Ousmane Dembélé marque', odds: '2.75' },
+      ],
+    },
+    {
+      id: 'm4', key: 'exact_score', name: 'Score exact', line: null, odds_version: 1, odds_updated_at: inHours(0), bettable: true,
+      selections: [
+        { id: 's8', key: 'score', label: '2-1', name: 'Arsenal 2-1 Chelsea', odds: '8.50' },
+        { id: 's9', key: 'score', label: '1-1', name: 'Arsenal 1-1 Chelsea', odds: '6.25' },
+      ],
+    },
   ],
 };
 
@@ -49,7 +63,7 @@ describe("page d'un match", () => {
     renderApp('/events/11');
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/Arsenal.*Chelsea/);
-    expect(screen.getByText(/Angleterre · Premier League/)).toBeInTheDocument();
+    expect(screen.getByText(/Angleterre - Premier League/)).toBeInTheDocument();
 
     const result = screen.getByRole('region', { name: 'Résultat du match (1X2)' });
     expect(within(result).getAllByRole('button')).toHaveLength(3);
@@ -71,10 +85,50 @@ describe("page d'un match", () => {
       expect.objectContaining({ selectionId: 's4', marketId: 'm2', oddsVersion: 1, odds: '1.80', market: 'Nombre de buts' }),
     ]);
 
-    // Un seul choix par match : le 1X2 remplace le pari sur les buts.
+    // Un marché différent du même match peut être ajouté au coupon.
     await userEvent.click(screen.getByRole('button', { name: 'Arsenal à 2.10' }));
+    expect(within(slip).getByLabelText('2 sélections')).toBeInTheDocument();
+    expect(within(slip).getByText('1 · Arsenal')).toBeInTheDocument();
+    expect(within(slip).getByText('+2.5 · Plus de 2.5')).toBeInTheDocument();
+  });
+
+  it('permet de miser sur un match en direct lorsque le marché est ouvert', async () => {
+    api({ ...MATCH, starts_at: new Date(Date.now() - 30 * 60_000).toISOString(), status: 'live' });
+    renderApp('/events/11');
+
+    expect(await screen.findByText('EN DIRECT')).toBeInTheDocument();
+    const odds = screen.getByRole('button', { name: 'Arsenal à 2.10' });
+    expect(odds).toBeEnabled();
+    await userEvent.click(odds);
+
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
     expect(within(slip).getByLabelText('1 sélection')).toBeInTheDocument();
     expect(within(slip).getByText('1 · Arsenal')).toBeInTheDocument();
+  });
+
+  it('filtre les marchés par joueur et score exact, puis ajoute la sélection au coupon', async () => {
+    api();
+    renderApp('/events/11');
+
+    await screen.findByRole('heading', { level: 1 });
+    await userEvent.click(screen.getByRole('button', { name: 'Joueurs' }));
+    expect(screen.getByRole('region', { name: 'Buteur' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Score exact' })).toBeNull();
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Rechercher un marché ou un joueur' }), 'Mbappé');
+    expect(screen.getByRole('button', { name: 'Kylian Mbappé marque à 2.20' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ousmane Dembélé marque à 2.75' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Kylian Mbappé marque à 2.20' }));
+
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Rechercher un marché ou un joueur' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Score exact' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Arsenal 2-1 Chelsea à 8.50' }));
+
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
+    expect(within(slip).getByLabelText('2 sélections')).toBeInTheDocument();
+    expect(within(slip).getByText('2-1 · Arsenal 2-1 Chelsea')).toBeInTheDocument();
+    expect(within(slip).getByText(/Score exact ·/)).toBeInTheDocument();
+    expect(within(slip).getByText('Oui · Kylian Mbappé marque')).toBeInTheDocument();
   });
 
   it('bloque un marché dont la cote est trop ancienne', async () => {

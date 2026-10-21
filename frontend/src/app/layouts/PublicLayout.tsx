@@ -1,10 +1,11 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMe } from '../../features/auth/api/auth';
 import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlipContext';
 import { SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
+import { BrandLogo } from './BrandLogo';
 import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
@@ -17,10 +18,30 @@ export function PublicLayout() {
 
 function Brand() {
   return (
-    <NavLink to="/" className="brand" end aria-label="REYEL 16 PAYAJ — accueil">
-      <span className="brand-mark" aria-hidden="true">R16</span>
-      <span className="brand-name">Reyel 16 <span>Payaj</span></span>
-    </NavLink>
+    <Link to="/" className="brand" aria-label="REYEL 16 PARYAJ — accueil">
+      <BrandLogo />
+    </Link>
+  );
+}
+
+/** Recherche d'équipe ou de compétition : ouvre la liste des matchs filtrée (?q=). */
+function HeaderSearch() {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const [value, setValue] = useState(params.get('q') ?? '');
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const q = value.trim();
+    navigate(q ? `/sports?q=${encodeURIComponent(q)}` : '/sports');
+  }
+
+  return (
+    <form className="header-search" role="search" onSubmit={submit}>
+      <label className="sr-only" htmlFor="header-search">Rechercher une équipe ou une compétition</label>
+      <button type="submit" className="header-search-btn" aria-label="Lancer la recherche"><Icon name="search" size={18} /></button>
+      <input id="header-search" type="search" placeholder="Équipe, championnat…" value={value} onChange={(e) => setValue(e.target.value)} />
+    </form>
   );
 }
 
@@ -29,6 +50,9 @@ function PublicShell() {
   const slip = useBetSlip();
   const { pathname } = useLocation();
   const mobile = useMediaQuery(SLIP_COLLAPSE_QUERY);
+  const [params] = useSearchParams();
+  const liveActive = params.get('tab') === 'live' && (pathname === '/' || pathname === '/sports');
+  const sportsActive = !liveActive && (pathname === '/' || pathname.startsWith('/sports') || pathname.startsWith('/events'));
 
   // Le panneau du coupon (mobile) se referme quand on change de page.
   useEffect(() => { slip.setPanelOpen(false); }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -37,32 +61,45 @@ function PublicShell() {
 
   return (
     <div className="shell">
+      {/* En-tête unique et collant : logo, navigation, recherche, compte. Sous 960 px : logo et boutons (navigation en bas). */}
       <header className="site-header">
         <div className="site-header-inner">
           <Brand />
+          <span className="demo-pill" title="Version de démonstration — fonds fictifs uniquement">
+            Démo<span className="sr-only"> : version de démonstration, fonds fictifs uniquement</span>
+          </span>
+
           <nav className="main-nav" aria-label="Navigation principale">
-            <NavLink to="/" end>Accueil</NavLink>
-            <NavLink to="/sports">Sports</NavLink>
-            {user && <NavLink to="/bets">Mes tickets</NavLink>}
-            {user && <NavLink to="/wallet">Portefeuille</NavLink>}
-            {user?.is_admin && <NavLink to="/admin">Administration</NavLink>}
+            <Link to="/" className={sportsActive ? 'active' : undefined} aria-current={sportsActive ? 'page' : undefined}>
+              <Icon name="sports" size={20} />Sports
+            </Link>
+            <Link to="/?tab=live" className={liveActive ? 'active' : undefined} aria-current={liveActive ? 'page' : undefined}>
+              <span className="nav-live-dot" aria-hidden="true" />Live
+            </Link>
+            {user && <NavLink to="/bets"><Icon name="tickets" size={20} />Mes paris</NavLink>}
+            {user?.is_admin && <NavLink to="/admin"><Icon name="shield" size={20} />Administration</NavLink>}
           </nav>
+
+          <HeaderSearch />
+
           <div className="header-actions">
             {user ? (
-              <NavLink to="/account" className="header-user" aria-label={`Mon compte (${user.name})`}>
-                <span className="avatar" aria-hidden="true">{user.name.charAt(0).toUpperCase()}</span>
-                <span className="user-name">{user.name}</span>
-              </NavLink>
+              <>
+                <NavLink to="/wallet" className="header-wallet"><Icon name="wallet" size={18} />Portefeuille</NavLink>
+                <NavLink to="/account" className="header-user" aria-label={`Mon compte (${user.name})`}>
+                  <span className="avatar" aria-hidden="true">{user.name.charAt(0).toUpperCase()}</span>
+                  <span className="user-name">{user.name}</span>
+                </NavLink>
+              </>
             ) : (
               <>
-                <NavLink to="/login" className="btn btn-secondary btn-sm">Connexion</NavLink>
-                <NavLink to="/register" className="btn btn-primary btn-sm">Inscription</NavLink>
+                <NavLink to="/login" className="btn btn-sm header-login-btn">Connexion</NavLink>
+                <NavLink to="/register" className="btn btn-sm btn-green header-register">S&apos;inscrire</NavLink>
               </>
             )}
           </div>
         </div>
       </header>
-      <div className="demo-banner" role="note">Version de démonstration — fonds fictifs uniquement.</div>
 
       <main className="content content-wide">
         <Outlet />
@@ -80,11 +117,11 @@ function PublicShell() {
           aria-controls="betslip"
           onClick={() => slip.setPanelOpen(!slip.panelOpen)}
         >
-          <span className="tab-icon"><Icon name="coupon" /></span>
-          Coupon
+          <span className="tab-icon"><Icon name="cart" /></span>
+          Panier
           {count > 0 && <span className="tab-badge" aria-label={`${count} sélection${count > 1 ? 's' : ''}`}>{count}</span>}
         </button>
-        <NavLink to="/bets"><span className="tab-icon"><Icon name="tickets" /></span>Tickets</NavLink>
+        <NavLink to="/bets"><span className="tab-icon"><Icon name="tickets" /></span>Mes paris</NavLink>
         <NavLink to={user ? '/account' : '/login'}><span className="tab-icon"><Icon name="user" /></span>{user ? 'Compte' : 'Connexion'}</NavLink>
       </nav>
       )}

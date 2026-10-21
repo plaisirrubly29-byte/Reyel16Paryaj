@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { BrandLogo } from '../../../app/layouts/BrandLogo';
 import { Icon, type IconName } from '../../../shared/components/Icon';
 
 const HIGHLIGHTS: { icon: IconName; text: string }[] = [
@@ -26,8 +27,7 @@ export function AuthShell({ title, subtitle, icon, children }: Props) {
       <div className="auth-shell">
         <aside className="auth-visual" aria-hidden="true">
           <div className="auth-visual-brand">
-            <span className="brand-mark">R16</span>
-            <span className="auth-visual-brand-name">Reyel 16 <span>Payaj</span></span>
+            <BrandLogo />
           </div>
           <div>
             <h2 className="auth-visual-heading">Pariez en toute confiance</h2>

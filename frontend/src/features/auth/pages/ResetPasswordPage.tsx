@@ -51,10 +51,12 @@ export function ResetPasswordPage() {
           <form className="stack" onSubmit={submit} noValidate>
             <TextField
               label="Nouveau mot de passe"
+              labelHidden
               type="password"
               name="password"
               autoComplete="new-password"
               icon="lock"
+              placeholder="Nouveau mot de passe"
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -63,10 +65,12 @@ export function ResetPasswordPage() {
             />
             <TextField
               label="Confirmer le mot de passe"
+              labelHidden
               type="password"
               name="password_confirmation"
               autoComplete="new-password"
               icon="lock"
+              placeholder="Confirmer le mot de passe"
               required
               value={form.password_confirmation}
               onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })}

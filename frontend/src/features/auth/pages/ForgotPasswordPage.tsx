@@ -34,10 +34,12 @@ export function ForgotPasswordPage() {
           <form className="stack" onSubmit={submit} noValidate>
             <TextField
               label="Email"
+              labelHidden
               type="email"
               name="email"
               autoComplete="email"
               icon="mail"
+              placeholder="Votre email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
