@@ -5,12 +5,14 @@ import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
 import { safeRedirect, useLogin } from '../api/auth';
+import { AuthShell } from '../components/AuthShell';
+import { digitsOnly } from '../phone';
 
 export function LoginPage() {
   const login = useLogin();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ phone: '', password: '' });
 
   const error = login.error instanceof ApiError ? login.error : null;
   const fieldErrors = error?.fieldErrors ?? {};
@@ -27,28 +29,34 @@ export function LoginPage() {
   }
 
   return (
-    <section className="auth-card stack">
-      <h1>Connexion</h1>
-
+    <AuthShell title="Connexion" subtitle="Accédez à votre compte pour suivre vos tickets." icon="lock">
       {/* Identifiants invalides : message général (le serveur ne dit pas si le compte existe). */}
       {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
       <form className="stack" onSubmit={submit} noValidate>
         <TextField
-          label="Email"
-          type="email"
-          name="email"
-          autoComplete="email"
+          label="Numéro de téléphone"
+          labelHidden
+          type="tel"
+          inputMode="numeric"
+          name="phone"
+          autoComplete="tel-national"
+          prefix="+509"
+          maxLength={8}
+          placeholder="34 12 34 56"
           required
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          error={fieldErrors.email}
+          value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })}
+          error={fieldErrors.phone}
         />
         <TextField
           label="Mot de passe"
+          labelHidden
           type="password"
           name="password"
           autoComplete="current-password"
+          icon="lock"
+          placeholder="Votre mot de passe"
           required
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -57,11 +65,11 @@ export function LoginPage() {
         <Button type="submit" loading={login.isPending} block>Se connecter</Button>
       </form>
 
-      <p className="muted">
+      <p className="auth-foot">
         <Link to="/forgot-password">Mot de passe oublié ?</Link>
-        {' · '}
+        <span className="auth-foot-sep" aria-hidden="true">·</span>
         <Link to="/register">Créer un compte</Link>
       </p>
-    </section>
+    </AuthShell>
   );
 }

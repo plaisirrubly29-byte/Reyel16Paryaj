@@ -1,52 +1,42 @@
-import { useBetSlip } from '../../betting/slip/BetSlipContext';
+import { Link } from 'react-router-dom';
+import { Icon } from '../../../shared/components/Icon';
 import type { CatalogueEvent } from '../api/catalogue';
-import { formatKickoff } from '../format';
+import { formatKickoff, liveLabel } from '../format';
+import { OddsButtons } from './OddsButtons';
 
-/** Ligne de match : heure, équipes et cotes 1 / X / 2 cliquables (ajout au coupon). */
-export function MatchRow({ event }: { event: CatalogueEvent }) {
-  const slip = useBetSlip();
-  const market = event.markets.find((m) => m.key === 'h2h') ?? event.markets[0];
+/**
+ * Ligne d'un match : « Domicile - Extérieur » et la compétition à gauche, l'heure et le jour à droite,
+ * puis les cotes 1 / X / 2 cliquables (ajout au coupon) et le lien vers tous les paris du match.
+ */
+export function MatchRow({ event, marketKey = 'h2h' }: { event: CatalogueEvent; marketKey?: string }) {
   const { day, time } = formatKickoff(event.starts_at);
-  const match = `${event.home_team} – ${event.away_team}`;
+  const live = liveLabel(event.status);
+  const { competition } = event;
 
   return (
-    <li className="match-row">
-      <div className="match-time">
-        <span>{day}</span>
-        <strong>{time}</strong>
+    <li className="match-line">
+      <div className="match-line-head">
+        <div className="match-line-info">
+          <Link to={`/events/${event.id}`} className="match-line-teams" title="Voir tous les paris de ce match">
+            <span className="team-name">{event.home_team}</span>
+            <span className="match-line-sep" aria-hidden="true"> - </span>
+            <span className="sr-only"> contre </span>
+            <span className="team-name">{event.away_team}</span>
+          </Link>
+          <p className="match-line-competition">
+            {competition.country ? `${competition.country} - ` : ''}{competition.name}
+            {live && <span className="live-badge"><Icon name="live" size={12} />{live}</span>}
+          </p>
+        </div>
+        <div className="match-line-time">
+          <strong className={live ? 'live-indicator' : undefined}>{live ? 'En cours' : time}</strong>
+          <span>{day}</span>
+          <Link to={`/events/${event.id}`} className="match-line-more" aria-label={`Voir tous les paris : ${event.home_team} – ${event.away_team}`}>
+            Plus de paris <Icon name="chevron" size={18} />
+          </Link>
+        </div>
       </div>
-      <div className="match-teams">
-        <span>{event.home_team}</span>
-        <span>{event.away_team}</span>
-      </div>
-      <div className="match-odds" role="group" aria-label={`Cotes ${match}`}>
-        {market?.selections.map((s) => {
-          const selected = slip.has(s.id);
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={`odds-btn${selected ? ' selected' : ''}`}
-              aria-pressed={selected}
-              aria-label={`${s.label} ${s.name} à ${s.odds}`}
-              onClick={() => slip.toggle({
-                selectionId: s.id,
-                eventId: event.id,
-                marketId: market.id,
-                oddsVersion: market.odds_version,
-                odds: s.odds,
-                label: s.label,
-                pick: s.name,
-                match,
-                startsAt: event.starts_at,
-              })}
-            >
-              <span className="odds-label">{s.label}</span>
-              <span className="odds-value">{s.odds}</span>
-            </button>
-          );
-        })}
-      </div>
+      <OddsButtons event={event} marketKey={marketKey} />
     </li>
   );
 }

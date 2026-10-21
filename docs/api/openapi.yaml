@@ -48,14 +48,29 @@ paths:
   /competitions:
     get: { tags: [Catalogue], summary: Liste des compétitions, x-task: P3-05, responses: { "200": { description: OK } } }
   /events:
-    get: { tags: [Catalogue], summary: Événements ouverts, x-task: P3-05, responses: { "200": { description: OK } } }
+    get: { tags: [Catalogue], summary: Événements ouverts aux paris, y compris en direct, x-task: P3-05, responses: { "200": { description: OK } } }
   /events/{id}/markets:
     get:
       tags: [Catalogue]
-      summary: Marchés et cotes disponibles d'un événement
+      summary: Tous les marchés et cotes disponibles d'un événement
+      description: |
+        Renvoie tous les marchés ouverts fournis pour cet événement, sans limiter les types
+        (résultat, buts, score exact, joueurs, etc.). Les marchés indisponibles ou périmés
+        ne doivent pas être proposés comme pariables.
       x-task: P3-05
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Match et marchés actuellement disponibles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/EventMarkets"
+        "404": { description: Événement introuvable ou plus proposé }
 
   /bets:
     post:
@@ -113,6 +128,55 @@ components:
       description: UUID unique par intention utilisateur. Une requête rejouée renvoie la même réponse.
       schema: { type: string, format: uuid }
   schemas:
+    EventMarkets:
+      type: object
+      required: [id, sport, competition, home_team, away_team, starts_at, status, markets]
+      properties:
+        id: { type: string }
+        sport:
+          type: object
+          required: [slug, name]
+          properties:
+            slug: { type: string }
+            name: { type: string }
+        competition:
+          type: object
+          required: [id, name, country]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            country: { type: [string, "null"] }
+        home_team: { type: string }
+        away_team: { type: string }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, description: État normalisé de l'événement }
+        markets:
+          type: array
+          items: { $ref: "#/components/schemas/EventMarket" }
+    EventMarket:
+      type: object
+      description: Marché générique; key et name permettent les types proposés par le fournisseur.
+      required: [id, key, name, odds_version, odds_updated_at, bettable, selections]
+      properties:
+        id: { type: string }
+        key: { type: string, example: exact_score }
+        name: { type: string, example: Score exact }
+        line: { type: [string, "null"], example: "2.5" }
+        odds_version: { type: integer }
+        odds_updated_at: { type: string, format: date-time }
+        bettable: { type: boolean }
+        selections:
+          type: array
+          items: { $ref: "#/components/schemas/MarketSelection" }
+    MarketSelection:
+      type: object
+      required: [id, key, label, name, odds]
+      properties:
+        id: { type: string }
+        key: { type: string, example: score }
+        label: { type: string, example: "2-1" }
+        name: { type: string, example: Arsenal 2-1 Chelsea }
+        odds: { type: string, pattern: '^\d+(\.\d+)?$', example: "8.50" }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.

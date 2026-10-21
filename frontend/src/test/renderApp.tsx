@@ -58,12 +58,13 @@ export const guest = { status: 401, body: { error: { code: 'unauthenticated', me
 export const player = {
   id: '1',
   name: 'Ana Joueuse',
-  email: 'ana@example.com',
+  phone: '34123456',
+  email: null as string | null,
   status: 'active',
   roles: [],
   permissions: [] as string[],
   is_admin: false,
   mfa: { enabled: false, verified: false, required: false },
-  profile: { first_name: null, last_name: null, birth_date: '1995-05-21', phone: null, country: 'HT' },
+  profile: { first_name: null, last_name: null, birth_date: '1995-05-21', country: 'HT' },
   created_at: '2026-10-01T12:00:00+00:00',
 };

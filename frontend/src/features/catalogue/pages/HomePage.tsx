@@ -1,64 +1,25 @@
-import { Link } from 'react-router-dom';
-import { useMe } from '../../auth/api/auth';
+import { BRAND_LOGO_URL } from '../../../app/layouts/BrandLogo';
 import { BettingBoard } from '../components/BettingBoard';
+import { TopMatches } from '../components/TopMatches';
 
-const STEPS = [
-  { title: 'Créez votre compte', text: 'Inscription en une minute, réservée aux personnes majeures.' },
-  { title: 'Recevez des fonds fictifs', text: 'La version de démonstration vous crédite un solde virtuel : aucun argent réel.' },
-  { title: 'Choisissez vos matchs', text: 'Cliquez sur les cotes 1, X ou 2 pour composer votre coupon.' },
-  { title: 'Suivez vos tickets', text: 'Résultats et gains sont calculés par la plateforme et visibles dans votre historique.' },
-];
-
-/** Accueil : les matchs et les cotes d'abord (comme les sites de paris), puis les informations. */
+/** Accueil : bandeau (logo et devise), top matchs, puis matchs à venir ou en direct, avec le coupon à droite. */
 export function HomePage() {
-  const { data: user } = useMe();
-
   return (
-    <div className="home">
-      <section className="hero hero-compact">
-        <div>
-          <p className="eyebrow">Paris sportifs</p>
-          <h1>Les matchs du moment, les meilleures cotes.</h1>
-        </div>
-        <div className="hero-actions">
-          {user ? (
-            <Link to="/wallet" className="btn btn-secondary">Mon portefeuille</Link>
-          ) : (
-            <>
-              <Link to="/register" className="btn btn-primary">Créer un compte</Link>
-              <Link to="/login" className="btn btn-secondary">Se connecter</Link>
-            </>
-          )}
-        </div>
-      </section>
+    <>
+      <h1 className="sr-only">REYEL 16 PARYAJ — paris sportifs</h1>
 
-      <section aria-labelledby="matches-title" className="home-section">
-        <h2 id="matches-title">Matchs à venir</h2>
-        <BettingBoard perPage={30} />
-      </section>
-
-      {!user && (
-        <section className="home-section" aria-labelledby="how-title">
-          <h2 id="how-title">Comment ça marche</h2>
-          <ol className="steps-grid">
-            {STEPS.map((s, i) => (
-              <li key={s.title} className="card">
-                <span className="step-number" aria-hidden="true">{i + 1}</span>
-                <h3>{s.title}</h3>
-                <p className="muted">{s.text}</p>
-              </li>
-            ))}
-          </ol>
+      <BettingBoard title="Tous les matchs" perPage={50} paginate>
+        <section className="hero" aria-label="Bienvenue">
+          <div className="hero-text">
+            <p className="hero-kicker">Football · Basketball · Baseball</p>
+            <p className="hero-title">Parye sou espò ou renmen</p>
+            <p className="hero-motto"><span>Pi fasil</span><span>Pi rapid</span><span>Pi sekirite</span></p>
+            <p className="hero-sub">Cotes mises à jour toute la journée.</p>
+          </div>
+          <img className="hero-logo" src={BRAND_LOGO_URL} alt="" width={151} height={190} />
         </section>
-      )}
-
-      <section className="responsible" aria-labelledby="responsible-title">
-        <h2 id="responsible-title">Jouez de manière responsable</h2>
-        <p>
-          Le jeu doit rester un divertissement. Interdit aux moins de 18 ans. Fixez-vous des limites et
-          faites une pause si vous en ressentez le besoin.
-        </p>
-      </section>
-    </div>
+        <TopMatches />
+      </BettingBoard>
+    </>
   );
 }

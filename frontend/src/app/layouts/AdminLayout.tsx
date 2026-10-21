@@ -63,7 +63,7 @@ function AdminShell() {
           <button
             type="button"
             className="link-button"
-            onClick={() => logout.mutate(undefined, { onSettled: () => navigate('/login', { replace: true }) })}
+            onClick={() => { navigate('/login', { replace: true }); logout.mutate(); }}
           >
             Se déconnecter
           </button>

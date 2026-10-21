@@ -15,8 +15,10 @@ export type SlipSelection = {
   oddsVersion: number;
   /** Cote affichée au moment du choix (chaîne décimale). */
   odds: string;
-  label: string; // 1 / X / 2
-  pick: string; // nom de la sélection (équipe ou « Match nul »)
+  label: string; // 1 / X / 2, +2.5 / -2.5
+  pick: string; // nom de la sélection (équipe, « Match nul », « Plus de 2.5 »…)
+  /** Nom du marché (« Résultat du match », « Nombre de buts »…) ; absent dans les anciens coupons. */
+  market?: string;
   match: string; // « Domicile – Extérieur »
   startsAt: string;
 };
@@ -27,26 +29,26 @@ type BetSlip = {
   selections: SlipSelection[];
   has: (selectionId: string) => boolean;
   /**
-   * Ajoute la sélection (un seul choix par match : remplace un autre choix du même match), ou la retire
-   * si elle est déjà choisie. Refusé ('full') si le coupon contient déjà MAX_SELECTIONS matchs.
+   * Ajoute la sélection (un choix par marché et par match), remplace celui du même marché ou la retire.
+   * Refusé ('full') si le coupon contient déjà MAX_SELECTIONS sélections.
    */
   toggle: (selection: SlipSelection) => ToggleResult;
   remove: (selectionId: string) => void;
   clear: () => void;
   /** Vrai juste après un ajout refusé parce que le coupon est complet. */
   full: boolean;
+  /** Panneau du coupon ouvert (mobile : ouvert depuis la barre d'onglets). */
+  panelOpen: boolean;
+  setPanelOpen: (open: boolean) => void;
+  /** Mise saisie en gourdes (texte). Gardée pendant la navigation, mais pas enregistrée dans le navigateur. */
+  stake: string;
+  setStake: (value: string) => void;
 };
 
 const STORAGE_KEY = 'r16p.betslip';
 export const MAX_SELECTIONS = 20;
-const PRUNE_EVERY_MS = 60_000;
 
 const BetSlipContext = createContext<BetSlip | null>(null);
-
-/** Une sélection n'a de sens que tant que le match n'a pas commencé. */
-function upcoming(selections: SlipSelection[], now = Date.now()): SlipSelection[] {
-  return selections.filter((s) => Date.parse(s.startsAt) > now);
-}
 
 function isSelection(value: unknown): value is SlipSelection {
   const s = value as SlipSelection;
@@ -58,7 +60,7 @@ function isSelection(value: unknown): value is SlipSelection {
 function load(): SlipSelection[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
-    return Array.isArray(parsed) ? upcoming(parsed.filter(isSelection)).slice(0, MAX_SELECTIONS) : [];
+    return Array.isArray(parsed) ? parsed.filter(isSelection).slice(0, MAX_SELECTIONS) : [];
   } catch {
     return [];
   }
@@ -67,6 +69,8 @@ function load(): SlipSelection[] {
 export function BetSlipProvider({ children }: { children: ReactNode }) {
   const [selections, setSelections] = useState<SlipSelection[]>(load);
   const [full, setFull] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [stake, setStake] = useState('');
   const { data: user, isSuccess } = useMe();
   const previousUserId = useRef<string | null | undefined>(undefined);
 
@@ -77,17 +81,6 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       // Stockage indisponible (navigation privée) : le coupon reste en mémoire.
     }
   }, [selections]);
-
-  // Retire régulièrement les matchs qui ont commencé (ils ne sont plus pariables).
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setSelections((current) => {
-        const kept = upcoming(current);
-        return kept.length === current.length ? current : kept;
-      });
-    }, PRUNE_EVERY_MS);
-    return () => window.clearInterval(timer);
-  }, []);
 
   // Déconnexion (ou changement de compte) : le coupon d'un joueur ne passe pas au suivant.
   useEffect(() => {
@@ -108,9 +101,12 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     if (current.some((s) => s.selectionId === selection.selectionId)) {
       result = 'removed';
       next = current.filter((s) => s.selectionId !== selection.selectionId);
-    } else if (current.some((s) => s.eventId === selection.eventId)) {
+    } else if (current.some((s) => s.eventId === selection.eventId && s.marketId === selection.marketId)) {
       result = 'replaced';
-      next = [...current.filter((s) => s.eventId !== selection.eventId), selection];
+      next = [
+        ...current.filter((s) => s.eventId !== selection.eventId || s.marketId !== selection.marketId),
+        selection,
+      ];
     } else if (current.length >= MAX_SELECTIONS) {
       result = 'full';
       next = current;
@@ -127,11 +123,15 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
   const value = useMemo<BetSlip>(() => ({
     selections,
     full,
+    panelOpen,
+    setPanelOpen,
+    stake,
+    setStake,
     has: (id) => selections.some((s) => s.selectionId === id),
     toggle,
     remove: (id) => { setFull(false); setSelections((current) => current.filter((s) => s.selectionId !== id)); },
     clear: () => { setFull(false); setSelections([]); },
-  }), [selections, full, toggle]);
+  }), [selections, full, panelOpen, stake, toggle]);
 
   return <BetSlipContext.Provider value={value}>{children}</BetSlipContext.Provider>;
 }
