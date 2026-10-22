@@ -311,14 +311,43 @@ paths:
         "201": { description: Ticket créé (reçu immuable) }
         "409": { description: Cote changée — confirmation requise }
         "422": { description: "Marché fermé, limites, solde insuffisant" }
-    get: { tags: [Bets], summary: Mes tickets, x-task: P4-04, responses: { "200": { description: OK } } }
+    get:
+      tags: [Bets]
+      summary: Mes tickets (plus récents d'abord)
+      description: Tickets du joueur connecté uniquement, avec leurs sélections.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/BetTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "423": { description: Compte suspendu ou fermé }
   /bets/{id}:
     get:
       tags: [Bets]
-      summary: Détail d'un ticket
-      x-task: P4-04
+      summary: Reçu d'un ticket
+      description: Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+      security: [{ sessionCookie: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "404": { description: Introuvable ou non autorisé } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "423": { description: Compte suspendu ou fermé }
 
   /wallet:
     get:
@@ -735,6 +764,46 @@ components:
                     label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
+    BetTicket:
+      type: object
+      description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: R16-7KQ2M9XAPB, description: Référence à communiquer au support }
+        type: { type: string, enum: [single, multiple] }
+        status: { type: string, enum: [pending, won, lost, void], description: "void : annulé et remboursé" }
+        stake: { $ref: "#/components/schemas/Money" }
+        total_odds: { type: string, example: "3.895", description: "Produit des cotes acceptées (chaîne, jamais de float)" }
+        potential_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Gain versé ; null tant que le ticket n'est pas réglé }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+        selections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              event:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string, example: Everton – Chelsea }
+                  starts_at: { type: string, format: date-time }
+              market:
+                type: object
+                properties:
+                  key: { type: string, enum: [h2h, double_chance, totals, btts] }
+                  name: { type: string, example: Nombre de buts }
+                  line: { type: [string, "null"], example: "2.5" }
+              selection:
+                type: object
+                properties:
+                  key: { type: string, example: over }
+                  label: { type: string, example: "+2.5" }
+                  name: { type: string, example: Over }
+              odds: { type: string, example: "1.90", description: Cote acceptée (pas la cote actuelle du catalogue) }
+              status: { type: string, enum: [pending, won, lost, void] }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
