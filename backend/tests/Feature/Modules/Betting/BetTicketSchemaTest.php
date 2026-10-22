@@ -2,18 +2,9 @@
 
 namespace Tests\Feature\Modules\Betting;
 
-use App\Models\User;
 use App\Modules\Betting\Enums\BetSelectionStatus;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Enums\BetType;
-use App\Modules\Betting\Models\BetSelection;
-use App\Modules\Betting\Models\BetTicket;
-use App\Modules\SportsData\Models\Competition;
-use App\Modules\SportsData\Models\Event;
-use App\Modules\SportsData\Models\Market;
-use App\Modules\SportsData\Models\Sport;
-use App\Modules\SportsData\Models\Team;
-use App\Modules\Wallet\Models\Wallet;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -22,69 +13,7 @@ use Tests\TestCase;
 
 class BetTicketSchemaTest extends TestCase
 {
-    use RefreshDatabase;
-
-    private function market(): Market
-    {
-        $sport = Sport::firstOrCreate(['slug' => 'soccer'], ['name' => 'Football']);
-        $competition = Competition::firstOrCreate(
-            ['provider' => 'theodds', 'external_key' => 'soccer_epl'],
-            ['sport_id' => $sport->id, 'name' => 'Premier League'],
-        );
-        $event = Event::create([
-            'competition_id' => $competition->id,
-            'provider' => 'theodds',
-            'external_id' => 'abc',
-            'home_team_id' => Team::firstOrCreate(['sport_id' => $sport->id, 'name' => 'Everton'])->id,
-            'away_team_id' => Team::firstOrCreate(['sport_id' => $sport->id, 'name' => 'Chelsea'])->id,
-            'starts_at' => now()->addDay(),
-        ]);
-
-        $market = $event->markets()->create(['key' => 'h2h', 'odds_version' => 1, 'odds_updated_at' => now()]);
-        $market->selections()->create(['key' => 'home', 'name' => 'Everton', 'odds' => '2.05']);
-        $market->selections()->create(['key' => 'away', 'name' => 'Chelsea', 'odds' => '3.40']);
-
-        return $market;
-    }
-
-    /** @param  array<string, mixed>  $attributes */
-    private function ticket(array $attributes = []): BetTicket
-    {
-        $user = User::factory()->create();
-
-        return BetTicket::create([
-            'user_id' => $user->id,
-            'wallet_id' => Wallet::create(['user_id' => $user->id, 'currency' => 'HTG'])->id,
-            'type' => BetType::Single,
-            'stake_minor' => 100_00,
-            'currency' => 'HTG',
-            'total_odds' => '2.05',
-            'potential_payout_minor' => 205_00,
-            'rules_version' => 'test-1',
-            'rules_snapshot' => ['min_stake_minor' => 10_00, 'odds_change_policy' => 'reject'],
-            ...$attributes,
-        ]);
-    }
-
-    private function select(BetTicket $ticket, Market $market, string $key = 'home'): BetSelection
-    {
-        $selection = $market->selections()->where('key', $key)->firstOrFail();
-
-        return BetSelection::create([
-            'bet_ticket_id' => $ticket->id,
-            'event_id' => $market->event_id,
-            'market_id' => $market->id,
-            'selection_id' => $selection->id,
-            'event_name' => 'Everton – Chelsea',
-            'event_starts_at' => $market->event->starts_at,
-            'market_key' => $market->key,
-            'market_line' => $market->line,
-            'selection_key' => $selection->key,
-            'selection_name' => $selection->name,
-            'odds' => $selection->odds,
-            'odds_version' => $market->odds_version,
-        ]);
-    }
+    use BuildsBetTickets, RefreshDatabase;
 
     public function test_a_readable_reference_is_generated_and_defaults_apply(): void
     {
@@ -98,17 +27,16 @@ class BetTicketSchemaTest extends TestCase
 
     public function test_reference_is_unique_in_database(): void
     {
-        $this->ticket(['reference' => 'R16-AAAAAAAAAA']);
+        $this->ticket(attributes: ['reference' => 'R16-AAAAAAAAAA']);
 
         $this->expectException(QueryException::class);
-        $this->ticket(['reference' => 'R16-AAAAAAAAAA']);
+        $this->ticket(attributes: ['reference' => 'R16-AAAAAAAAAA']);
     }
 
     public function test_amounts_are_integers_and_odds_exact_strings(): void
     {
-        $market = $this->market();
-        $ticket = $this->ticket(['total_odds' => '2.05']);
-        $this->select($ticket, $market);
+        $ticket = $this->ticket(attributes: ['total_odds' => '2.05']);
+        $this->select($ticket, $this->market());
 
         $ticket = $ticket->fresh();
         $this->assertSame(100_00, $ticket->stake()->minor);
@@ -137,9 +65,8 @@ class BetTicketSchemaTest extends TestCase
 
     public function test_settlement_can_still_update_status_and_payout(): void
     {
-        $market = $this->market();
         $ticket = $this->ticket();
-        $selection = $this->select($ticket, $market);
+        $selection = $this->select($ticket, $this->market());
 
         $selection->update(['status' => BetSelectionStatus::Won, 'settled_at' => now()]);
         $ticket->update(['status' => BetTicketStatus::Won, 'payout_minor' => 205_00, 'settled_at' => now()]);
@@ -175,7 +102,7 @@ class BetTicketSchemaTest extends TestCase
     public function test_only_one_selection_per_market_in_a_ticket(): void
     {
         $market = $this->market();
-        $ticket = $this->ticket(['type' => BetType::Multiple]);
+        $ticket = $this->ticket(attributes: ['type' => BetType::Multiple]);
         $this->select($ticket, $market, 'home');
 
         $this->expectException(QueryException::class);
@@ -194,7 +121,7 @@ class BetTicketSchemaTest extends TestCase
         $selection = $selection->fresh();
         $this->assertNull($selection->selection_id);
         $this->assertSame('home', $selection->selection_key);
-        $this->assertSame('Everton', $selection->selection_name);
+        $this->assertSame('Home', $selection->selection_name);
         $this->assertSame('2.050', $selection->odds);
         $this->assertSame(1, $selection->odds_version);
     }
