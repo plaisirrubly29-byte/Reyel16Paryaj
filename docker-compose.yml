@@ -23,11 +23,15 @@ services:
     ports:
       - "6379:6379"
 
+  # Pas d'env_file : Laravel lit backend/.env lui-même (monté). Un env_file figerait
+  # les valeurs au démarrage du conteneur (ex. APP_KEY vide après key:generate).
   backend:
     build: ./backend
+    # Crée .env, installe les dépendances, génère la clé et migre si nécessaire.
+    entrypoint: ["sh", "docker/dev-entrypoint.sh"]
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
     volumes:
       - ./backend:/var/www/backend
-    env_file: ./backend/.env
     environment:
       DB_HOST: postgres
       REDIS_HOST: redis
@@ -38,18 +42,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/api/v1/health') ? 0 : 1);"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 300s # premier lancement : composer install
+    restart: unless-stopped
 
   queue:
     build: ./backend
     command: php artisan queue:work --tries=3
     volumes:
       - ./backend:/var/www/backend
-    env_file: ./backend/.env
     environment:
       DB_HOST: postgres
       REDIS_HOST: redis
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     image: node:22-alpine
