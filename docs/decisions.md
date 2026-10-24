@@ -14,7 +14,7 @@ Une décision non validée = la fonctionnalité concernée reste **désactivée*
 | D-07 | Rôles admin, double validation, limites d'action | P0-06 | 🟡 À décider | | | |
 | D-08 | Prestataires de paiement, frais, webhooks | P7-01 | ⛔ Bloqué | | | |
 | D-09 | Âge, vérification d'identité, jeu responsable, protection des données | P0-01 | 🟡 À décider | | | |
-| D-10 | Hébergement, disponibilité, sauvegardes, rétention | P0-07 | 🟡 À décider | | | |
+| D-10 | Hébergement, disponibilité, sauvegardes, rétention | P0-07 | 🟡 Proposition ([détail](decisions/D-10-hebergement.md)) | Staging VPS Docker ; Prod VPS + PostgreSQL managé ; 99,5 %, RPO 15 min, RTO 4 h ; 50–120 $/mois estimés | | |
 
 ## Décisions techniques déjà prises
 
