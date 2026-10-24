@@ -91,6 +91,45 @@ paths:
           description: "`account_suspended` — compte suspendu, exclu ou fermé"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Demander un lien de réinitialisation
+      description: |
+        Réponse 202 identique que le compte existe ou non (pas d'énumération). Le lien envoyé par email
+        pointe vers `FRONTEND_URL/reset-password?token=…&email=…`, expire en 30 minutes et sert une seule fois.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        "202": { description: Demande prise en compte }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Choisir un nouveau mot de passe
+      description: Ferme toutes les sessions ouvertes du compte.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, email, password, password_confirmation]
+              properties:
+                token: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                password_confirmation: { type: string }
+      responses:
+        "200": { description: Mot de passe modifié }
+        "422":
+          description: "`invalid_reset_token` (jeton invalide, expiré, déjà utilisé ou compte inconnu) ou `validation_failed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/logout:
     post:
       tags: [Auth]

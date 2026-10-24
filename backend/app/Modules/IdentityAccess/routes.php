@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\IdentityAccess\Http\Controllers\AuthController;
+use App\Modules\IdentityAccess\Http\Controllers\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,6 +14,11 @@ Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:register');
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+
+    Route::middleware('throttle:password-reset')->group(function () {
+        Route::post('/forgot-password', [PasswordResetController::class, 'forgot']);
+        Route::post('/reset-password', [PasswordResetController::class, 'reset']);
+    });
 });
 
 Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
