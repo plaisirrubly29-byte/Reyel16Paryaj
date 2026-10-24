@@ -24,4 +24,4 @@ Une décision non validée = la fonctionnalité concernée reste **désactivée*
 | T-02 | Monorepo `backend/` + `frontend/` | Une PR peut couvrir API + écran ; CI unique |
 | T-03 | Frontend unique (site joueur + `/admin`) | Code partagé ; l'API reste la seule barrière de sécurité |
 | T-04 | Montants en entier (unité mineure) via `App\Support\Money` | Pas d'erreur d'arrondi float |
-| T-05 | Authentification Sanctum (mode SPA cookie à confirmer en P2-02) | Standard Laravel, adapté à un frontend first-party |
+| T-05 | Authentification Sanctum en **mode SPA** (cookie de session HttpOnly + CSRF), confirmé en P2-02 ; aucun jeton API en V1 | Pas de jeton exposé au JavaScript (XSS), standard Laravel pour un frontend first-party |

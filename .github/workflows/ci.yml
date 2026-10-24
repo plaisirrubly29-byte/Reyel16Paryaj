@@ -50,13 +50,33 @@ jobs:
       - name: Migrations on PostgreSQL
         env:
           DB_HOST: 127.0.0.1
-        run: php artisan migrate --force
+        run: php artisan migrate --force --seed
+
+      - name: Migrations reversible (rollback complet puis re-migration)
+        env:
+          DB_HOST: 127.0.0.1
+        run: |
+          php artisan migrate:reset --force
+          php artisan migrate --force
 
       - name: Tests
         run: php artisan test
 
       - name: Dependency audit
         run: composer audit
+
+  api-contract:
+    name: Contrat API (OpenAPI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Lint docs/api/openapi.yaml
+        run: npx --yes @redocly/cli@1.34.21 lint docs/api/openapi.yaml
 
   frontend:
     name: Frontend (React + TypeScript)
