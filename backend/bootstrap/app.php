@@ -19,8 +19,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    // Commandes artisan des modules (ex. sports-data:check).
-    ->withCommands([__DIR__.'/../app/Modules/SportsData/Console'])
+    // Commandes artisan des modules (ex. sports-data:check, settlement:import-results).
+    ->withCommands([__DIR__.'/../app/Modules/SportsData/Console', __DIR__.'/../app/Modules/Settlement/Console'])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
         $middleware->statefulApi();

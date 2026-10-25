@@ -19,8 +19,15 @@
 
 ## Tables (modèle de données initial)
 
-- `results`
-- `settlements`
+- `results` : versions successives du résultat d'un match (ajout seul, `supersedes_id` vers la version remplacée).
+- `settlements` : règlement de chaque ticket, par révision (ajout seul).
+- `bet_selections.result_id` : version de résultat qui a réglé la sélection.
+
+## Commandes
+
+- `php artisan settlement:import-results` : importe les scores des matchs terminés (planifiée selon
+  `SPORTS_DATA_RESULTS_CRON`) ; sans `--competition`, n'interroge que les compétitions qui attendent un résultat.
+- En test et en développement : `FakeSportsDataProvider::setResult('fake-1', '2', '1')` publie un score.
 
 ## Routes prévues
 

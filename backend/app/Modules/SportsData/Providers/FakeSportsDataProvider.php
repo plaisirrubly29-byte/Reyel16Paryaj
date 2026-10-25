@@ -18,7 +18,8 @@ use Carbon\CarbonImmutable;
  *
  * En test : $fake->failWith(SportsDataException::UNAVAILABLE) simule une panne ;
  * $fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.85']) simule un changement de cote ;
- * $fake->setOdds('fake-1', 'totals', ['Over' => '1.70', 'Under' => '2.10'], '3.5') un changement de ligne.
+ * $fake->setOdds('fake-1', 'totals', ['Over' => '1.70', 'Under' => '2.10'], '3.5') un changement de ligne ;
+ * $fake->setResult('fake-1', '2', '1') publie un score final (completed: false = match en cours).
  * Les matchs de football ont un 1X2 (h2h) et un plus/moins 2.5 buts (totals) ; la NBA n'a que le h2h.
  */
 class FakeSportsDataProvider implements SportsDataProvider
@@ -30,6 +31,9 @@ class FakeSportsDataProvider implements SportsDataProvider
 
     /** @var array<string, array<string, array{odds: array<string, string>, point: ?string}>> */
     private array $oddsOverrides = [];
+
+    /** @var array<string, array{home: ?string, away: ?string, completed: bool}> */
+    private array $results = [];
 
     private ?CarbonImmutable $updatedAtOverride = null;
 
@@ -52,6 +56,14 @@ class FakeSportsDataProvider implements SportsDataProvider
     public function setOdds(string $eventId, string $market, array $odds, ?string $point = null): static
     {
         $this->oddsOverrides[$eventId][$market] = ['odds' => $odds, 'point' => $point];
+
+        return $this;
+    }
+
+    /** Score publié pour un match du faux catalogue (fake-1, fake-2, fake-3), renvoyé par results(). */
+    public function setResult(string $eventId, ?string $homeScore, ?string $awayScore, bool $completed = true): static
+    {
+        $this->results[$eventId] = ['home' => $homeScore, 'away' => $awayScore, 'completed' => $completed];
 
         return $this;
     }
@@ -79,8 +91,31 @@ class FakeSportsDataProvider implements SportsDataProvider
     {
         $this->guard();
 
+        $updatedAt = $this->updatedAtOverride ?? CarbonImmutable::now()->startOfMinute()->subMinutes(2);
+
+        return array_map(function (array $f) use ($sportKey, $updatedAt) {
+            [$id, $home, $away, $startsAt, $markets] = $f;
+
+            return new EventData(
+                externalId: $id,
+                sportKey: $sportKey,
+                competition: $sportKey === 'soccer_epl' ? 'EPL' : 'NBA',
+                homeTeam: $home,
+                awayTeam: $away,
+                startsAt: $startsAt,
+                markets: array_map(fn (string $key, array $odds) => $this->market($id, $key, $odds, $updatedAt), array_keys($markets), $markets),
+            );
+        }, $this->fixtures($sportKey));
+    }
+
+    /**
+     * Matchs du faux catalogue : [id, domicile, extérieur, début, marchés (clé => cotes par nom de sélection)].
+     *
+     * @return list<array{0: string, 1: string, 2: string, 3: CarbonImmutable, 4: array<string, array<string, string>>}>
+     */
+    private function fixtures(string $sportKey): array
+    {
         $now = CarbonImmutable::now()->startOfMinute();
-        $updatedAt = $this->updatedAtOverride ?? $now->subMinutes(2);
 
         $fixtures = [
             'soccer_epl' => [
@@ -104,19 +139,7 @@ class FakeSportsDataProvider implements SportsDataProvider
             ],
         ];
 
-        return array_map(function (array $f) use ($sportKey, $updatedAt) {
-            [$id, $home, $away, $startsAt, $markets] = $f;
-
-            return new EventData(
-                externalId: $id,
-                sportKey: $sportKey,
-                competition: $sportKey === 'soccer_epl' ? 'EPL' : 'NBA',
-                homeTeam: $home,
-                awayTeam: $away,
-                startsAt: $startsAt,
-                markets: array_map(fn (string $key, array $odds) => $this->market($id, $key, $odds, $updatedAt), array_keys($markets), $markets),
-            );
-        }, $fixtures[$sportKey] ?? []);
+        return $fixtures[$sportKey] ?? [];
     }
 
     /** @param array<string, string> $odds */
@@ -143,15 +166,23 @@ class FakeSportsDataProvider implements SportsDataProvider
     {
         $this->guard();
 
-        if ($sportKey !== 'soccer_epl') {
-            return [];
+        $now = CarbonImmutable::now()->startOfMinute();
+        $results = [];
+
+        // Match absent du catalogue : l'import doit l'ignorer.
+        if ($sportKey === 'soccer_epl') {
+            $yesterday = $now->subDay()->setTime(15, 0);
+            $results[] = new ResultData('fake-0', 'soccer_epl', 'Manchester City', 'Tottenham', $yesterday, true, '2', '1', $yesterday->addHours(2));
         }
 
-        $yesterday = CarbonImmutable::now()->subDay()->setTime(15, 0);
+        foreach ($this->fixtures($sportKey) as [$id, $home, $away, $startsAt]) {
+            if (isset($this->results[$id])) {
+                $r = $this->results[$id];
+                $results[] = new ResultData($id, $sportKey, $home, $away, $startsAt, $r['completed'], $r['home'], $r['away'], $now);
+            }
+        }
 
-        return [
-            new ResultData('fake-0', 'soccer_epl', 'Manchester City', 'Tottenham', $yesterday, true, '2', '1', $yesterday->addHours(2)),
-        ];
+        return $results;
     }
 
     public function quota(): ?QuotaData
