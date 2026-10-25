@@ -4,6 +4,7 @@ namespace App\Modules\Settlement\Services;
 
 use App\Models\User;
 use App\Modules\Settlement\Enums\ResultStatus;
+use App\Modules\Settlement\Jobs\SettleEventJob;
 use App\Modules\Settlement\Models\Result;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
@@ -21,6 +22,7 @@ use InvalidArgumentException;
  *   la réévaluation des tickets déjà réglés relève de la correction auditée (P5-06).
  * - Le match passe à "finished" (ou "cancelled") avec le score en vigueur ; ses marchés encore ouverts
  *   ou suspendus sont fermés.
+ * - Chaque nouvelle version lance le règlement des tickets du match (SettleEventJob).
  */
 class ResultRecorder
 {
@@ -91,6 +93,9 @@ class ResultRecorder
                     'source' => $source,
                 ]);
             }
+
+            // Après validation de la transaction : le job ne voit jamais un résultat annulé par un rollback.
+            SettleEventJob::dispatch($locked->id)->afterCommit();
 
             return $result;
         });

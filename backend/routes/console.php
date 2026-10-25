@@ -24,3 +24,10 @@ Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))
     ->withoutOverlapping()
     ->onOneServer();
+
+// Rattrapage du règlement (P5-05) : tickets restés en attente alors que leurs matchs ont un résultat
+// (job en échec, règlement interrompu). Idempotent : ne paie jamais deux fois.
+Schedule::command('settlement:run')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
