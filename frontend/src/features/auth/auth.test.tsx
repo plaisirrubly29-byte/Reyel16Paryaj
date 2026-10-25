@@ -23,7 +23,7 @@ describe('routes protégées', () => {
     renderApp('/account');
 
     expect(await screen.findByRole('heading', { name: 'Mon compte' })).toBeInTheDocument();
-    expect(screen.getByText('+509 34123456')).toBeInTheDocument();
+    expect(screen.getByText('+509 34 12 34 56')).toBeInTheDocument();
   });
 });
 
