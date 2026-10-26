@@ -34,6 +34,10 @@ type BetSlip = {
    */
   toggle: (selection: SlipSelection) => ToggleResult;
   remove: (selectionId: string) => void;
+  /** Retire plusieurs sélections (ex. celles que le serveur ne propose plus). */
+  removeMany: (selectionIds: string[]) => void;
+  /** Remplace la cote (et sa version) des sélections dont le serveur a changé la cote. */
+  updateOdds: (changes: { selectionId: string; odds: string; oddsVersion: number }[]) => void;
   clear: () => void;
   /** Vrai juste après un ajout refusé parce que le coupon est complet. */
   full: boolean;
@@ -130,6 +134,11 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     has: (id) => selections.some((s) => s.selectionId === id),
     toggle,
     remove: (id) => { setFull(false); setSelections((current) => current.filter((s) => s.selectionId !== id)); },
+    removeMany: (ids) => { setFull(false); setSelections((current) => current.filter((s) => !ids.includes(s.selectionId))); },
+    updateOdds: (changes) => setSelections((current) => current.map((s) => {
+      const change = changes.find((c) => c.selectionId === s.selectionId);
+      return change ? { ...s, odds: change.odds, oddsVersion: change.oddsVersion } : s;
+    })),
     clear: () => { setFull(false); setSelections([]); },
   }), [selections, full, panelOpen, stake, toggle]);
 

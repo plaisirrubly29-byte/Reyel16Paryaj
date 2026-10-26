@@ -7,9 +7,10 @@ import { formatMoney } from '../../../shared/format/money';
 import { useMediaQuery } from '../../../shared/hooks/useMediaQuery';
 import { useMe } from '../../auth/api/auth';
 import { formatKickoff } from '../../catalogue/format';
+import { ApiError } from '../../../shared/api/client';
 import { MAX_SELECTIONS, useBetSlip } from './BetSlipContext';
 import { BetCodeShare } from '../tickets/BetCodeShare';
-import { addTicket, generateBetCode, type Ticket } from '../tickets/ticketStore';
+import { usePlaceBet, type BetTicket, type OddsChange } from '../api/bets';
 import { parseStakeMinor, sanitizeStake } from './stake';
 import { combinedOdds, potentialReturnMinor } from './totalOdds';
 
@@ -19,9 +20,24 @@ const CURRENCY = 'HTG';
 /** Point de rupture du coupon en panneau mobile (doit correspondre à index.css). */
 export const SLIP_COLLAPSE_QUERY = '(max-width: 960px)';
 
+type Notice = { tone: 'warning' | 'error'; text: string };
+
+/** Message affichable pour un refus du serveur ; les cotes changées ou sélections fermées sont aussi corrigées dans le coupon. */
+function refusal(error: unknown): string {
+  if (!(error instanceof ApiError)) return 'Le pari n\'a pas pu être placé. Réessayez.';
+  if (error.code === 'stake_out_of_range') {
+    const { min, max } = error.details as { min?: { minor: number; currency: string }; max?: { minor: number; currency: string } };
+    return min && max ? `La mise doit être comprise entre ${formatMoney(min)} et ${formatMoney(max)}.` : error.message;
+  }
+  if (error.code === 'insufficient_funds') return 'Solde insuffisant pour cette mise.';
+  if (error.status === 0) return 'Serveur injoignable : le pari n\'a pas été placé.';
+  return error.message;
+}
+
 /**
  * Coupon : colonne à droite sur ordinateur ; sur mobile, panneau ouvert depuis la barre d'onglets du bas.
- * La validation du pari (mise, revalidation de la cote par le serveur) arrive avec P4-03 / P4-05.
+ * « Placer mon pari » envoie le coupon à POST /bets : le serveur revalide cotes, disponibilité, limites et solde,
+ * débite la mise et renvoie le reçu. Une cote changée est mise à jour dans le coupon et doit être confirmée.
  */
 export function BetSlipPanel() {
   const slip = useBetSlip();
@@ -37,10 +53,13 @@ export function BetSlipPanel() {
   const combined = combinedOdds(odds);
   const stakeMinor = parseStakeMinor(slip.stake);
   const potential = combined !== null && stakeMinor !== null ? potentialReturnMinor(stakeMinor, odds) : null;
-  const canPlace = user !== null && user !== undefined && count > 0 && combined !== null && stakeMinor !== null && potential !== null;
+  const placeBetMutation = usePlaceBet();
+  const canPlace = user !== null && user !== undefined && count > 0 && combined !== null && stakeMinor !== null && potential !== null
+    && !placeBetMutation.isPending;
 
   // Ticket venant d'être placé : affiché à la place du coupon vide, avec le betcode à partager.
-  const [placed, setPlaced] = useState<Ticket | null>(null);
+  const [placed, setPlaced] = useState<BetTicket | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   // Dès qu'un nouveau pari est commencé, la confirmation précédente disparaît.
   useEffect(() => {
     if (count > 0) setPlaced(null);
@@ -55,20 +74,34 @@ export function BetSlipPanel() {
   function placeBet() {
     if (!user || combined === null || stakeMinor === null || potential === null) return;
 
-    const ticket: Ticket = {
-      code: generateBetCode(),
-      placedAt: new Date().toISOString(),
-      stakeMinor: Number(stakeMinor),
-      potentialMinor: Number(potential),
-      combinedOdds: combined,
-      selections: slip.selections.map(({ match, pick, label, odds: o, market, startsAt }) => ({
-        match, pick, label, odds: o, market, startsAt,
-      })),
-    };
-    addTicket(user.id, ticket);
-    setPlaced(ticket);
-    slip.clear();
-    slip.setStake('');
+    setNotice(null);
+    placeBetMutation.mutate(
+      {
+        stakeMinor: Number(stakeMinor),
+        currency: CURRENCY,
+        selections: slip.selections.map((s) => ({ selectionId: s.selectionId, odds: s.odds })),
+      },
+      {
+        onSuccess: (ticket) => {
+          setPlaced(ticket);
+          slip.clear();
+          slip.setStake('');
+        },
+        onError: (error) => {
+          if (error instanceof ApiError && error.code === 'odds_changed') {
+            const changes = ((error.details.selections ?? []) as OddsChange[])
+              .map((c) => ({ selectionId: c.selection_id, odds: c.odds, oddsVersion: c.odds_version }));
+            slip.updateOdds(changes);
+            setNotice({ tone: 'warning', text: 'La cote a changé. Vérifiez la nouvelle cote, puis confirmez votre pari.' });
+          } else if (error instanceof ApiError && error.code === 'selection_unavailable') {
+            slip.removeMany((error.details.selection_ids ?? []) as string[]);
+            setNotice({ tone: 'warning', text: 'Une ou plusieurs sélections ne sont plus proposées et ont été retirées du coupon.' });
+          } else {
+            setNotice({ tone: 'error', text: refusal(error) });
+          }
+        },
+      },
+    );
   }
 
   return (
@@ -103,12 +136,16 @@ export function BetSlipPanel() {
         {slip.full && (
           <Alert tone="warning">Coupon complet : {MAX_SELECTIONS} sélections au maximum. Retirez une sélection pour en ajouter une autre.</Alert>
         )}
+        {/* Refus du serveur : visible même si toutes les sélections ont été retirées du coupon. */}
+        {notice && !placed && <Alert tone={notice.tone}>{notice.text}</Alert>}
         {count === 0 && placed ? (
           <div className="betslip-placed" role="status">
             <span className="betslip-empty-icon" aria-hidden="true"><Icon name="check" size={26} /></span>
             <strong>Pari placé</strong>
-            <p className="muted small">Votre ticket est enregistré dans MES PARIS.</p>
-            <BetCodeShare code={placed.code} summary={`Cote ${placed.combinedOdds} · Mise ${formatMoney({ minor: placed.stakeMinor, currency: CURRENCY })}`} />
+            <p className="muted small">
+              Mise de {formatMoney(placed.stake)} débitée · gain potentiel {formatMoney(placed.potential_payout)}.
+            </p>
+            <BetCodeShare code={placed.reference} summary={`Cote ${placed.total_odds} · Mise ${formatMoney(placed.stake)}`} />
             <Link to="/bets" className="btn btn-secondary btn-sm">Voir mes paris</Link>
           </div>
         ) : count === 0 ? (
@@ -165,19 +202,20 @@ export function BetSlipPanel() {
               </div>
             </div>
             <div className="betslip-footer">
-              <p className="muted small">Pari de démonstration : le ticket est simulé et aucun argent réel n'est engagé.</p>
+              <p className="muted small">Fonds fictifs : la mise est débitée de votre portefeuille de démonstration, aucun argent réel n'est engagé.</p>
               {!user && <Link to="/login" className="btn btn-green btn-block">Se connecter pour parier</Link>}
               {user && (
                 <button
                   type="button"
                   className="btn btn-green btn-block place-bet"
                   disabled={!canPlace}
+                  aria-busy={placeBetMutation.isPending || undefined}
                   onClick={placeBet}
                 >
-                  Placer mon pari
+                  {placeBetMutation.isPending ? 'Validation…' : 'Placer mon pari'}
                 </button>
               )}
-              {user && !canPlace && <p className="muted small place-hint">Saisissez une mise pour placer votre pari.</p>}
+              {user && stakeMinor === null && <p className="muted small place-hint">Saisissez une mise pour placer votre pari.</p>}
             </div>
           </>
         )}

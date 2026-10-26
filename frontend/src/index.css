@@ -947,6 +947,11 @@ a.match-line-teams:hover { color: var(--brand); }
   font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
   padding: 0.2rem 0.65rem; border-radius: 999px; background: #fff8ee; border: 1px solid #f2d7b0; color: var(--warning);
 }
+.ticket-status.status-won { background: var(--success-soft); border-color: #a7dcbb; color: var(--success); }
+.ticket-status.status-lost { background: #fdecec; border-color: #f2b8b5; color: var(--danger); }
+.ticket-status.status-void { background: var(--surface-2); border-color: var(--border-strong); color: var(--muted); }
+.ticket-selections .selection-won .odds-value { color: var(--success); }
+.ticket-selections .selection-lost .odds-value { color: var(--danger); text-decoration: line-through; }
 .ticket-selections { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .ticket-selections li {
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.7rem 0;

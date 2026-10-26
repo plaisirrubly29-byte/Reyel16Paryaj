@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../../shared/components/Button';
 import { Icon, type IconName } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
-import { loadTickets } from '../../betting/tickets/ticketStore';
+import { useBets } from '../../betting/api/bets';
 import { useWallet } from '../../wallet/api/wallet';
 import { useLogout, useMe, type User } from '../api/auth';
 
@@ -48,6 +48,7 @@ function InfoRow({ icon, label, children }: { icon: IconName; label: string; chi
 export function AccountPage() {
   const { data: user } = useMe();
   const wallet = useWallet();
+  const bets = useBets();
   const logout = useLogout();
   const navigate = useNavigate();
 
@@ -58,7 +59,7 @@ export function AccountPage() {
     ? new Date(`${user.profile.birth_date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
   const memberSince = new Date(user.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  const ticketCount = loadTickets(user.id).length;
+  const ticketCount = bets.data?.meta.total;
   const missing = <span className="profile-missing">Non renseigné</span>;
 
   return (
@@ -91,7 +92,7 @@ export function AccountPage() {
       <nav className="profile-shortcuts" aria-label="Raccourcis">
         <Link to="/bets" className="profile-shortcut">
           <span className="profile-shortcut-icon"><Icon name="coupon" /></span>
-          <span><strong>Mes paris</strong><span>{ticketCount === 0 ? 'Aucun ticket' : `${ticketCount} ticket${ticketCount > 1 ? 's' : ''}`}</span></span>
+          <span><strong>Mes paris</strong><span>{ticketCount === undefined ? 'Vos tickets' : ticketCount === 0 ? 'Aucun ticket' : `${ticketCount} ticket${ticketCount > 1 ? 's' : ''}`}</span></span>
         </Link>
         <Link to="/wallet" className="profile-shortcut">
           <span className="profile-shortcut-icon"><Icon name="wallet" /></span>
