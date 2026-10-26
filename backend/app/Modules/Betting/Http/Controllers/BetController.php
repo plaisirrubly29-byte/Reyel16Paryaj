@@ -4,10 +4,13 @@ namespace App\Modules\Betting\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Betting\Enums\BetTicketStatus;
+use App\Modules\Betting\Http\Requests\PlaceBetRequest;
 use App\Modules\Betting\Http\Resources\BetTicketResource;
 use App\Modules\Betting\Models\BetTicket;
+use App\Modules\Betting\Services\BetPlacementService;
 use App\Support\Http\Pagination;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\Rule;
@@ -31,6 +34,19 @@ class BetController extends Controller
             ->withQueryString();
 
         return BetTicketResource::collection($tickets);
+    }
+
+    /** Accepte un pari (P4-03) : 201 et le reçu immuable du ticket. */
+    public function store(PlaceBetRequest $request, BetPlacementService $placement): JsonResponse
+    {
+        $ticket = $placement->place(
+            $request->user(),
+            $request->validated('selections'),
+            (int) $request->validated('stake.minor'),
+            $request->validated('stake.currency'),
+        );
+
+        return (new BetTicketResource($ticket))->response()->setStatusCode(201);
     }
 
     public function show(Request $request, string $id): BetTicketResource
