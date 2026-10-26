@@ -123,7 +123,9 @@ function MatchHeader({ event }: { event: CatalogueEvent }) {
       <h1 id="match-title" className="match-header-teams">
         <span className="match-header-icon" aria-hidden="true"><Icon name={sportIcon(event.sport.slug)} size={30} /></span>
         <span className="match-header-team">{event.home_team}</span>
-        <span className="match-header-vs" aria-hidden="true">-</span>
+        {live && event.score
+          ? <span className="match-header-score" aria-label={`Score : ${event.score.home} à ${event.score.away}`}>{event.score.home} - {event.score.away}</span>
+          : <span className="match-header-vs" aria-hidden="true">-</span>}
         <span className="sr-only"> contre </span>
         <span className="match-header-team">{event.away_team}</span>
       </h1>

@@ -543,6 +543,15 @@ a.match-card-teams:hover .team-name { text-decoration: underline; text-underline
   background: linear-gradient(90deg, #ff5a6b, #ffffff 50%, #7f9bff); -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .card-time { font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+/* Score d'un match en cours : pastille rouge à la place du « VS » / de l'heure. */
+.card-score, .match-line-score, .match-header-score {
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
+  font-weight: 900; font-variant-numeric: tabular-nums; color: #fff; background: var(--accent);
+  border-radius: 8px; box-shadow: 0 4px 12px rgba(227, 23, 47, 0.35);
+}
+.card-score { font-size: 1.2rem; padding: 0.2rem 0.6rem; }
+.match-line-time .match-line-score { font-size: 1.05rem; padding: 0.15rem 0.55rem; color: #fff; }
+.match-header-score { font-size: 1.6rem; padding: 0.2rem 0.8rem; }
 .card-day { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.65); white-space: nowrap; }
 
 /* Écusson générique : bouclier en dégradé (teinte tirée du nom) avec reflet et initiales */

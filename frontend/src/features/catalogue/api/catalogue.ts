@@ -40,6 +40,8 @@ export type CatalogueEvent = {
   away_team: string;
   starts_at: string;
   status: string;
+  /** Score du moment d'un match en cours ("live") ; null avant le coup d'envoi ou s'il n'est pas encore connu. */
+  score?: { home: string; away: string } | null;
   markets: CatalogueMarket[];
 };
 

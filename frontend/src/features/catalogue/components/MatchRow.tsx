@@ -29,8 +29,10 @@ export function MatchRow({ event, marketKey = 'h2h' }: { event: CatalogueEvent; 
           </p>
         </div>
         <div className="match-line-time">
-          <strong className={live ? 'live-indicator' : undefined}>{live ? 'En cours' : time}</strong>
-          <span>{day}</span>
+          {live && event.score
+            ? <strong className="match-line-score" aria-label={`Score : ${event.score.home} à ${event.score.away}`}>{event.score.home} - {event.score.away}</strong>
+            : <strong className={live ? 'live-indicator' : undefined}>{live ? 'En cours' : time}</strong>}
+          <span className={live ? 'live-indicator' : undefined}>{live ? 'En cours' : day}</span>
           <Link to={`/events/${event.id}`} className="match-line-more" aria-label={`Voir tous les paris : ${event.home_team} – ${event.away_team}`}>
             Plus de paris <Icon name="chevron" size={18} />
           </Link>

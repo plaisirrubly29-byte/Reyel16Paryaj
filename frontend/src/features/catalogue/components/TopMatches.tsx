@@ -71,7 +71,9 @@ export function TopMatches({ count = 8 }: { count?: number }) {
                   <span className="team-name">{e.home_team}</span>
                 </span>
                 <span className="card-versus">
-                  <span className="card-vs" aria-hidden="true">VS</span>
+                  {live && e.score
+                    ? <strong className="card-score" aria-label={`Score : ${e.score.home} à ${e.score.away}`}>{e.score.home} - {e.score.away}</strong>
+                    : <span className="card-vs" aria-hidden="true">VS</span>}
                   <span className="sr-only"> contre </span>
                   {!live && <strong className="card-time">{time}</strong>}
                   {!live && <small className="card-day">{day}</small>}

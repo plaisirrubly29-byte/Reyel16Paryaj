@@ -383,6 +383,23 @@ describe('page Sports', () => {
   });
 });
 
+describe('onglet Live', () => {
+  it('ne montre que les matchs en cours, avec leur score', async () => {
+    const live = { ...event('1', 'Everton', 'Chelsea', ['1.40', '4.33', '7.50']), status: 'live', starts_at: inHours(-0.5), score: { home: '2', away: '1' } };
+    mockApi({
+      'GET /me': guest,
+      'GET /health': { status: 200, body: { status: 'ok', version: 'v1', time: '' } },
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([live, EVENTS[1]]) },
+    });
+    renderApp('/sports?tab=live');
+
+    const region = await screen.findByRole('region', { name: 'Premier League' });
+    expect(within(region).getAllByLabelText('Score : 2 à 1').length).toBeGreaterThan(0);
+    expect(within(region).queryByText('Fulham')).not.toBeInTheDocument();
+  });
+});
+
 describe('formatKickoff', () => {
   it("indique « Aujourd'hui » et « Demain »", () => {
     const now = new Date(2026, 9, 16, 9, 0);
