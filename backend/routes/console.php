@@ -19,6 +19,13 @@ Schedule::command('sports-data:sync')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Matchs en direct : score et cotes des matchs en cours, plafonnés en crédits par jour (SPORTS_DATA_LIVE_DAILY_CREDITS).
+Schedule::command('sports-data:live')
+    ->cron((string) config('sports_data.live_cron'))
+    ->when(fn () => (bool) config('sports_data.live_enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))

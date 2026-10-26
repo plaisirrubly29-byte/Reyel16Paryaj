@@ -263,10 +263,11 @@ paths:
   /events:
     get:
       tags: [Catalogue]
-      summary: Matchs à venir avec un marché affiché (1X2 par défaut), triés par heure de début
+      summary: Matchs en cours et à venir avec un marché affiché (1X2 par défaut), triés par heure de début
       description: |
-        Public. Un match n'apparaît que s'il est programmé, pas encore commencé et qu'un marché est ouvert
-        avec une cote assez récente (SPORTS_DATA_MAX_ODDS_AGE). Cotes en chaînes décimales.
+        Public. Un match apparaît s'il est programmé et pas encore commencé, ou en cours (status "live", avec son
+        score), et qu'un marché est ouvert et coté. Une cote trop ancienne (SPORTS_DATA_MAX_ODDS_AGE, ou
+        SPORTS_DATA_MAX_LIVE_ODDS_AGE pendant le match) est affichée mais non pariable. Cotes en chaînes décimales.
       parameters:
         - { name: sport, in: query, schema: { type: string, example: soccer } }
         - { name: competition, in: query, schema: { type: integer } }
@@ -743,7 +744,13 @@ components:
         home_team: { type: string }
         away_team: { type: string }
         starts_at: { type: string, format: date-time }
-        status: { type: string, enum: [scheduled] }
+        status: { type: string, enum: [scheduled, live] }
+        score:
+          type: [object, "null"]
+          description: Score du moment d'un match en cours ; null avant le coup d'envoi ou s'il n'est pas encore connu
+          properties:
+            home: { type: string, example: "1" }
+            away: { type: string, example: "0" }
         markets:
           type: array
           items:

@@ -82,7 +82,22 @@ class CatalogueSyncService
 
     public function __construct(private readonly SportsDataProvider $provider) {}
 
+    /** Matchs à venir (dans l'horizon configuré). */
     public function sync(string $competitionKey): SyncReport
+    {
+        return $this->run($competitionKey, live: false);
+    }
+
+    /**
+     * Matchs en cours (commencés depuis moins de live_window_minutes) : cotes en direct, statut "live".
+     * Le fournisseur renvoie les matchs en cours dans le même appel que les matchs à venir.
+     */
+    public function syncLive(string $competitionKey): SyncReport
+    {
+        return $this->run($competitionKey, live: true);
+    }
+
+    private function run(string $competitionKey, bool $live): SyncReport
     {
         $report = new SyncReport($competitionKey);
 
@@ -96,17 +111,20 @@ class CatalogueSyncService
         }
 
         $horizon = now()->addDays((int) config('sports_data.horizon_days', 7));
+        $liveSince = now()->subMinutes((int) config('sports_data.live_window_minutes', 180));
 
         $selected = collect($events)
-            ->filter(fn (EventData $e) => $e->startsAt->isFuture() && $e->startsAt->lte($horizon))
+            ->filter(fn (EventData $e) => $live
+                ? $e->startsAt->lte(now()) && $e->startsAt->gt($liveSince)
+                : $e->startsAt->isFuture() && $e->startsAt->lte($horizon))
             ->sortBy(fn (EventData $e) => $e->startsAt->getTimestamp())
-            ->take((int) config('sports_data.max_events_per_competition', 10));
+            ->take($live ? PHP_INT_MAX : (int) config('sports_data.max_events_per_competition', 10));
 
         $report->skipped += count($events) - $selected->count();
 
         foreach ($selected as $data) {
             try {
-                DB::transaction(fn () => $this->syncEvent($data, $report));
+                DB::transaction(fn () => $this->syncEvent($data, $report, $live));
             } catch (Throwable $e) {
                 $report->skipped++;
                 Log::warning('sports_data.event_rejected', ['competition' => $competitionKey, 'id' => $data->externalId, 'error' => $e->getMessage()]);
@@ -118,7 +136,7 @@ class CatalogueSyncService
         return $report;
     }
 
-    private function syncEvent(EventData $data, SyncReport $report): void
+    private function syncEvent(EventData $data, SyncReport $report, bool $live = false): void
     {
         if (mb_strtolower(trim($data->homeTeam)) === mb_strtolower(trim($data->awayTeam))) {
             throw new \InvalidArgumentException('Équipes identiques.');
@@ -130,8 +148,10 @@ class CatalogueSyncService
         $event = Event::firstOrNew(['provider' => $this->provider->name(), 'external_id' => $data->externalId]);
         $isNew = ! $event->exists;
 
-        // Un événement terminé, annulé ou réglé n'est plus modifié par la synchro des cotes.
-        if (! $isNew && ! in_array($event->status, [EventStatus::Scheduled, EventStatus::Postponed], true)) {
+        // Un événement terminé, annulé ou réglé n'est plus modifié par la synchro des cotes ;
+        // un match en cours ne l'est que par la synchro en direct.
+        $updatable = $live ? [EventStatus::Scheduled, EventStatus::Live] : [EventStatus::Scheduled, EventStatus::Postponed];
+        if (! $isNew && ! in_array($event->status, $updatable, true)) {
             $report->skipped++;
 
             return;
@@ -142,7 +162,7 @@ class CatalogueSyncService
             'home_team_id' => Team::firstOrCreate(['sport_id' => $sportId, 'name' => trim($data->homeTeam)])->id,
             'away_team_id' => Team::firstOrCreate(['sport_id' => $sportId, 'name' => trim($data->awayTeam)])->id,
             'starts_at' => $data->startsAt,
-            'status' => EventStatus::Scheduled,
+            'status' => $live ? EventStatus::Live : EventStatus::Scheduled,
             'last_synced_at' => now(),
         ])->save();
 

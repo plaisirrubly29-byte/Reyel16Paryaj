@@ -48,7 +48,8 @@ interface SportsDataProvider
     public function upcomingStarts(string $sportKey): array;
 
     /**
-     * Résultats (terminés ou en cours) des derniers jours.
+     * Résultats (terminés ou en cours) des derniers jours ; $daysFrom = 0 : seulement les matchs en cours
+     * (et à venir), moins cher chez The Odds API.
      *
      * @return list<ResultData>
      *

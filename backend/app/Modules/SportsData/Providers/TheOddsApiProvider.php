@@ -100,10 +100,9 @@ class TheOddsApiProvider implements SportsDataProvider
 
     public function results(string $sportKey, int $daysFrom = 1): array
     {
-        $payload = $this->get("/sports/{$this->segment($sportKey)}/scores", [
-            'daysFrom' => max(1, min(3, $daysFrom)),
-            'dateFormat' => 'iso',
-        ]);
+        // Sans daysFrom (1 crédit au lieu de 2) : seulement les matchs en cours et à venir.
+        $query = ['dateFormat' => 'iso'] + ($daysFrom > 0 ? ['daysFrom' => min(3, $daysFrom)] : []);
+        $payload = $this->get("/sports/{$this->segment($sportKey)}/scores", $query);
 
         return array_map(function (array $r) use ($sportKey) {
             $scores = collect($r['scores'] ?? [])->mapWithKeys(fn ($s) => [(string) $s['name'] => (string) $s['score']]);
