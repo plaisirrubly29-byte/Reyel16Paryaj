@@ -346,6 +346,8 @@ paths:
           description: |
             odds_changed — cote changée, rien n'est créé. details.selections : [{ selection_id, odds, odds_version }]
             avec la cote actuelle ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
+            idempotency_key_reused — clé déjà utilisée pour un autre pari. La clé est figée sur le ticket : rejouer
+            le même pari avec la même clé (même après une panne du serveur) renvoie le ticket existant, sans seconde mise.
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422":
           description: |

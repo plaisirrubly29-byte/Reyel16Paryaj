@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Modules\Betting;
 
+use App\Models\IdempotencyKey;
 use App\Models\User;
 use App\Modules\Betting\Models\BetTicket;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
@@ -16,6 +17,7 @@ use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Money;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -228,6 +230,58 @@ class PlaceBetTest extends TestCase
             'stake' => ['minor' => 100_00],
             'selections' => [['selection_id' => $this->selection()->id, 'odds' => '2.10']],
         ])->assertStatus(428);
+    }
+
+    /**
+     * Revue P8-02, M4 : le middleware libère sa clé si la réponse n'a pas pu être enregistrée (erreur après le
+     * commit, processus tué). Simulé en vidant idempotency_keys : le rejeu ne doit ni créer ni débiter.
+     */
+    public function test_a_replay_after_a_crash_returns_the_same_ticket_without_a_second_stake(): void
+    {
+        $key = (string) Str::uuid();
+        $first = $this->bet([[$this->selection()]], key: $key)->assertCreated();
+        IdempotencyKey::query()->delete();
+
+        // Même la cote a bougé entre-temps : le pari déjà accepté est renvoyé tel quel, sans revalidation.
+        $this->fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.95', 'Chelsea' => '3.60', 'Draw' => '3.30']);
+        app(CatalogueSyncService::class)->sync('soccer_epl');
+
+        $replay = $this->bet([[$this->selection(), '2.10']], key: $key)->assertCreated();
+
+        $this->assertSame($first->json('data.reference'), $replay->json('data.reference'));
+        $this->assertSame('2.10', $replay->json('data.total_odds'));
+        $this->assertSame(1, BetTicket::count());
+        $this->assertSame(1, LedgerEntry::where('type', LedgerEntryType::Stake)->count());
+        $this->assertSame(900_00, $this->balance());
+    }
+
+    public function test_a_key_already_used_for_another_bet_is_refused_after_a_crash(): void
+    {
+        $key = (string) Str::uuid();
+        $this->bet([[$this->selection()]], key: $key)->assertCreated();
+        IdempotencyKey::query()->delete();
+
+        $this->bet([[$this->selection()]], stake: 200_00, key: $key)
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'idempotency_key_reused');
+        $this->assertSame(900_00, $this->balance());
+    }
+
+    public function test_the_same_key_is_unique_per_player_in_the_database(): void
+    {
+        $key = (string) Str::uuid();
+        $this->bet([[$this->selection()]], key: $key)->assertCreated();
+
+        // Un autre joueur peut utiliser la même clé (clés propres à chaque joueur).
+        $other = User::factory()->create();
+        $this->credit($other, 100_00);
+        $this->bet([[$this->selection()]], key: $key, as: $other)->assertCreated();
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        BetTicket::create([
+            ...BetTicket::where('user_id', $this->player->id)->firstOrFail()->only(['user_id', 'wallet_id', 'type', 'stake_minor', 'currency', 'total_odds', 'potential_payout_minor', 'rules_version', 'rules_snapshot']),
+            'placement_key' => $key,
+        ]);
     }
 
     public function test_invalid_payloads_are_rejected(): void

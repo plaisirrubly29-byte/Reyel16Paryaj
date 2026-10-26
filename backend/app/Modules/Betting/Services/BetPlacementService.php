@@ -13,6 +13,7 @@ use App\Modules\SportsData\Models\Selection;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -27,7 +28,10 @@ use Illuminate\Support\Facades\DB;
  *   409 odds_changed avec les nouvelles cotes, rien n'est créé ;
  * - ticket, sélections figées et réservation de la mise dans UNE transaction : solde insuffisant → rien n'est créé.
  *
- * Le doublon (même requête rejouée) est arrêté en amont par la clé d'idempotence (middleware "idempotent").
+ * Doublon : le middleware "idempotent" rejoue la réponse d'une requête déjà traitée. Il libère pourtant sa clé
+ * si la requête échoue après le commit ou si le processus meurt (revue P8-02, M4) : la clé est donc aussi
+ * figée sur le ticket (placement_key, unique par joueur) et un rejeu renvoie le ticket existant, jamais un
+ * second ticket ni une seconde mise.
  */
 class BetPlacementService
 {
@@ -35,11 +39,61 @@ class BetPlacementService
 
     /**
      * @param  list<array{selection_id: int|string, odds: string}>  $picks
+     * @param  ?string  $placementKey  clé d'idempotence de la requête (null hors API)
      *
      * @throws ApiException stake_out_of_range, multiple_not_allowed, selection_unavailable,
-     *                      same_event_selections, odds_changed, insufficient_funds, wallet_frozen
+     *                      same_event_selections, odds_changed, insufficient_funds, wallet_frozen,
+     *                      idempotency_key_reused
      */
-    public function place(User $user, array $picks, int $stakeMinor, ?string $currency = null): BetTicket
+    public function place(User $user, array $picks, int $stakeMinor, ?string $currency = null, ?string $placementKey = null): BetTicket
+    {
+        // Pari déjà accepté avec cette clé (rejeu après une panne) : le même ticket, rien de plus.
+        if ($placementKey !== null && ($existing = $this->replayed($user, $placementKey, $picks, $stakeMinor)) !== null) {
+            return $existing;
+        }
+
+        try {
+            return $this->accept($user, $picks, $stakeMinor, $currency, $placementKey);
+        } catch (UniqueConstraintViolationException $e) {
+            // Deux requêtes simultanées avec la même clé : la contrainte unique a arrêté la seconde.
+            if ($placementKey !== null && ($existing = $this->replayed($user, $placementKey, $picks, $stakeMinor)) !== null) {
+                return $existing;
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Ticket déjà créé par ce joueur avec cette clé ; 409 si la clé a servi à un autre pari.
+     *
+     * @param  list<array{selection_id: int|string, odds: string}>  $picks
+     */
+    private function replayed(User $user, string $placementKey, array $picks, int $stakeMinor): ?BetTicket
+    {
+        $ticket = BetTicket::where('user_id', $user->id)->where('placement_key', $placementKey)->first();
+        if ($ticket === null) {
+            return null;
+        }
+
+        $requested = array_map(fn ($p) => (int) $p['selection_id'], $picks);
+        $selections = $ticket->selections()->get();
+        $same = $ticket->stake_minor === $stakeMinor
+            && $selections->count() === count($requested)
+            // Une sélection retirée du catalogue depuis (selection_id nul) ne peut plus être comparée.
+            && $selections->every(fn (BetSelection $s) => $s->selection_id === null || in_array($s->selection_id, $requested, true));
+
+        if (! $same) {
+            throw new ApiException('idempotency_key_reused', __('Cette clé d\'idempotence a déjà servi pour une autre requête.'), 409);
+        }
+
+        return $ticket->load('selections.event.competition.sport');
+    }
+
+    /**
+     * @param  list<array{selection_id: int|string, odds: string}>  $picks
+     */
+    private function accept(User $user, array $picks, int $stakeMinor, ?string $currency, ?string $placementKey): BetTicket
     {
         $wallet = $this->ledger->walletFor($user);
 
@@ -60,7 +114,7 @@ class BetPlacementService
             throw new ApiException('multiple_not_allowed', __('Les paris combinés ne sont pas proposés.'), 422);
         }
 
-        return DB::transaction(function () use ($user, $wallet, $picks, $stakeMinor) {
+        return DB::transaction(function () use ($user, $wallet, $picks, $stakeMinor, $placementKey) {
             $selections = $this->lockSelections($picks);
             $this->assertAvailable($picks, $selections);
             $this->assertOddsUnchanged($picks, $selections);
@@ -70,6 +124,7 @@ class BetPlacementService
             $payout = min((int) bcmul((string) $stakeMinor, $product, 0), (int) config('betting.max_payout_minor'));
 
             $ticket = BetTicket::create([
+                'placement_key' => $placementKey,
                 'user_id' => $user->id,
                 'wallet_id' => $wallet->id,
                 'type' => $selections->count() > 1 ? BetType::Multiple : BetType::Single,

@@ -3,6 +3,7 @@
 namespace App\Modules\Betting\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\RequireIdempotencyKey;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Http\Requests\PlaceBetRequest;
 use App\Modules\Betting\Http\Resources\BetTicketResource;
@@ -44,6 +45,8 @@ class BetController extends Controller
             $request->validated('selections'),
             (int) $request->validated('stake.minor'),
             $request->validated('stake.currency'),
+            // Déjà validée (UUID) par le middleware "idempotent" ; figée sur le ticket contre les rejeux après panne.
+            strtolower((string) $request->header(RequireIdempotencyKey::HEADER)),
         );
 
         return (new BetTicketResource($ticket))->response()->setStatusCode(201);
