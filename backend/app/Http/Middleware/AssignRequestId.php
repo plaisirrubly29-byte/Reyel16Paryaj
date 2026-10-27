@@ -30,11 +30,11 @@ class AssignRequestId
         return $response;
     }
 
-    /** Refuse les valeurs arbitraires (injection dans les logs, taille). */
+    /** Refuse les valeurs arbitraires (injection dans les logs, taille : 64 comme audit_logs.request_id). */
     private function incomingId(Request $request): ?string
     {
         $id = $request->headers->get(self::HEADER);
 
-        return is_string($id) && preg_match('/^[A-Za-z0-9._-]{8,128}$/', $id) ? $id : null;
+        return is_string($id) && preg_match('/^[A-Za-z0-9._-]{8,64}$/', $id) ? $id : null;
     }
 }

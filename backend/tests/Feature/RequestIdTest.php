@@ -57,9 +57,15 @@ class RequestIdTest extends TestCase
             ->assertHeader(AssignRequestId::HEADER, 'proxy-abc123.XYZ');
     }
 
+    public function test_reuses_incoming_request_id_up_to_64_characters(): void
+    {
+        $this->getJson('/api/v1/health', [AssignRequestId::HEADER => str_repeat('a', 64)])
+            ->assertHeader(AssignRequestId::HEADER, str_repeat('a', 64));
+    }
+
     public function test_replaces_unsafe_incoming_request_id(): void
     {
-        foreach (["abc12345\ninjection", 'court', str_repeat('a', 129), 'avec espace'] as $unsafe) {
+        foreach (["abc12345\ninjection", 'court', str_repeat('a', 65), 'avec espace'] as $unsafe) {
             $id = $this->getJson('/api/v1/health', [AssignRequestId::HEADER => $unsafe])
                 ->headers->get(AssignRequestId::HEADER);
 
