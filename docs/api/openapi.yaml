@@ -69,7 +69,8 @@ paths:
       summary: Connexion
       description: |
         Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
-        Limité à 5 tentatives/minute par téléphone+IP et 20/minute par IP.
+        Limité à 5 tentatives/minute par téléphone+IP, 20/minute par IP et 30/heure par téléphone, quelle que soit l'IP.
+        Le numéro est normalisé avant d'être compté : `34123456`, `3412-3456` et `+509 3412 3456` partagent les mêmes compteurs.
       requestBody:
         required: true
         content:
@@ -191,10 +192,16 @@ paths:
                 recovery_code: { type: string, example: "a1b2c-d3e4f" }
       responses:
         "204": { description: Session validée }
-        "422":
-          description: "`invalid_mfa_code` (code invalide ou déjà utilisé)"
+        "401":
+          description: "`mfa_too_many_failures` : trop d'échecs consécutifs (5), la session est fermée et il faut se reconnecter"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé) ; chaque échec est audité (`mfa.failed`)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429":
+          description: "`too_many_requests` : par compte, 5 essais par minute, 20 par heure et 50 par jour (avec `/auth/mfa/confirm`)"
+          headers: { Retry-After: { schema: { type: integer } } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   /auth/mfa/recovery-codes:
     post:
       tags: [Auth]
