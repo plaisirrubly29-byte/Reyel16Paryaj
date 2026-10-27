@@ -59,6 +59,12 @@ jobs:
           php artisan migrate:reset --force
           php artisan migrate --force
 
+      # migrate:fresh supprime les tables sans appeler down() : les fonctions SQL doivent pouvoir être recréées.
+      - name: Migrations rejouables (migrate:fresh sur une base existante)
+        env:
+          DB_HOST: 127.0.0.1
+        run: php artisan migrate:fresh --force --seed
+
       - name: Tests
         run: php artisan test
 
