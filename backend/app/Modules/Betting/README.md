@@ -33,9 +33,9 @@ Garde-fous :
 
 ## Routes prévues
 
-- `POST /api/v1/bets`
-- `GET /api/v1/bets`
-- `GET /api/v1/bets/{id}`
+- `POST /api/v1/bets` (P4-03)
+- `GET /api/v1/bets` (P4-04) : tickets du joueur connecté, plus récents d'abord, filtre `status`, paginé
+- `GET /api/v1/bets/{id}` (P4-04) : reçu d'un ticket ; celui d'un autre joueur répond 404 (protection IDOR)
 
 ## Règles à respecter
 

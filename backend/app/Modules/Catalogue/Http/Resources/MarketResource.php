@@ -20,7 +20,7 @@ class MarketResource extends JsonResource
         return [
             'id' => (string) $this->id,
             'key' => $this->key,
-            'name' => $this->label(),
+            'name' => self::marketName($this->key, $this->event?->competition?->sport?->slug),
             // Ligne du plus/moins en chaîne décimale (ex. "2.5") ; null pour le 1X2.
             'line' => $this->line,
             // À renvoyer avec la sélection lors du pari : le serveur refuse une version périmée (P4-03).
@@ -31,19 +31,7 @@ class MarketResource extends JsonResource
             'selections' => $this->selections->map(fn ($s) => [
                 'id' => (string) $s->id,
                 'key' => $s->key,
-                'label' => match ($s->key) {
-                    'home' => '1',
-                    'draw' => 'X',
-                    'away' => '2',
-                    'home_draw' => '1X',
-                    'home_away' => '12',
-                    'draw_away' => 'X2',
-                    'over' => "+{$this->line}",
-                    'under' => "-{$this->line}",
-                    'yes' => 'Oui',
-                    'no' => 'Non',
-                    default => $s->key,
-                },
+                'label' => self::selectionLabel($s->key, $this->line),
                 'name' => $s->name,
                 // Cote en chaîne décimale (ex. "2.10") : jamais de nombre flottant.
                 'odds' => self::odds($s->odds),
@@ -51,14 +39,33 @@ class MarketResource extends JsonResource
         ];
     }
 
-    private function label(): string
+    /** Libellé d'un marché (aussi affiché dans l'historique des tickets). */
+    public static function marketName(string $key, ?string $sportSlug): string
     {
-        return match ($this->key) {
+        return match ($key) {
             'h2h' => 'Résultat du match (1X2)',
             'double_chance' => 'Double chance',
             'btts' => 'Les deux équipes marquent',
-            'totals' => $this->event?->competition?->sport?->slug === 'soccer' ? 'Nombre de buts' : 'Total de points',
-            default => $this->key,
+            'totals' => $sportSlug === 'soccer' ? 'Nombre de buts' : 'Total de points',
+            default => $key,
+        };
+    }
+
+    /** Libellé court d'une issue : 1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non. */
+    public static function selectionLabel(string $key, ?string $line): string
+    {
+        return match ($key) {
+            'home' => '1',
+            'draw' => 'X',
+            'away' => '2',
+            'home_draw' => '1X',
+            'home_away' => '12',
+            'draw_away' => 'X2',
+            'over' => "+{$line}",
+            'under' => "-{$line}",
+            'yes' => 'Oui',
+            'no' => 'Non',
+            default => $key,
         };
     }
 
