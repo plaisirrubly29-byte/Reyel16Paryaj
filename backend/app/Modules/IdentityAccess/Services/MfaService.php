@@ -8,7 +8,10 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Support\Http\ApiException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Session\Session;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 /**
@@ -86,12 +89,21 @@ class MfaService
             throw new ApiException('mfa_setup_required', __('Commencez par configurer la double authentification.'), 409);
         }
 
-        if ($recoveryCode !== null && $recoveryCode !== '') {
-            $this->consumeRecoveryCode($user, $recoveryCode);
-        } else {
-            $this->consumeTotp($user, (string) $code);
+        $method = $recoveryCode !== null && $recoveryCode !== '' ? 'recovery_code' : 'totp';
+
+        try {
+            if ($method === 'recovery_code') {
+                $this->consumeRecoveryCode($user, $recoveryCode);
+            } else {
+                $this->consumeTotp($user, (string) $code);
+            }
+        } catch (ApiException $e) {
+            $this->recordFailure($user, $method, $session);
+
+            throw $e;
         }
 
+        RateLimiter::clear($this->failuresKey($user));
         $session->migrate(true);
         $session->put(self::SESSION_KEY, $user->getKey());
     }
@@ -125,6 +137,42 @@ class MfaService
 
             $this->audit->record(AuditAction::MfaReset, $target, $before, ['mfa_enabled' => false], $reason, $actor);
         });
+    }
+
+    /**
+     * Échec de mfa/verify : audité (mfa.failed, base des alertes de sécurité) ; après N échecs consécutifs,
+     * la session est fermée et il faut repasser par le mot de passe (revue P8-02, M2).
+     *
+     * @throws ApiException mfa_too_many_failures
+     */
+    private function recordFailure(User $user, string $method, Session $session): void
+    {
+        $failures = RateLimiter::hit($this->failuresKey($user), 3600);
+        $loggedOut = $failures >= (int) config('identity.mfa.max_failures_before_logout');
+
+        $this->audit->record(AuditAction::MfaFailed, $user, actor: $user, metadata: [
+            'method' => $method,
+            'consecutive_failures' => $failures,
+            'logged_out' => $loggedOut,
+        ]);
+
+        if (! $loggedOut) {
+            return;
+        }
+
+        Log::warning('mfa.too_many_failures', ['user_id' => $user->getKey(), 'consecutive_failures' => $failures]);
+
+        // Le compteur n'est pas remis à zéro : après reconnexion, un nouvel échec referme la session.
+        Auth::guard('web')->logout();
+        $session->invalidate();
+        $session->regenerateToken();
+
+        throw new ApiException('mfa_too_many_failures', __('Trop de codes invalides : vous avez été déconnecté. Reconnectez-vous.'), 401);
+    }
+
+    private function failuresKey(User $user): string
+    {
+        return 'mfa-failures:'.$user->getKey();
     }
 
     private function consumeTotp(User $user, string $code): void

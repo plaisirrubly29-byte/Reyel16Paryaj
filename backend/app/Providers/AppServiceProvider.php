@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Modules\IdentityAccess\Support\PhoneNumber;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
@@ -82,18 +83,35 @@ class AppServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         RateLimiter::for('login', function (Request $request) {
-            $phone = (string) $request->input('phone');
+            // Le limiteur passe avant LoginRequest : il normalise lui-même le numéro, sinon "3412-3456"
+            // et "+509 34123456" auraient chacun leur compteur (revue P8-02, M1).
+            $phone = is_string($request->input('phone')) ? PhoneNumber::normalize($request->input('phone')) : '';
 
-            return [
+            $limits = [
                 Limit::perMinute(config('identity.login.max_attempts_per_phone'))->by('login:'.$phone.'|'.$request->ip()),
                 Limit::perMinute(config('identity.login.max_attempts_per_ip'))->by('login-ip:'.$request->ip()),
             ];
+
+            // Par compte, quelle que soit l'IP : borne une attaque répartie sur de nombreuses adresses.
+            if ($phone !== '') {
+                $limits[] = Limit::perHour(config('identity.login.max_attempts_per_account'))->by('login-account:'.$phone);
+            }
+
+            return $limits;
         });
 
         RateLimiter::for('register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
 
-        // MFA : 5 essais par minute et par compte (10^6 combinaisons → force brute impraticable).
-        RateLimiter::for('mfa', fn (Request $request) => Limit::perMinute(5)->by('mfa:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // MFA, par compte : sans plafond long, 5 essais/min laissent 7 200 essais par jour (revue P8-02, M2).
+        RateLimiter::for('mfa', function (Request $request) {
+            $id = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return [
+                Limit::perMinute(config('identity.mfa.max_attempts_per_minute'))->by('mfa:'.$id),
+                Limit::perHour(config('identity.mfa.max_attempts_per_hour'))->by('mfa-hour:'.$id),
+                Limit::perDay(config('identity.mfa.max_attempts_per_day'))->by('mfa-day:'.$id),
+            ];
+        });
 
         RateLimiter::for('password-reset', fn (Request $request) => [
             Limit::perMinute(3)->by('password-reset:'.Str::lower((string) $request->input('email'))),

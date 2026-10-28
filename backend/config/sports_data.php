@@ -83,4 +83,20 @@ return [
     // Règle de fraîcheur (P3-04) : au-delà, la cote n'est plus proposée. Doit dépasser l'intervalle de synchro.
     'max_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_ODDS_AGE', 300),
 
+    // Import des résultats (P5-04) : seules les compétitions avec un match commencé depuis results_delay_minutes
+    // et sans résultat sont interrogées (2 crédits chacune chez The Odds API). Par défaut toutes les heures.
+    'results_cron' => env('SPORTS_DATA_RESULTS_CRON', '20 * * * *'),
+    // Durée minimale entre le début du match et la première demande de résultat (football : ~1 h 45).
+    'results_delay_minutes' => (int) env('SPORTS_DATA_RESULTS_DELAY', 105),
+
+    // Matchs en direct (sports-data:live) : score et cotes des matchs commencés depuis moins de live_window_minutes,
+    // seulement pour les compétitions qui en ont un (aucun appel sinon). Coût par compétition et par passage :
+    // 1 crédit (scores) + marchés × régions (cotes). live_daily_credits plafonne la dépense du jour.
+    'live_enabled' => (bool) env('SPORTS_DATA_LIVE', true),
+    'live_cron' => env('SPORTS_DATA_LIVE_CRON', '*/15 * * * *'),
+    'live_window_minutes' => (int) env('SPORTS_DATA_LIVE_WINDOW', 180),
+    'live_daily_credits' => (int) env('SPORTS_DATA_LIVE_DAILY_CREDITS', 30),
+    // Règle de fraîcheur en direct : une cote bouge vite pendant le match, elle est bloquée plus tôt.
+    'max_live_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_LIVE_ODDS_AGE', 20),
+
 ];

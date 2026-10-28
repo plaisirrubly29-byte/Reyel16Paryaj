@@ -1,0 +1,2 @@
+# Scripts shell : toujours LF (sinon ": command not found" sous Git Bash / Linux).
+*.sh text eol=lf

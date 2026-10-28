@@ -2,6 +2,7 @@
 
 namespace App\Modules\SportsData\Models;
 
+use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -43,7 +44,17 @@ class Market extends Model
     {
         $query->where('status', MarketStatus::Open)
             ->whereNotNull('odds_updated_at')
-            ->where('odds_updated_at', '>=', now()->subMinutes((int) config('sports_data.max_odds_age_minutes')));
+            ->where(fn ($q) => $q
+                ->where(fn ($l) => $l->whereHas('event', fn ($e) => $e->where('status', EventStatus::Live))
+                    ->where('odds_updated_at', '>=', now()->subMinutes(self::maxAgeMinutes(true))))
+                ->orWhere(fn ($u) => $u->whereHas('event', fn ($e) => $e->where('status', '!=', EventStatus::Live))
+                    ->where('odds_updated_at', '>=', now()->subMinutes(self::maxAgeMinutes(false)))));
+    }
+
+    /** Âge maximal d'une cote pariable : plus court pendant le match (la cote bouge vite). */
+    public static function maxAgeMinutes(bool $live): int
+    {
+        return (int) config($live ? 'sports_data.max_live_odds_age_minutes' : 'sports_data.max_odds_age_minutes');
     }
 
     /**
@@ -61,7 +72,7 @@ class Market extends Model
     {
         return $this->status === MarketStatus::Open
             && $this->odds_updated_at !== null
-            && $this->odds_updated_at->gte(now()->subMinutes((int) config('sports_data.max_odds_age_minutes')));
+            && $this->odds_updated_at->gte(now()->subMinutes(self::maxAgeMinutes($this->event?->status === EventStatus::Live)));
     }
 
     /** @return BelongsTo<Event, $this> */

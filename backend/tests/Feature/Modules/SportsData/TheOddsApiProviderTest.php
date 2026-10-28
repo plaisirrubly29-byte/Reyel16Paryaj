@@ -206,6 +206,16 @@ class TheOddsApiProviderTest extends TestCase
         Http::assertSent(fn (Request $r) => str_contains($r->url(), '/scores') && (int) $r['daysFrom'] === 2);
     }
 
+    public function test_live_scores_are_requested_without_days_from(): void
+    {
+        Http::fake(['*' => Http::response([], 200, $this->quotaHeaders(497, 3, 1))]);
+
+        $this->provider()->results('soccer_epl', 0);
+
+        // Sans daysFrom : matchs en cours et à venir seulement, 1 crédit au lieu de 2.
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/scores') && ! str_contains($r->url(), 'daysFrom'));
+    }
+
     public function test_quota_is_read_from_response_headers(): void
     {
         Http::fake(['*' => Http::response($this->oddsPayload(), 200, $this->quotaHeaders(420, 80, 1))]);

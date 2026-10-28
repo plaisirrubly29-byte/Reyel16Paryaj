@@ -69,7 +69,8 @@ paths:
       summary: Connexion
       description: |
         Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
-        Limité à 5 tentatives/minute par téléphone+IP et 20/minute par IP.
+        Limité à 5 tentatives/minute par téléphone+IP, 20/minute par IP et 30/heure par téléphone, quelle que soit l'IP.
+        Le numéro est normalisé avant d'être compté : `34123456`, `3412-3456` et `+509 3412 3456` partagent les mêmes compteurs.
       requestBody:
         required: true
         content:
@@ -191,10 +192,16 @@ paths:
                 recovery_code: { type: string, example: "a1b2c-d3e4f" }
       responses:
         "204": { description: Session validée }
-        "422":
-          description: "`invalid_mfa_code` (code invalide ou déjà utilisé)"
+        "401":
+          description: "`mfa_too_many_failures` : trop d'échecs consécutifs (5), la session est fermée et il faut se reconnecter"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
-        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé) ; chaque échec est audité (`mfa.failed`)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429":
+          description: "`too_many_requests` : par compte, 5 essais par minute, 20 par heure et 50 par jour (avec `/auth/mfa/confirm`)"
+          headers: { Retry-After: { schema: { type: integer } } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   /auth/mfa/recovery-codes:
     post:
       tags: [Auth]
@@ -263,10 +270,11 @@ paths:
   /events:
     get:
       tags: [Catalogue]
-      summary: Matchs à venir avec un marché affiché (1X2 par défaut), triés par heure de début
+      summary: Matchs en cours et à venir avec un marché affiché (1X2 par défaut), triés par heure de début
       description: |
-        Public. Un match n'apparaît que s'il est programmé, pas encore commencé et qu'un marché est ouvert
-        avec une cote assez récente (SPORTS_DATA_MAX_ODDS_AGE). Cotes en chaînes décimales.
+        Public. Un match apparaît s'il est programmé et pas encore commencé, ou en cours (status "live", avec son
+        score), et qu'un marché est ouvert et coté. Une cote trop ancienne (SPORTS_DATA_MAX_ODDS_AGE, ou
+        SPORTS_DATA_MAX_LIVE_ODDS_AGE pendant le match) est affichée mais non pariable. Cotes en chaînes décimales.
       parameters:
         - { name: sport, in: query, schema: { type: string, example: soccer } }
         - { name: competition, in: query, schema: { type: integer } }
@@ -305,20 +313,95 @@ paths:
       tags: [Bets]
       summary: Placer un pari (simulé en V1)
       x-task: P4-03
+      description: |
+        Le serveur recharge les marchés et applique SES cotes : la cote envoyée ne sert qu'à détecter un changement.
+        Ticket, sélections figées et réservation de la mise sont créés dans une seule transaction.
+        Règles provisoires (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
+        à 1 000 000,00, combinés de 20 sélections au plus et une seule sélection par match, toute cote changée refusée.
+      security: [{ sessionCookie: [] }]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stake, selections]
+              properties:
+                stake:
+                  type: object
+                  required: [minor]
+                  properties:
+                    minor: { type: integer, minimum: 1, example: 10000, description: Mise en unité mineure (centimes) }
+                    currency: { type: string, example: HTG, description: "Facultatif ; doit être la devise du portefeuille" }
+                selections:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [selection_id, odds]
+                    properties:
+                      selection_id: { type: integer, example: 462 }
+                      odds: { type: string, example: "2.10", description: Cote vue par le joueur (détection de changement) }
       responses:
-        "201": { description: Ticket créé (reçu immuable) }
-        "409": { description: Cote changée — confirmation requise }
-        "422": { description: "Marché fermé, limites, solde insuffisant" }
-    get: { tags: [Bets], summary: Mes tickets, x-task: P4-04, responses: { "200": { description: OK } } }
+        "201":
+          description: Ticket créé (reçu immuable)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: |
+            odds_changed — cote changée, rien n'est créé. details.selections : [{ selection_id, odds, odds_version }]
+            avec la cote actuelle ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
+            idempotency_key_reused — clé déjà utilisée pour un autre pari. La clé est figée sur le ticket : rejouer
+            le même pari avec la même clé (même après une panne du serveur) renvoie le ticket existant, sans seconde mise.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: |
+            validation_failed ; selection_unavailable (details.selection_ids : match commencé ou terminé, marché fermé,
+            cote trop ancienne) ; same_event_selections ; multiple_not_allowed ; stake_out_of_range (details.min / max) ;
+            currency_mismatch ; insufficient_funds.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
+        "428": { description: En-tête Idempotency-Key manquant }
+    get:
+      tags: [Bets]
+      summary: Mes tickets (plus récents d'abord)
+      description: Tickets du joueur connecté uniquement, avec leurs sélections.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/BetTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "423": { description: Compte suspendu ou fermé }
   /bets/{id}:
     get:
       tags: [Bets]
-      summary: Détail d'un ticket
-      x-task: P4-04
+      summary: Reçu d'un ticket
+      description: Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+      security: [{ sessionCookie: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "404": { description: Introuvable ou non autorisé } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "423": { description: Compte suspendu ou fermé }
 
   /wallet:
     get:
@@ -714,7 +797,13 @@ components:
         home_team: { type: string }
         away_team: { type: string }
         starts_at: { type: string, format: date-time }
-        status: { type: string, enum: [scheduled] }
+        status: { type: string, enum: [scheduled, live] }
+        score:
+          type: [object, "null"]
+          description: Score du moment d'un match en cours ; null avant le coup d'envoi ou s'il n'est pas encore connu
+          properties:
+            home: { type: string, example: "1" }
+            away: { type: string, example: "0" }
         markets:
           type: array
           items:
@@ -723,8 +812,10 @@ components:
               id: { type: string }
               key: { type: string, enum: [h2h, double_chance, totals, btts] }
               name: { type: string, example: Résultat du match (1X2) }
+              line: { type: [string, "null"], example: "2.5", description: Ligne du plus/moins ; null pour les autres marchés }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
+              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable" }
               selections:
                 type: array
                 items:
@@ -735,6 +826,46 @@ components:
                     label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
+    BetTicket:
+      type: object
+      description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: R16-7KQ2M9XAPB, description: Référence à communiquer au support }
+        type: { type: string, enum: [single, multiple] }
+        status: { type: string, enum: [pending, won, lost, void], description: "void : annulé et remboursé" }
+        stake: { $ref: "#/components/schemas/Money" }
+        total_odds: { type: string, example: "3.895", description: "Produit des cotes acceptées (chaîne, jamais de float)" }
+        potential_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Gain versé ; null tant que le ticket n'est pas réglé }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+        selections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              event:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string, example: Everton – Chelsea }
+                  starts_at: { type: string, format: date-time }
+              market:
+                type: object
+                properties:
+                  key: { type: string, enum: [h2h, double_chance, totals, btts] }
+                  name: { type: string, example: Nombre de buts }
+                  line: { type: [string, "null"], example: "2.5" }
+              selection:
+                type: object
+                properties:
+                  key: { type: string, example: over }
+                  label: { type: string, example: "+2.5" }
+                  name: { type: string, example: Over }
+              odds: { type: string, example: "1.90", description: Cote acceptée (pas la cote actuelle du catalogue) }
+              status: { type: string, enum: [pending, won, lost, void] }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
