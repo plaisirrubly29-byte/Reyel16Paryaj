@@ -6,7 +6,7 @@ Une décision non validée = la fonctionnalité concernée reste **désactivée*
 | # | Sujet | Tâche | Statut | Décision | Date | Validé par |
 |---|---|---|---|---|---|---|
 | D-01 | Territoire, cadre juridique, licences | P0-01 | 🟡 Proposition ([détail](decisions/D-01-D-09-cadre-juridique.md)) | Haïti seul ; V1 en fonds fictifs ; argent réel après licence écrite | | |
-| D-02 | Fournisseur de données sportives et cotes (droits, limites, sandbox) | P0-02 | 🟡 À décider | | | |
+| D-02 | Fournisseur de données sportives et cotes (droits, limites, sandbox) | P0-02 | 🟡 Pressenti | **The Odds API** (accès détenu par Rubly) — à confirmer : droits d'usage pour des paris, quotas, sports couverts, résultats (scores) | | |
 | D-03 | Sports, compétitions et marchés V1 | P0-03 | 🟡 À décider | | | |
 | D-04 | Types de paris V1 : simple seulement ou combiné | P0-03 | 🟡 À décider | | | |
 | D-05 | Politique changement de cote / annulation / report / abandon / correction | P0-04 | 🟡 À décider | | | |
@@ -24,4 +24,4 @@ Une décision non validée = la fonctionnalité concernée reste **désactivée*
 | T-02 | Monorepo `backend/` + `frontend/` | Une PR peut couvrir API + écran ; CI unique |
 | T-03 | Frontend unique (site joueur + `/admin`) | Code partagé ; l'API reste la seule barrière de sécurité |
 | T-04 | Montants en entier (unité mineure) via `App\Support\Money` | Pas d'erreur d'arrondi float |
-| T-05 | Authentification Sanctum (mode SPA cookie à confirmer en P2-02) | Standard Laravel, adapté à un frontend first-party |
+| T-05 | Authentification Sanctum en **mode SPA** (cookie de session HttpOnly + CSRF), confirmé en P2-02 ; aucun jeton API en V1 | Pas de jeton exposé au JavaScript (XSS), standard Laravel pour un frontend first-party |
