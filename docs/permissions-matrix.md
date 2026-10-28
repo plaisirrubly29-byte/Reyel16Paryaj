@@ -2,6 +2,12 @@
 
 **Brouillon à valider (tâche P0-06).** Chaque ligne validée doit avoir un test API (tâche P6-09).
 
+> Implémentation : [`backend/config/permissions.php`](../backend/config/permissions.php) (P2-04) — synchronisé en base par
+> `PermissionSeeder`. Toute modification de cette matrice se fait **dans la même PR** que la config.
+> Vérification côté API : middleware `permission:<slug>` ou `Gate::allows('<slug>')`.
+> Les permissions d'un rôle ne sont modifiables par aucune route : seule l'attribution des rôles l'est
+> (`PUT /admin/users/{id}/roles`, Super Admin uniquement, jamais sur soi-même, motif obligatoire).
+
 Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · ❌ interdit
 
 | Ressource / action | Super Admin | Opérations | Finance | Support | Conformité |

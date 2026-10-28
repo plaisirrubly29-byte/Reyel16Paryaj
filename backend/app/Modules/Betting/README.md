@@ -2,7 +2,7 @@
 
 **Namespace :** `App\Modules\Betting`
 **Livraison :** Phase 4
-**Responsable :** _à assigner_
+**Responsable :** Rubly PLAISIR (@plaisirrubly29-byte)
 
 ## Responsabilités
 
@@ -16,16 +16,26 @@
 - Wallet & Ledger
 - Compliance
 
-## Tables (modèle de données initial)
+## Tables (P4-01)
 
-- `bet_tickets`
-- `bet_selections`
+- `bet_tickets` : référence publique unique (`R16-XXXXXXXXXX`), joueur, portefeuille, type (simple/combiné),
+  statut, mise en unité mineure + devise, cote totale, gain potentiel, gain versé, version et instantané des règles.
+- `bet_selections` : match, marché et sélection d'origine + **instantané** de ce qui a été accepté
+  (nom du match, marché, ligne, issue, cote, version de cote). Une seule sélection par marché dans un ticket.
+
+Garde-fous :
+
+- Aucun float : montants en `bigInteger`, cotes en `decimal` (chaîne en PHP).
+- Les conditions acceptées sont immuables (exception côté modèle) ; seuls le statut, le gain et la date de
+  règlement évoluent. Un ticket ne se supprime jamais, ni le joueur ou le match qui en portent.
+- Si la synchro retire une sélection du catalogue, `selection_id` passe à null : le règlement s'appuie sur
+  le marché + la clé de sélection figée.
 
 ## Routes prévues
 
-- `POST /api/v1/bets`
-- `GET /api/v1/bets`
-- `GET /api/v1/bets/{id}`
+- `POST /api/v1/bets` (P4-03)
+- `GET /api/v1/bets` (P4-04) : tickets du joueur connecté, plus récents d'abord, filtre `status`, paginé
+- `GET /api/v1/bets/{id}` (P4-04) : reçu d'un ticket ; celui d'un autre joueur répond 404 (protection IDOR)
 
 ## Règles à respecter
 
