@@ -29,7 +29,9 @@ services:
     build: ./backend
     # Crée .env, installe les dépendances, génère la clé et migre si nécessaire.
     entrypoint: ["sh", "docker/dev-entrypoint.sh"]
-    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+    # --no-reload : sans lui, artisan serve ne transmet pas DB_HOST / REDIS_HOST (ci-dessous) au serveur web,
+    # qui lirait 127.0.0.1 dans .env. Après une modification de .env : docker compose restart backend.
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000", "--no-reload"]
     volumes:
       - ./backend:/var/www/backend
     environment:
