@@ -76,8 +76,8 @@ class ResultImportTest extends TestCase
         $this->assertNotNull($result->provider_updated_at);
         $this->assertNull($result->supersedes_id);
 
-        // Plus aucun pari sur un match terminé ; les autres matchs ne bougent pas.
-        $this->assertSame([MarketStatus::Closed], $event->markets()->get()->pluck('status')->unique()->values()->all());
+        // Plus aucun pari sur un match terminé (marchés fermés puis réglés) ; les autres matchs ne bougent pas.
+        $this->assertSame([MarketStatus::Settled], $event->markets()->get()->pluck('status')->unique()->values()->all());
         $this->assertSame(EventStatus::Scheduled, $this->event('fake-2')->status);
     }
 
