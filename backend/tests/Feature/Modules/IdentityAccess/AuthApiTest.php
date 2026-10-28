@@ -209,6 +209,45 @@ class AuthApiTest extends TestCase
             ->assertHeader('Retry-After');
     }
 
+    public function test_login_limit_counts_every_spelling_of_the_same_phone(): void
+    {
+        User::factory()->create(['phone' => '34123456']);
+
+        foreach (['34123456', '3412-3456', '+509 3412 3456', '509-34-12-34-56', '34 12 34 56'] as $spelling) {
+            $this->postJson('/api/v1/auth/login', ['phone' => $spelling, 'password' => 'mauvais-mdp1'])->assertStatus(422);
+        }
+
+        $this->postJson('/api/v1/auth/login', ['phone' => '(509) 3412.3456', 'password' => 'mauvais-mdp1'])
+            ->assertStatus(429)
+            ->assertJsonPath('error.code', 'too_many_requests');
+    }
+
+    public function test_login_is_limited_per_account_whatever_the_ip(): void
+    {
+        User::factory()->create(['phone' => '34123456']);
+        User::factory()->create(['phone' => '37654321']);
+
+        for ($i = 0; $i < config('identity.login.max_attempts_per_account'); $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.{$i}"])
+                ->postJson('/api/v1/auth/login', ['phone' => '34123456', 'password' => 'mauvais-mdp1'])
+                ->assertStatus(422);
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.1'])
+            ->postJson('/api/v1/auth/login', ['phone' => '+509 3412-3456', 'password' => 'mauvais-mdp1'])
+            ->assertStatus(429);
+
+        // Les autres comptes ne sont pas touchés.
+        $this->postJson('/api/v1/auth/login', ['phone' => '37654321', 'password' => 'mauvais-mdp1'])->assertStatus(422);
+    }
+
+    public function test_login_with_a_non_string_phone_is_a_validation_error(): void
+    {
+        $this->postJson('/api/v1/auth/login', ['phone' => ['34123456'], 'password' => 'mauvais-mdp1'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'validation_failed');
+    }
+
     public function test_logout_ends_the_session(): void
     {
         $user = User::factory()->create(['password' => 'motdepasse123']);

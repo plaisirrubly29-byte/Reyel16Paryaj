@@ -2,6 +2,7 @@
 
 namespace App\Modules\IdentityAccess\Http\Requests;
 
+use App\Modules\IdentityAccess\Support\PhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
 
 class LoginRequest extends FormRequest
@@ -17,22 +18,11 @@ class LoginRequest extends FormRequest
         ];
     }
 
+    /** Même normalisation qu'à l'inscription, pour que le numéro saisi retrouve le compte stocké. */
     protected function prepareForValidation(): void
     {
         if (is_string($this->input('phone'))) {
-            $this->merge(['phone' => $this->normalizePhone($this->input('phone'))]);
+            $this->merge(['phone' => PhoneNumber::normalize($this->input('phone'))]);
         }
-    }
-
-    /** Même normalisation qu'à l'inscription, pour que le numéro saisi retrouve le compte stocké. */
-    private function normalizePhone(string $phone): string
-    {
-        $digits = preg_replace('/\D+/', '', $phone);
-
-        if (strlen($digits) === 11 && str_starts_with($digits, '509')) {
-            $digits = substr($digits, 3);
-        }
-
-        return $digits;
     }
 }

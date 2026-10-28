@@ -19,6 +19,7 @@ use LogicException;
  *
  * @property int $id
  * @property string $reference référence publique du reçu, ex. "R16-7KQ2M9XAPB"
+ * @property string|null $placement_key clé d'idempotence de POST /bets (unique par joueur)
  * @property int $user_id
  * @property int $wallet_id
  * @property BetType $type
@@ -42,7 +43,7 @@ class BetTicket extends Model
 
     /** Conditions acceptées par le joueur : aucune modification après création. */
     private const FROZEN = [
-        'reference', 'user_id', 'wallet_id', 'type', 'stake_minor', 'currency', 'total_odds',
+        'reference', 'placement_key', 'user_id', 'wallet_id', 'type', 'stake_minor', 'currency', 'total_odds',
         'potential_payout_minor', 'rules_version', 'rules_snapshot', 'placed_at',
     ];
 

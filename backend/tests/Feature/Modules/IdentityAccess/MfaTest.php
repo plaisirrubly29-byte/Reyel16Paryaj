@@ -38,6 +38,15 @@ class MfaTest extends TestCase
         return Totp::codeAt($user->fresh()->mfa_secret, intdiv(now()->getTimestamp(), Totp::PERIOD));
     }
 
+    /**
+     * Code valide après plusieurs travel() : Totp::verify lit l'heure réelle (time()), fenêtre de ±1 période.
+     * La période suivante reste acceptée et n'a pas encore été consommée par la confirmation.
+     */
+    private function nextRealTimeCode(User $user): string
+    {
+        return Totp::codeAt($user->fresh()->mfa_secret, intdiv(time(), Totp::PERIOD) + 1);
+    }
+
     /** Active le MFA via l'API et renvoie les codes de secours. */
     private function enableMfa(): array
     {
@@ -163,6 +172,112 @@ class MfaTest extends TestCase
         }
 
         $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(429);
+    }
+
+    public function test_verify_is_capped_per_hour(): void
+    {
+        config(['identity.mfa.max_failures_before_logout' => 100]);
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->relogin();
+
+        // Une tentative par minute : seule la limite horaire peut bloquer (la confirmation compte pour 1).
+        for ($i = 1; $i < config('identity.mfa.max_attempts_per_hour'); $i++) {
+            $this->travel(61)->seconds();
+            $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        }
+
+        $this->travel(61)->seconds();
+        $response = $this->postJson('/api/v1/auth/mfa/verify', ['code' => $this->nextRealTimeCode($this->admin)])->assertStatus(429);
+        $this->assertGreaterThan(60, (int) $response->headers->get('Retry-After'));
+    }
+
+    public function test_verify_is_capped_per_day(): void
+    {
+        config(['identity.mfa.max_failures_before_logout' => 100, 'identity.mfa.max_attempts_per_hour' => 1000]);
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->relogin();
+
+        for ($i = 1; $i < config('identity.mfa.max_attempts_per_day'); $i++) {
+            $this->travel(61)->seconds();
+            $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        }
+
+        $this->travel(61)->seconds();
+        $response = $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(429);
+        $this->assertGreaterThan(3600, (int) $response->headers->get('Retry-After'));
+    }
+
+    public function test_failed_verifications_are_audited_without_the_code(): void
+    {
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->relogin();
+
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/mfa/verify', ['recovery_code' => 'faux00-code0'])->assertStatus(422);
+
+        $logs = AuditLog::where('action', AuditAction::MfaFailed)->orderBy('id')->get();
+        $this->assertCount(2, $logs);
+        $this->assertSame((string) $this->admin->id, $logs[0]->subject_id);
+        $this->assertSame($this->admin->id, $logs[0]->actor_id);
+        $this->assertSame(['method' => 'totp', 'consecutive_failures' => 1, 'logged_out' => false], $logs[0]->metadata);
+        $this->assertSame(['method' => 'recovery_code', 'consecutive_failures' => 2, 'logged_out' => false], $logs[1]->metadata);
+        $this->assertStringNotContainsString('faux00-code0', json_encode($logs->toArray()));
+    }
+
+    public function test_too_many_consecutive_failures_close_the_session(): void
+    {
+        $max = config('identity.mfa.max_failures_before_logout');
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->relogin();
+        $this->travel(61)->seconds(); // la confirmation ne compte plus dans la limite par minute
+
+        for ($i = 1; $i < $max; $i++) {
+            $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        }
+
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])
+            ->assertUnauthorized()
+            ->assertJsonPath('error.code', 'mfa_too_many_failures');
+        $this->assertGuest('web');
+        $this->assertTrue(AuditLog::where('action', AuditAction::MfaFailed)->latest('id')->first()->metadata['logged_out']);
+
+        // Le compteur est gardé : après reconnexion, un nouvel échec referme aussitôt la session.
+        $this->travel(61)->seconds();
+        $this->login($this->admin);
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])
+            ->assertUnauthorized()
+            ->assertJsonPath('error.code', 'mfa_too_many_failures');
+
+        // Un code valide, lui, est toujours accepté et remet le compteur à zéro.
+        $this->login($this->admin);
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => $this->nextRealTimeCode($this->admin)])->assertNoContent();
+        $this->getJson('/api/v1/admin/audit-logs')->assertOk();
+    }
+
+    public function test_successful_verification_resets_the_failure_count(): void
+    {
+        $max = config('identity.mfa.max_failures_before_logout');
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->relogin();
+        $this->travel(61)->seconds();
+
+        for ($i = 1; $i < $max; $i++) {
+            $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        }
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => $this->nextRealTimeCode($this->admin)])->assertNoContent();
+
+        $this->travel(61)->seconds();
+        $this->relogin();
+        for ($i = 1; $i < $max; $i++) {
+            $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        }
+
+        $this->assertAuthenticated('web');
     }
 
     public function test_setup_is_refused_once_mfa_is_enabled(): void

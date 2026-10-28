@@ -11,6 +11,10 @@
 
 Partir de `develop`, ouvrir la PR vers `develop`. `develop` → `main` uniquement pour une release.
 
+Protection de `main` et `develop` (PR obligatoire, 1 revue du propriétaire de code, CI verte, pas de push direct,
+même pour les admins) : `bash scripts/github/protect-branches.sh`. Les relecteurs sont demandés automatiquement
+selon [`.github/CODEOWNERS`](.github/CODEOWNERS) : chaque PR est relue par l'autre développeur.
+
 ```bash
 git checkout develop && git pull
 git checkout -b feature/P2-02-auth-api

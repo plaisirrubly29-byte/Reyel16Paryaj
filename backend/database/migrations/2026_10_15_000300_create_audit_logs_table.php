@@ -32,9 +32,10 @@ return new class extends Migration
             $table->index(['subject_type', 'subject_id']);
         });
 
+        // OR REPLACE : migrate:fresh supprime les tables (et donc le déclencheur) mais pas les fonctions.
         if (DB::getDriverName() === 'pgsql') {
             DB::unprepared(<<<'SQL'
-                CREATE FUNCTION audit_logs_append_only() RETURNS trigger AS $$
+                CREATE OR REPLACE FUNCTION audit_logs_append_only() RETURNS trigger AS $$
                 BEGIN
                     RAISE EXCEPTION 'audit_logs est en ajout seul (append-only)';
                 END;
