@@ -113,8 +113,9 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Le limiteur passe avant la validation : un email envoyé en tableau ne doit pas provoquer de 500 (revue P8-02, F4).
         RateLimiter::for('password-reset', fn (Request $request) => [
-            Limit::perMinute(3)->by('password-reset:'.Str::lower((string) $request->input('email'))),
+            Limit::perMinute(3)->by('password-reset:'.(is_string($request->input('email')) ? Str::lower($request->input('email')) : '')),
             Limit::perMinute(10)->by('password-reset-ip:'.$request->ip()),
         ]);
 
