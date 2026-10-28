@@ -21,8 +21,9 @@
 
 ## Routes prévues
 
-- `GET/PATCH /api/v1/admin/events/{id}`
-- `GET/PATCH /api/v1/admin/markets/{id}`
+- `GET /api/v1/admin/events`, `GET /api/v1/admin/events/{id}` (P6-02, livrées) : origine, synchronisation, marchés de tous statuts
+- `GET/PATCH /api/v1/admin/markets/{id}` (P6-02, livrées) : fraîcheur ; suspendre / rouvrir avec motif
+  (écriture par `SportsData\Services\MarketAvailabilityService`, auditée `market.suspended` / `market.reopened`)
 - `GET /api/v1/admin/users`, `GET/PATCH /api/v1/admin/users/{id}` (P6-03, livrées)
 
 ## Règles à respecter

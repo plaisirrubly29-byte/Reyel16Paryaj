@@ -15,6 +15,10 @@ enum AuditAction: string
     case MfaFailed = 'mfa.failed';
     case UserPersonalDataViewed = 'user.personal_data_viewed';
 
+    // Admin — événements et marchés (P6-02)
+    case MarketSuspended = 'market.suspended';
+    case MarketReopened = 'market.reopened';
+
     // Audit
     case AuditViewed = 'audit.viewed';
     case AuditExported = 'audit.exported';
