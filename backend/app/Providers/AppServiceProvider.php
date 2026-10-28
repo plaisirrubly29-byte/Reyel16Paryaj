@@ -8,6 +8,7 @@ use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
 use App\Modules\SportsData\Services\CreditBudget;
+use App\Support\ProductionSafety;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
@@ -50,6 +51,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Mode debug, proxy « * », CORS ou Sanctum « * » : refus de démarrer en production (revue P8-02).
+        if ($this->app->isProduction()) {
+            ProductionSafety::assertSafe();
+        }
+
         $this->configurePasswords();
         $this->configureRateLimiting();
         $this->configureAuthorization();
