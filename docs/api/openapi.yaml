@@ -5,6 +5,9 @@ info:
   description: |
     Contrat de l'API v1. Toute route doit être documentée ici AVANT l'intégration frontend.
     Les routes marquées `x-task` ne sont pas encore implémentées.
+
+    Conventions (format des réponses, codes d'erreur, pagination, idempotence) : docs/api/README.md.
+    Toute erreur suit le schéma `Error`.
 servers:
   - url: http://localhost:8000/api/v1
     description: Développement local
@@ -35,27 +38,267 @@ paths:
                   time: { type: string, format: date-time }
 
   /auth/register:
-    post: { tags: [Auth], summary: Inscription, x-task: P2-02, responses: { "201": { description: Créé } } }
+    post:
+      tags: [Auth]
+      summary: Inscription (compte joueur) — ouvre la session
+      description: Limité à 5 requêtes/minute par IP. Âge minimum configurable (IDENTITY_MINIMUM_AGE, 18 par défaut).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone, password, password_confirmation, birth_date]
+              properties:
+                name: { type: string, maxLength: 100 }
+                phone: { type: string, description: "Numéro haïtien local, 8 chiffres (espaces/tirets et préfixe +509/509 acceptés)", example: "+509 3412-3456" }
+                email: { type: [string, "null"], format: email, description: "Optionnel." }
+                password: { type: string, minLength: 10, description: "Au moins une lettre et un chiffre" }
+                password_confirmation: { type: string }
+                birth_date: { type: string, format: date, example: "1998-05-21" }
+                country: { type: string, minLength: 2, maxLength: 2, example: HT }
+      responses:
+        "201":
+          description: Compte créé, session ouverte
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/login:
-    post: { tags: [Auth], summary: Connexion, x-task: P2-02, responses: { "200": { description: OK } } }
+    post:
+      tags: [Auth]
+      summary: Connexion
+      description: |
+        Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
+        Limité à 5 tentatives/minute par téléphone+IP et 20/minute par IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password]
+              properties:
+                phone: { type: string, example: "34123456" }
+                password: { type: string }
+      responses:
+        "200":
+          description: Session ouverte
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "422":
+          description: "`invalid_credentials` ou `validation_failed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423":
+          description: "`account_suspended` — compte suspendu, exclu ou fermé"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Demander un lien de réinitialisation
+      description: |
+        Réponse 202 identique que le compte existe ou non (pas d'énumération). Le lien envoyé par email
+        pointe vers `FRONTEND_URL/reset-password?token=…&email=…`, expire en 30 minutes et sert une seule fois.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        "202": { description: Demande prise en compte }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Choisir un nouveau mot de passe
+      description: Ferme toutes les sessions ouvertes du compte.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, email, password, password_confirmation]
+              properties:
+                token: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                password_confirmation: { type: string }
+      responses:
+        "200": { description: Mot de passe modifié }
+        "422":
+          description: "`invalid_reset_token` (jeton invalide, expiré, déjà utilisé ou compte inconnu) ou `validation_failed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/setup:
+    post:
+      tags: [Auth]
+      summary: Générer un secret TOTP (MFA admin) — à afficher en QR code
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Secret en attente de confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret: { type: string, example: JBSWY3DPEHPK3PXP }
+                      otpauth_uri: { type: string, example: "otpauth://totp/REYEL%2016%20PAYAJ:admin%40example.com?secret=…" }
+        "409":
+          description: "`mfa_already_enabled`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /auth/mfa/confirm:
+    post:
+      tags: [Auth]
+      summary: Activer le MFA avec un premier code — renvoie 8 codes de secours (affichés une seule fois)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string, example: "123456" } } } } }
+      responses:
+        "200":
+          description: MFA activé ; session validée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object, properties: { recovery_codes: { type: array, items: { type: string } } } }
+        "409":
+          description: "`mfa_already_enabled` ou `mfa_setup_required`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "`invalid_mfa_code`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/verify:
+    post:
+      tags: [Auth]
+      summary: Valider la session avec un code TOTP ou un code de secours (requis après chaque connexion admin)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, example: "123456" }
+                recovery_code: { type: string, example: "a1b2c-d3e4f" }
+      responses:
+        "204": { description: Session validée }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [Auth]
+      summary: Régénérer les codes de secours (session MFA validée)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Nouveaux codes (les anciens sont invalidés) }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /auth/logout:
-    post: { tags: [Auth], summary: Déconnexion, x-task: P2-02, responses: { "204": { description: OK } } }
+    post:
+      tags: [Auth]
+      summary: Déconnexion (invalide la session)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Session fermée }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /me:
-    get: { tags: [Auth], summary: Utilisateur connecté, x-task: P2-02, responses: { "200": { description: OK } } }
+    get:
+      tags: [Auth]
+      summary: Utilisateur connecté
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /sports:
-    get: { tags: [Catalogue], summary: Liste des sports, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Sports ayant des matchs ouverts, avec leurs compétitions
+      description: Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        slug: { type: string, example: soccer }
+                        name: { type: string, example: Football }
+                        events_count: { type: integer }
+                        competitions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string }
+                              name: { type: string, example: EPL }
+                              country: { type: [string, "null"] }
+                              events_count: { type: integer }
   /competitions:
-    get: { tags: [Catalogue], summary: Liste des compétitions, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Compétitions ayant des matchs ouverts
+      parameters:
+        - { name: sport, in: query, schema: { type: string, example: soccer } }
+      responses:
+        "200": { description: OK }
   /events:
-    get: { tags: [Catalogue], summary: Événements ouverts, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Matchs à venir avec un marché affiché (1X2 par défaut), triés par heure de début
+      description: |
+        Public. Un match n'apparaît que s'il est programmé, pas encore commencé et qu'un marché est ouvert
+        avec une cote assez récente (SPORTS_DATA_MAX_ODDS_AGE). Cotes en chaînes décimales.
+      parameters:
+        - { name: sport, in: query, schema: { type: string, example: soccer } }
+        - { name: competition, in: query, schema: { type: integer } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - name: market
+          in: query
+          description: Marché affiché dans la liste. Un match qui ne le propose pas est listé avec `markets` vide.
+          schema: { type: string, enum: [h2h, double_chance, totals, btts], default: h2h }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/CatalogueEvent" } }
+                  links: { type: object }
+                  meta: { type: object }
+        "422": { description: Paramètres invalides }
   /events/{id}/markets:
     get:
       tags: [Catalogue]
-      summary: Marchés et cotes disponibles d'un événement
-      x-task: P3-05
+      summary: Détail d'un match et de tous ses marchés pariables
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
+        "404": { description: Match inconnu ou plus proposé }
 
   /bets:
     post:
@@ -67,7 +310,7 @@ paths:
       responses:
         "201": { description: Ticket créé (reçu immuable) }
         "409": { description: Cote changée — confirmation requise }
-        "422": { description: Marché fermé, limites, solde insuffisant }
+        "422": { description: "Marché fermé, limites, solde insuffisant" }
     get: { tags: [Bets], summary: Mes tickets, x-task: P4-04, responses: { "200": { description: OK } } }
   /bets/{id}:
     get:
@@ -78,9 +321,48 @@ paths:
       responses: { "200": { description: OK }, "404": { description: Introuvable ou non autorisé } }
 
   /wallet:
-    get: { tags: [Wallet], summary: Solde, x-task: P5-03, responses: { "200": { description: OK } } }
+    get:
+      tags: [Wallet]
+      summary: Solde du portefeuille de l'utilisateur connecté (calculé par le serveur)
+      description: Le frontend affiche ce solde tel quel ; il ne le recalcule jamais.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency: { type: string, example: HTG }
+                      balance: { $ref: "#/components/schemas/Money" }
+                      status: { type: string, enum: [active, frozen] }
+                      simulated: { type: boolean, description: "true en V1 : fonds fictifs" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /wallet/transactions:
-    get: { tags: [Wallet], summary: Historique des écritures, x-task: P5-03, responses: { "200": { description: OK } } }
+    get:
+      tags: [Wallet]
+      summary: Historique des écritures (plus récentes d'abord)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LedgerEntry" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /admin/events/{id}:
     patch:
@@ -96,13 +378,155 @@ paths:
       x-task: P6-02
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+  /admin/users/{id}/roles:
+    put:
+      tags: [Admin]
+      summary: Remplacer les rôles administratifs d'un utilisateur
+      description: |
+        Permission `roles.manage` (Super Admin). Interdit sur son propre compte (`403 cannot_modify_own_roles`).
+        Sans permission : 403, que l'identifiant existe ou non.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles, reason]
+              properties:
+                roles:
+                  type: array
+                  items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Rôles mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      roles: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/mfa:
+    delete:
+      tags: [Admin]
+      summary: Réinitialiser le MFA d'un autre administrateur (appareil perdu) — audité
+      description: Permission `roles.manage`. Interdit sur son propre compte (`403 cannot_reset_own_mfa`).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5 } } } } }
+      responses:
+        "204": { description: MFA réinitialisé }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Rechercher des comptes (permission users.view)
+      description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: search, in: query, description: "Email, nom, téléphone ou identifiant", schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
+        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Consulter un compte (consultation des données personnelles journalisée)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [Admin]
-      summary: Suspendre un compte (motif requis)
-      x-task: P6-03
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+      summary: Suspendre ou réactiver un compte (motif requis, audité)
+      description: |
+        Permission users.suspend. Interdit sur son propre compte. Le compte d'un administrateur ne peut être
+        suspendu que par un Super Admin. Une auto-exclusion ne peut pas être levée ici (409 invalid_status_transition).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Statut appliqué
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`invalid_status_transition`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Journal d'audit (permission audit.view) — la consultation est elle-même journalisée
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: action, in: query, schema: { type: string, example: roles.updated } }
+        - { name: actor_id, in: query, schema: { type: integer } }
+        - { name: subject_type, in: query, schema: { type: string } }
+        - { name: subject_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Entrées, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AuditLog" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
 components:
   parameters:
@@ -112,7 +536,205 @@ components:
       required: true
       description: UUID unique par intention utilisateur. Une requête rejouée renvoie la même réponse.
       schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      description: Taille de page, bornée à 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    ValidationError:
+      description: Données invalides
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              code: validation_failed
+              message: Les données envoyées sont invalides.
+              details: { phone: ["Le champ phone est obligatoire."] }
+    Unauthenticated:
+      description: Authentification requise
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: unauthenticated, message: Authentification requise. } }
+    Forbidden:
+      description: Permission refusée
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: forbidden, message: Action non autorisée. } }
+    NotFound:
+      description: Introuvable (ou non autorisé, sans révéler l'existence)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: not_found, message: Ressource introuvable. } }
+    TooManyRequests:
+      description: Trop de tentatives
+      headers:
+        Retry-After: { schema: { type: integer }, description: Secondes avant de réessayer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: too_many_requests, message: Trop de tentatives. Réessayez plus tard. } }
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: reyel-16-paryaj-session
+      description: |
+        Mode SPA de Sanctum : appeler `GET /sanctum/csrf-cookie` (hors /api/v1), puis envoyer le cookie
+        de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
+
   schemas:
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        amount: { $ref: "#/components/schemas/Money" }
+        balance_after: { $ref: "#/components/schemas/Money" }
+        related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
+        description: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phone: { type: string, example: "34123456" }
+        email: { type: [string, "null"] }
+        status: { type: string, enum: [active, suspended, excluded, closed] }
+        status_changed_at: { type: [string, "null"], format: date-time }
+        is_admin: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_login_at: { type: [string, "null"], format: date-time }
+        roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
+        mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
+        profile: { type: object, description: "Avec users.view_personal_data uniquement" }
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, example: roles.updated }
+        actor: { type: [object, "null"], properties: { id: { type: string }, email: { type: string } } }
+        subject: { type: [object, "null"], properties: { type: { type: string }, id: { type: string } } }
+        before: { type: [object, "null"] }
+        after: { type: [object, "null"] }
+        reason: { type: [string, "null"] }
+        metadata: { type: [object, "null"] }
+        ip_address: { type: [string, "null"] }
+        request_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    User:
+      type: object
+      properties:
+        id: { type: string, example: "42" }
+        name: { type: string }
+        phone: { type: string, example: "34123456", description: "Identifiant de connexion, 8 chiffres." }
+        email: { type: [string, "null"], format: email }
+        status: { type: string, enum: [active, suspended, excluded, closed] }
+        roles:
+          type: array
+          items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+          description: Vide pour un joueur.
+        permissions:
+          type: array
+          items: { type: string, example: users.view }
+          description: Permissions effectives (config/permissions.php). Sert à afficher le menu admin ; l'API vérifie chaque route.
+        is_admin: { type: boolean }
+        mfa:
+          type: object
+          description: Le frontend redirige un admin vers l'activation (enabled=false) ou la saisie du code (verified=false).
+          properties:
+            enabled: { type: boolean }
+            verified: { type: boolean }
+            required: { type: boolean }
+        profile:
+          type: [object, "null"]
+          properties:
+            first_name: { type: [string, "null"] }
+            last_name: { type: [string, "null"] }
+            birth_date: { type: [string, "null"], format: date }
+            country: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    UserEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/User" }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Identifiant stable (snake_case) sur lequel le client se base.
+              example: validation_failed
+            message:
+              type: string
+              description: Message lisible, affichable tel quel.
+            details:
+              type: object
+              additionalProperties: true
+              description: Informations complémentaires (ex. erreurs par champ).
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: [string, "null"] }
+        last: { type: [string, "null"] }
+        prev: { type: [string, "null"] }
+        next: { type: [string, "null"] }
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
+        from: { type: [integer, "null"] }
+        to: { type: [integer, "null"] }
+        path: { type: string }
+    CatalogueEvent:
+      type: object
+      properties:
+        id: { type: string }
+        sport: { type: object, properties: { slug: { type: string }, name: { type: string } } }
+        competition: { type: object, properties: { id: { type: string }, name: { type: string }, country: { type: [string, "null"] } } }
+        home_team: { type: string }
+        away_team: { type: string }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled] }
+        markets:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              key: { type: string, enum: [h2h, double_chance, totals, btts] }
+              name: { type: string, example: Résultat du match (1X2) }
+              odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
+              odds_updated_at: { type: string, format: date-time }
+              selections:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    key: { type: string, enum: [home, draw, away, home_draw, home_away, draw_away, over, under, yes, no] }
+                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
+                    name: { type: string, example: Arsenal }
+                    odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
