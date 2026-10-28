@@ -1,0 +1,13 @@
+# XAMPP : frontend/index.html est le point d'entrée de Vite (code source non compilé), illisible tel quel
+# par le navigateur. On redirige donc vers le build compilé pour Apache : dist-xampp/ (npm run build:xampp).
+# dist/ est le build standard (chemins à la racine du serveur) : inutilisable sous Apache, on le redirige aussi.
+# Le chemin est repris de l'URL demandée : fonctionne quel que soit l'emplacement du dépôt dans htdocs.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  RewriteCond %{REQUEST_URI} ^(.*/)(index\.html)?$
+  RewriteRule ^(index\.html)?$ %1dist-xampp/ [R=302,L]
+
+  RewriteCond %{REQUEST_URI} ^(.*/)dist(/.*)?$
+  RewriteRule ^dist(/.*)?$ %1dist-xampp/ [R=302,L]
+</IfModule>
