@@ -1,6 +1,9 @@
 <?php
 
+use App\Modules\Admin\Http\Controllers\AdminLedgerController;
+use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
+use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,4 +16,16 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/users', [AdminUserController::class, 'index'])->middleware('permission:users.view');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->middleware('permission:users.view');
     Route::patch('/users/{user}', [AdminUserController::class, 'update'])->middleware(['permission:users.suspend', 'idempotent']);
+
+    // Tickets et finance (P6-04)
+    Route::get('/tickets', [AdminTicketController::class, 'index'])->middleware('permission:tickets.view');
+    Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->whereNumber('ticket')->middleware('permission:tickets.view');
+    Route::get('/ledger', [AdminLedgerController::class, 'index'])->middleware('permission:ledger.view');
+    Route::get('/finance/reconciliation', [AdminLedgerController::class, 'reconciliation'])->middleware('permission:ledger.view');
+    Route::get('/finance/corrections', [FinanceCorrectionController::class, 'index'])->middleware('permission:ledger.view');
+    Route::post('/finance/corrections', [FinanceCorrectionController::class, 'store'])->middleware(['permission:finance.correct', 'idempotent']);
+    Route::post('/finance/corrections/{correction}/approve', [FinanceCorrectionController::class, 'approve'])
+        ->whereNumber('correction')->middleware(['permission:finance.approve', 'idempotent']);
+    Route::post('/finance/corrections/{correction}/reject', [FinanceCorrectionController::class, 'reject'])
+        ->whereNumber('correction')->middleware(['permission:finance.approve', 'idempotent']);
 });
