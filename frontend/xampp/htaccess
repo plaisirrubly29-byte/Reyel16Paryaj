@@ -1,0 +1,18 @@
+# Copié dans dist-xampp/.htaccess par "npm run build:xampp" uniquement (voir vite.config.ts).
+
+# Apache (XAMPP) : toute adresse qui n'est pas un fichier réel est servie par index.html,
+# puis React Router affiche la bonne page (ex. /admin/users, /reset-password?token=…).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# index.html n'est jamais mis en cache : après un nouveau build, le navigateur charge les bons fichiers.
+# (Les fichiers de assets/ portent une empreinte dans leur nom et peuvent rester en cache.)
+<IfModule mod_headers.c>
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>

@@ -5,16 +5,16 @@ Une décision non validée = la fonctionnalité concernée reste **désactivée*
 
 | # | Sujet | Tâche | Statut | Décision | Date | Validé par |
 |---|---|---|---|---|---|---|
-| D-01 | Territoire, cadre juridique, licences | P0-01 | 🟡 À décider | | | |
-| D-02 | Fournisseur de données sportives et cotes (droits, limites, sandbox) | P0-02 | 🟡 À décider | | | |
+| D-01 | Territoire, cadre juridique, licences | P0-01 | 🟡 Proposition ([détail](decisions/D-01-D-09-cadre-juridique.md)) | Haïti seul ; V1 en fonds fictifs ; argent réel après licence écrite | | |
+| D-02 | Fournisseur de données sportives et cotes (droits, limites, sandbox) | P0-02 | 🟡 Pressenti | **The Odds API** (accès détenu par Rubly) — à confirmer : droits d'usage pour des paris, quotas, sports couverts, résultats (scores) | | |
 | D-03 | Sports, compétitions et marchés V1 | P0-03 | 🟡 À décider | | | |
 | D-04 | Types de paris V1 : simple seulement ou combiné | P0-03 | 🟡 À décider | | | |
 | D-05 | Politique changement de cote / annulation / report / abandon / correction | P0-04 | 🟡 À décider | | | |
 | D-06 | Devise, arrondi, mises min/max, plafonds de gain | P0-05 | 🟡 À décider | | | |
 | D-07 | Rôles admin, double validation, limites d'action | P0-06 | 🟡 À décider | | | |
 | D-08 | Prestataires de paiement, frais, webhooks | P7-01 | ⛔ Bloqué | | | |
-| D-09 | Âge, vérification d'identité, jeu responsable, protection des données | P0-01 | 🟡 À décider | | | |
-| D-10 | Hébergement, disponibilité, sauvegardes, rétention | P0-07 | 🟡 À décider | | | |
+| D-09 | Âge, vérification d'identité, jeu responsable, protection des données | P0-01 | 🟡 Proposition ([détail](decisions/D-01-D-09-cadre-juridique.md)) | 18 ans ; KYC avant tout dépôt réel ; jeu responsable dès la V1 | | |
+| D-10 | Hébergement, disponibilité, sauvegardes, rétention | P0-07 | 🟡 Proposition ([détail](decisions/D-10-hebergement.md)) | Staging VPS Docker ; Prod VPS + PostgreSQL managé ; 99,5 %, RPO 15 min, RTO 4 h ; 50–120 $/mois estimés | | |
 
 ## Décisions techniques déjà prises
 
