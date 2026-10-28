@@ -89,8 +89,10 @@ class ResultImportService
 
         if (! $data->completed) {
             $report->inProgress++;
-            if ($event->status === EventStatus::Scheduled && $event->starts_at->isPast()) {
-                $event->update(['status' => EventStatus::Live]);
+            // Match commencé : en direct, avec le score du moment (un score illisible n'efface pas le précédent).
+            if (in_array($event->status, [EventStatus::Scheduled, EventStatus::Live], true) && $event->starts_at->isPast()) {
+                $scores = $this->liveScore($data);
+                $event->update(['status' => EventStatus::Live] + ($scores === null ? [] : ['home_score' => $scores[0], 'away_score' => $scores[1]]));
             }
 
             return;
@@ -121,5 +123,17 @@ class ResultImportService
 
         $result->version === 1 ? $report->recorded++ : $report->corrected++;
         $report->results[] = $result;
+    }
+
+    /** @return array{0: string, 1: string}|null score en cours normalisé, null s'il est absent ou invalide */
+    private function liveScore(ResultData $data): ?array
+    {
+        foreach ([$data->homeScore, $data->awayScore] as $score) {
+            if ($score === null || ! preg_match('/^\d{1,3}$/', trim($score))) {
+                return null;
+            }
+        }
+
+        return [(string) (int) trim($data->homeScore), (string) (int) trim($data->awayScore)];
     }
 }

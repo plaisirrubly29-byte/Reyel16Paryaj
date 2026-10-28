@@ -7,7 +7,7 @@ use App\Modules\SportsData\Models\Event;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Lecture du catalogue public (P3-05) : les événements à venir qui ont au moins un marché ouvert
+ * Lecture du catalogue public (P3-05) : les événements à venir ou en cours qui ont au moins un marché ouvert
  * et coté (Market::scopeDisplayable). Une cote trop ancienne reste affichée mais n'est pas pariable
  * (règle de fraîcheur, Market::isBettable, exposée par MarketResource en "bettable").
  * Lecture seule des tables du module SportsData.
@@ -21,8 +21,10 @@ class CatalogueQuery
     public function visibleEvents(?string $marketKey = null): Builder
     {
         return Event::query()
-            ->where('status', EventStatus::Scheduled)
-            ->where('starts_at', '>', now())
+            // À venir, ou en cours (statut "live" posé par la synchro en direct : onglet Live).
+            ->where(fn ($q) => $q
+                ->where(fn ($s) => $s->where('status', EventStatus::Scheduled)->where('starts_at', '>', now()))
+                ->orWhere('status', EventStatus::Live))
             ->whereHas('markets', fn ($q) => $q->displayable()->when($marketKey, fn ($m) => $m->where('key', $marketKey)))
             ->whereHas('competition', fn ($q) => $q->where('is_active', true)
                 ->whereHas('sport', fn ($s) => $s->where('is_active', true)));

@@ -19,7 +19,8 @@ use Carbon\CarbonImmutable;
  * En test : $fake->failWith(SportsDataException::UNAVAILABLE) simule une panne ;
  * $fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.85']) simule un changement de cote ;
  * $fake->setOdds('fake-1', 'totals', ['Over' => '1.70', 'Under' => '2.10'], '3.5') un changement de ligne ;
- * $fake->setResult('fake-1', '2', '1') publie un score final (completed: false = match en cours).
+ * $fake->setResult('fake-1', '2', '1') publie un score final (completed: false = match en cours) ;
+ * $fake->setStartsAt('fake-1', now()->subMinutes(30)) fait commencer un match (cotes en direct).
  * Les matchs de football ont un 1X2 (h2h) et un plus/moins 2.5 buts (totals) ; la NBA n'a que le h2h.
  */
 class FakeSportsDataProvider implements SportsDataProvider
@@ -34,6 +35,9 @@ class FakeSportsDataProvider implements SportsDataProvider
 
     /** @var array<string, array{home: ?string, away: ?string, completed: bool}> */
     private array $results = [];
+
+    /** @var array<string, CarbonImmutable> */
+    private array $startsAt = [];
 
     private ?CarbonImmutable $updatedAtOverride = null;
 
@@ -64,6 +68,14 @@ class FakeSportsDataProvider implements SportsDataProvider
     public function setResult(string $eventId, ?string $homeScore, ?string $awayScore, bool $completed = true): static
     {
         $this->results[$eventId] = ['home' => $homeScore, 'away' => $awayScore, 'completed' => $completed];
+
+        return $this;
+    }
+
+    /** Heure de début d'un match du faux catalogue (par défaut relative à maintenant, donc toujours à venir). */
+    public function setStartsAt(string $eventId, CarbonImmutable $startsAt): static
+    {
+        $this->startsAt[$eventId] = $startsAt;
 
         return $this;
     }
@@ -139,7 +151,11 @@ class FakeSportsDataProvider implements SportsDataProvider
             ],
         ];
 
-        return $fixtures[$sportKey] ?? [];
+        return array_map(function (array $f) {
+            $f[3] = $this->startsAt[$f[0]] ?? $f[3];
+
+            return $f;
+        }, $fixtures[$sportKey] ?? []);
     }
 
     /** @param array<string, string> $odds */
