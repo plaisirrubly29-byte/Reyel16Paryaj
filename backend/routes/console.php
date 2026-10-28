@@ -18,3 +18,9 @@ Schedule::command('sports-data:sync')
     ->cron((string) config('sports_data.sync_cron'))
     ->withoutOverlapping()
     ->onOneServer();
+
+// Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
+Schedule::command('settlement:import-results')
+    ->cron((string) config('sports_data.results_cron'))
+    ->withoutOverlapping()
+    ->onOneServer();

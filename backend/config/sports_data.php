@@ -83,4 +83,10 @@ return [
     // Règle de fraîcheur (P3-04) : au-delà, la cote n'est plus proposée. Doit dépasser l'intervalle de synchro.
     'max_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_ODDS_AGE', 300),
 
+    // Import des résultats (P5-04) : seules les compétitions avec un match commencé depuis results_delay_minutes
+    // et sans résultat sont interrogées (2 crédits chacune chez The Odds API). Par défaut toutes les heures.
+    'results_cron' => env('SPORTS_DATA_RESULTS_CRON', '20 * * * *'),
+    // Durée minimale entre le début du match et la première demande de résultat (football : ~1 h 45).
+    'results_delay_minutes' => (int) env('SPORTS_DATA_RESULTS_DELAY', 105),
+
 ];
