@@ -1,0 +1,76 @@
+<?php
+
+namespace App\Modules\Admin\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Modules\Admin\Http\Resources\AdminUserResource;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\IdentityAccess\Enums\AccountStatus;
+use App\Modules\IdentityAccess\Enums\RoleSlug;
+use App\Modules\IdentityAccess\Services\AccountStatusService;
+use App\Support\Http\Pagination;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
+
+class AdminUserController extends Controller
+{
+    public function index(Request $request): AnonymousResourceCollection
+    {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', Rule::enum(AccountStatus::class)],
+            'role' => ['nullable', Rule::enum(RoleSlug::class)],
+        ]);
+
+        $users = User::query()
+            ->with(['roles', 'profile'])
+            ->when($filters['search'] ?? null, function ($query, string $search) {
+                $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], mb_strtolower($search)).'%';
+                // Téléphone : numéro complet uniquement (même normalisation qu'à la connexion),
+                // pour ne pas mélanger une recherche par identifiant avec des fragments de numéro.
+                $phone = preg_replace('/\D+/', '', $search);
+                if (strlen($phone) === 11 && str_starts_with($phone, '509')) {
+                    $phone = substr($phone, 3);
+                }
+                $query->where(fn ($q) => $q
+                    ->whereRaw("LOWER(email) LIKE ? ESCAPE '\\'", [$like])
+                    ->orWhereRaw("LOWER(name) LIKE ? ESCAPE '\\'", [$like])
+                    ->when(strlen($phone) === 8, fn ($q) => $q->orWhere('phone', $phone))
+                    ->when(ctype_digit($search), fn ($q) => $q->orWhere('id', (int) $search)));
+            })
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($filters['role'] ?? null, fn ($q, $role) => $q->whereHas('roles', fn ($r) => $r->where('slug', $role)))
+            ->orderByDesc('id')
+            ->paginate(Pagination::perPage($request))
+            ->withQueryString();
+
+        return AdminUserResource::collection($users);
+    }
+
+    public function show(Request $request, User $user, AuditLogger $audit): AdminUserResource
+    {
+        // Consultation de données personnelles complètes : journalisée.
+        if ($request->user()->hasPermission('users.view_personal_data')) {
+            $audit->record(AuditAction::UserPersonalDataViewed, $user);
+        }
+
+        return new AdminUserResource($user->load(['roles', 'profile']));
+    }
+
+    public function update(Request $request, User $user, AccountStatusService $accounts): AdminUserResource
+    {
+        $data = $request->validate([
+            'status' => ['required', Rule::in([AccountStatus::Active->value, AccountStatus::Suspended->value])],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $user = $data['status'] === AccountStatus::Suspended->value
+            ? $accounts->suspend($request->user(), $user, $data['reason'])
+            : $accounts->reactivate($request->user(), $user, $data['reason']);
+
+        return new AdminUserResource($user->load(['roles', 'profile']));
+    }
+}
