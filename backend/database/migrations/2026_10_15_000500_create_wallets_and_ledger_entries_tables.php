@@ -45,9 +45,10 @@ return new class extends Migration
             $table->index(['related_type', 'related_id']);
         });
 
+        // OR REPLACE : migrate:fresh supprime les tables (et donc le déclencheur) mais pas les fonctions.
         if (DB::getDriverName() === 'pgsql') {
             DB::unprepared(<<<'SQL'
-                CREATE FUNCTION ledger_entries_append_only() RETURNS trigger AS $$
+                CREATE OR REPLACE FUNCTION ledger_entries_append_only() RETURNS trigger AS $$
                 BEGIN
                     RAISE EXCEPTION 'ledger_entries est en ajout seul : utiliser une écriture compensatoire';
                 END;

@@ -752,8 +752,10 @@ components:
               id: { type: string }
               key: { type: string, enum: [h2h, double_chance, totals, btts] }
               name: { type: string, example: Résultat du match (1X2) }
+              line: { type: [string, "null"], example: "2.5", description: Ligne du plus/moins ; null pour les autres marchés }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
+              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable" }
               selections:
                 type: array
                 items:
