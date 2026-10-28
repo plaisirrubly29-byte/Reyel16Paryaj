@@ -2,6 +2,7 @@
 
 namespace App\Modules\IdentityAccess\Http\Requests;
 
+use App\Modules\IdentityAccess\Support\PhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -36,22 +37,7 @@ class RegisterRequest extends FormRequest
         }
 
         if (is_string($this->input('phone'))) {
-            $this->merge(['phone' => $this->normalizePhone($this->input('phone'))]);
+            $this->merge(['phone' => PhoneNumber::normalize($this->input('phone'))]);
         }
-    }
-
-    /**
-     * Garde uniquement les chiffres, puis retire l'indicatif "509" s'il est présent
-     * (saisie du type "+509 34 12 34 56" ou "509-3412-3456").
-     */
-    private function normalizePhone(string $phone): string
-    {
-        $digits = preg_replace('/\D+/', '', $phone);
-
-        if (strlen($digits) === 11 && str_starts_with($digits, '509')) {
-            $digits = substr($digits, 3);
-        }
-
-        return $digits;
     }
 }
