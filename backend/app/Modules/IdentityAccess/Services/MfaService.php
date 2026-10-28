@@ -54,7 +54,8 @@ class MfaService
 
         return [
             'secret' => $secret,
-            'otpauth_uri' => Totp::provisioningUri($secret, $user->email, (string) config('app.name')),
+            // Email facultatif depuis la connexion par téléphone : le numéro sert alors de nom de compte (revue P8-02, F1).
+            'otpauth_uri' => Totp::provisioningUri($secret, $user->email ?? $user->phone, (string) config('app.name')),
         ];
     }
 
