@@ -16,6 +16,10 @@ import { WalletPage } from '../features/wallet/pages/WalletPage';
 import { RequirePermission } from '../admin/components/RequireAdmin';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { AdminHomePage } from '../admin/pages/AdminHomePage';
+import { CorrectionDetailPage } from '../admin/pages/CorrectionDetailPage';
+import { EventDetailPage } from '../admin/pages/EventDetailPage';
+import { EventsPage } from '../admin/pages/EventsPage';
+import { SettlementsPage } from '../admin/pages/SettlementsPage';
 import { UserDetailPage } from '../admin/pages/UserDetailPage';
 import { TicketDetailPage } from '../admin/pages/TicketDetailPage';
 import { TicketsPage } from '../admin/pages/TicketsPage';
@@ -51,8 +55,10 @@ export const routes = [
     element: <AdminLayout />,
     children: [
       section('', <AdminHomePage />),
-      section('events', <Placeholder title="Événements & marchés" task="P6-06" />),
-      section('settlements', <Placeholder title="Résultats & règlement" task="P6-06" />),
+      section('events', <EventsPage />),
+      section('events/:id', <EventDetailPage />),
+      section('settlements', <SettlementsPage />),
+      section('settlements/:id', <CorrectionDetailPage />),
       section('users', <UsersPage />),
       section('users/:id', <UserDetailPage />),
       section('tickets', <TicketsPage />),
