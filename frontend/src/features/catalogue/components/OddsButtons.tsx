@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useBetSlip } from '../../betting/slip/BetSlipContext';
 import type { CatalogueEvent, CatalogueMarket } from '../api/catalogue';
+import { isLiveStatus } from '../format';
 import { favoriteSelection, impliedShares, marketTitle, matchingSelections } from '../markets';
 
 type Props = {
@@ -14,14 +15,20 @@ type Props = {
   variant?: 'card' | 'bar' | 'wide';
 };
 
+/** Raison affichée sur une cote non pariable : match en cours (paris en direct fermés) ou cote trop ancienne. */
+function lockedReason(event: CatalogueEvent): string {
+  return isLiveStatus(event.status) ? 'Paris fermés pendant le match' : 'Cote en cours de mise à jour';
+}
+
 /**
  * Cotes d'un marché : chaque bouton ajoute ou retire la sélection du coupon (un choix par marché et par match).
- * Une cote trop ancienne reste affichée mais ne peut pas être ajoutée au coupon.
+ * Une cote non pariable (trop ancienne, ou match en direct) reste affichée mais ne peut pas être ajoutée au coupon.
  */
 export function MarketOdds({ event, market, variant = 'card', selectionSearch = '' }: Props) {
   const slip = useBetSlip();
   const match = `${event.home_team} – ${event.away_team}`;
   const locked = market.bettable === false;
+  const reason = lockedReason(event);
   const favoriteId = favoriteSelection(market.selections);
   const shares = impliedShares(market.selections);
   const visibleSelections = matchingSelections(market, selectionSearch);
@@ -46,8 +53,8 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
             className={`odds-btn odds-btn-${variant}${selected ? ' selected' : ''}${favorite ? ' favorite' : ''}`}
             aria-pressed={selected}
             disabled={locked}
-            title={locked ? 'Cote en cours de mise à jour' : undefined}
-            aria-label={`${name}${locked ? ' (cote en cours de mise à jour)' : ''}`}
+            title={locked ? reason : undefined}
+            aria-label={`${name}${locked ? ` (${reason.toLowerCase()})` : ''}`}
             onClick={() => slip.toggle({
               selectionId: s.id,
               eventId: event.id,
