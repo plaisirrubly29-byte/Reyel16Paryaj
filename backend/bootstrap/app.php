@@ -21,8 +21,12 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    // Commandes artisan des modules (ex. sports-data:check, settlement:import-results).
-    ->withCommands([__DIR__.'/../app/Modules/SportsData/Console', __DIR__.'/../app/Modules/Settlement/Console'])
+    // Commandes artisan des modules (ex. sports-data:check, settlement:import-results, identity:grant-role).
+    ->withCommands([
+        __DIR__.'/../app/Modules/SportsData/Console',
+        __DIR__.'/../app/Modules/Settlement/Console',
+        __DIR__.'/../app/Modules/IdentityAccess/Console',
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Identifiant de corrélation X-Request-Id (P1-04) : en tête, pour figurer dans tous les logs de la requête.
         $middleware->prepend(AssignRequestId::class);
