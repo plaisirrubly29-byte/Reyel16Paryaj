@@ -42,7 +42,10 @@ paths:
     post:
       tags: [Auth]
       summary: Inscription (compte joueur) — ouvre la session
-      description: Limité à 5 requêtes/minute par IP. Âge minimum configurable (IDENTITY_MINIMUM_AGE, 18 par défaut).
+      description: |
+        Limité à 5 requêtes/minute par IP. Âge minimum configurable (IDENTITY_MINIMUM_AGE, 18 par défaut).
+        V1 (fonds fictifs) : le portefeuille reçoit un crédit de bienvenue (WALLET_WELCOME_CREDIT_MINOR,
+        5 000,00 HTG par défaut ; 0 le désactive), visible dans GET /wallet et ses transactions.
       requestBody:
         required: true
         content:

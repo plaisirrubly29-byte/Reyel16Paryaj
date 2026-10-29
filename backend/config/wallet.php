@@ -13,4 +13,7 @@ return [
     // V1 : fonds fictifs uniquement. Aucun mouvement réel tant que P7-01 n'est pas débloqué.
     'simulated' => true,
 
+    // Fonds fictifs crédités à l'inscription, en unité mineure (500 000 = 5 000,00 HTG). 0 désactive le crédit.
+    'welcome_credit_minor' => (int) env('WALLET_WELCOME_CREDIT_MINOR', 500_000),
+
 ];
