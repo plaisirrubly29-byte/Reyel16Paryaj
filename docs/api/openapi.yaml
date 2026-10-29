@@ -688,6 +688,47 @@ paths:
           description: "`invalid_status_transition`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/responsible-gaming:
+    get:
+      tags: [Admin]
+      summary: Jeu responsable d'un joueur — limites, pause, pauses et exclusions, journal (permission responsible_gaming.view)
+      description: Consultation journalisée (responsible_gaming.viewed). Journal limité aux 100 derniers événements.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminResponsibleGaming" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/users/{id}/responsible-gaming/reopen:
+    post:
+      tags: [Admin]
+      summary: Rouvrir une auto-exclusion arrivée à échéance, à la demande du joueur (motif requis, audité)
+      description: |
+        Permission responsible_gaming.manage (Conformité). Avant l'échéance : 409 exclusion_not_ended (details.ends_at) ;
+        compte non exclu ou exclusion déjà levée : 409 invalid_status_transition. Le compte redevient actif ;
+        audit user.self_exclusion_ended, journal self_exclusion.lifted.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 255 } } } } }
+      responses:
+        "200":
+          description: Compte rouvert
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminResponsibleGaming" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`exclusion_not_ended` ou `invalid_status_transition`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
   /admin/audit-logs:
     get:
       tags: [Admin]
@@ -824,6 +865,35 @@ components:
             pause_durations: { type: array, items: { type: string }, example: ["24h", "7d", "30d"] }
             exclusion_durations: { type: array, items: { type: string }, example: ["6m", "1y", "5y"] }
             limit_increase_delay_days: { type: integer, example: 7 }
+    AdminResponsibleGaming:
+      type: object
+      properties:
+        user: { type: object, properties: { id: { type: string }, status: { type: string, enum: [active, suspended, excluded, closed] } } }
+        limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/limits" }
+        pause: { $ref: "#/components/schemas/ResponsibleGaming/properties/pause" }
+        restrictions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              type: { type: string, enum: [pause, self_exclusion] }
+              duration: { type: string, example: 6m }
+              starts_at: { type: string, format: date-time }
+              ends_at: { type: string, format: date-time }
+              ended: { type: boolean }
+              lifted:
+                type: [object, "null"]
+                properties: { at: { type: string, format: date-time }, by: { type: string }, reason: { type: string } }
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string, example: limit.lowered }
+              data: { type: [object, "null"] }
+              actor_id: { type: [string, "null"], description: "null : action du joueur ou du système" }
+              created_at: { type: string, format: date-time }
     AdminUser:
       type: object
       properties:

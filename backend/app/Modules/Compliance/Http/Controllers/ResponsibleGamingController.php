@@ -5,8 +5,8 @@ namespace App\Modules\Compliance\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Compliance\Enums\LimitPeriod;
 use App\Modules\Compliance\Enums\RestrictionType;
+use App\Modules\Compliance\Http\Resources\ResponsibleGamingPresenter;
 use App\Modules\Compliance\Services\ResponsibleGamingService;
-use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -71,23 +71,10 @@ class ResponsibleGamingController extends Controller
     private function state(Request $request): JsonResponse
     {
         $status = $this->responsibleGaming->status($request->user());
-        $currency = (string) config('wallet.currency');
-        $money = fn (?int $minor) => $minor === null ? null : ['minor' => $minor, 'currency' => $currency];
 
         return response()->json(['data' => [
-            'limits' => collect($status['limits'])->map(fn (array $limit) => [
-                'amount' => $money($limit['amount_minor']),
-                'used' => $money($limit['used_minor']),
-                'remaining' => $money($limit['remaining_minor']),
-                'pending' => $limit['pending'] === null ? null : [
-                    'amount' => $money($limit['pending']['amount_minor']),
-                    'effective_at' => $limit['pending']['effective_at']->toIso8601String(),
-                ],
-            ]),
-            'pause' => [
-                'active' => $status['pause'] !== null,
-                'ends_at' => $status['pause']?->ends_at instanceof CarbonInterface ? $status['pause']->ends_at->toIso8601String() : null,
-            ],
+            'limits' => ResponsibleGamingPresenter::limits($status['limits']),
+            'pause' => ResponsibleGamingPresenter::pause($status['pause']),
             'options' => [
                 'pause_durations' => array_keys(RestrictionType::Pause->durations()),
                 'exclusion_durations' => array_keys(RestrictionType::SelfExclusion->durations()),
