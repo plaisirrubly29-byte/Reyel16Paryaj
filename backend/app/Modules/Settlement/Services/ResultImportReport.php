@@ -16,6 +16,9 @@ final class ResultImportReport
     /** Même issue que la version enregistrée : rien à faire. */
     public int $unchanged = 0;
 
+    /** Corrections après règlement : demande de correction en attente de validation (P5-06). */
+    public int $awaitingApproval = 0;
+
     /** Matchs pas encore terminés chez le fournisseur. */
     public int $inProgress = 0;
 
@@ -45,6 +48,7 @@ final class ResultImportReport
             'recorded' => $this->recorded,
             'corrected' => $this->corrected,
             'unchanged' => $this->unchanged,
+            'awaiting_approval' => $this->awaitingApproval,
             'in_progress' => $this->inProgress,
             'unknown' => $this->unknown,
             'rejected' => $this->rejected,

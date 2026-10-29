@@ -887,6 +887,167 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
+  /admin/events/{id}/results:
+    get:
+      tags: [Admin]
+      summary: Historique complet du résultat d'un match — versions et demandes de correction (permission events.view)
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      event_id: { type: string }
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            version: { type: integer }
+                            status: { type: string, enum: [final, cancelled] }
+                            score: { type: [string, "null"], example: "2-1" }
+                            source: { type: string, example: manual, description: "Fournisseur, ou « manual » (correction validée)" }
+                            external_id: { type: [string, "null"] }
+                            entered_by: { type: [object, "null"], description: "Validateur d'une correction ; null : fournisseur" }
+                            correction_reason: { type: [string, "null"] }
+                            created_at: { type: string, format: date-time }
+                      corrections: { type: array, items: { $ref: "#/components/schemas/ResultCorrection" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/events/{id}/result-corrections:
+    post:
+      tags: [Admin]
+      summary: Demander la correction du résultat d'un match (motif requis, audité) — rien ne change avant validation
+      description: |
+        Permission results.enter. Une seule demande en attente par match. La réponse contient l'aperçu de l'impact
+        (tickets dont l'issue change, montants). Une correction envoyée par le fournisseur après règlement crée aussi
+        une demande (requested_by null), à valider de la même façon.
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [final, cancelled] }
+                home_score: { type: [string, "null"], example: "1", description: "Obligatoire si final" }
+                away_score: { type: [string, "null"], example: "2", description: "Obligatoire si final" }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Demande créée, en attente
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`no_result_to_correct`, `result_unchanged` ou `correction_already_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/result-corrections:
+    get:
+      tags: [Admin]
+      summary: Demandes de correction de résultat (permission results.enter)
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: event, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ResultCorrection" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/result-corrections/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une demande ; en attente, avec l'aperçu de l'impact si elle était validée maintenant
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/result-corrections/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une correction (second administrateur, motif requis, audité)
+      description: |
+        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden). Dans une transaction : nouvelle
+        version du résultat (source manual, validateur, motif), réévaluation des tickets déjà réglés — gain ou
+        remboursement précédent compensé (reversal), nouvelle écriture si besoin, nouvelle révision du règlement. Un
+        gain repris peut rendre le solde négatif. Un combiné perdu sur ce match redevient « pending » si d'autres matchs
+        ne sont pas joués. 409 result_changed si le résultat a changé depuis la demande.
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Correction appliquée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { description: "`forbidden` ou `self_approval_forbidden`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending` ou `result_changed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "423": { description: "`wallet_frozen` : un portefeuille concerné est gelé, rien n'est appliqué" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/result-corrections/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser (results.approve) ou retirer (demandeur) une demande en attente (motif requis, audité)
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Demande refusée ou retirée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
   /admin/audit-logs:
     get:
       tags: [Admin]
@@ -1558,6 +1719,41 @@ components:
               expected: { $ref: "#/components/schemas/Money" }
               actual: { $ref: "#/components/schemas/Money" }
         truncated: { type: boolean, description: "true : au moins un contrôle a plus d'écarts que la liste n'en montre" }
+    ResultCorrectionImpact:
+      type: object
+      description: Tickets dont l'issue change (aperçu ou réévaluation appliquée)
+      properties:
+        tickets_count: { type: integer }
+        ledger_delta_minor: { type: integer, description: "Somme des variations de gain (négatif : argent repris)" }
+        tickets:
+          type: array
+          items:
+            type: object
+            properties:
+              ticket_id: { type: string }
+              reference: { type: string }
+              user_id: { type: string }
+              from: { type: object, properties: { status: { type: string }, payout_minor: { type: integer } } }
+              to: { type: object, properties: { status: { type: string, enum: [pending, won, lost, void] }, payout_minor: { type: integer } } }
+              ledger_delta_minor: { type: integer }
+    ResultCorrection:
+      type: object
+      properties:
+        id: { type: string }
+        event: { type: object, properties: { id: { type: string }, name: { type: string, example: "Arsenal – Chelsea" } } }
+        status: { type: string, enum: [pending, approved, rejected] }
+        current: { type: object, description: "Version en vigueur lors de la demande", properties: { version: { type: integer }, status: { type: string }, score: { type: [string, "null"] } } }
+        proposed: { type: object, properties: { status: { type: string, enum: [final, cancelled] }, score: { type: [string, "null"] } } }
+        source: { type: string, description: "manual (administrateur) ou nom du fournisseur" }
+        reason: { type: string }
+        requested_by: { type: [object, "null"], description: "null : correction envoyée par le fournisseur" }
+        decided_by: { type: [object, "null"] }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        applied_result_id: { type: [string, "null"] }
+        impact: { oneOf: [{ $ref: "#/components/schemas/ResultCorrectionImpact" }, { type: "null" }], description: "Réévaluation appliquée (validée)" }
+        preview: { $ref: "#/components/schemas/ResultCorrectionImpact" }
+        created_at: { type: string, format: date-time }
     FinanceCorrection:
       type: object
       properties:

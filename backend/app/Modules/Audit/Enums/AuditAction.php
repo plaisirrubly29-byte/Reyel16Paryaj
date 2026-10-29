@@ -28,6 +28,11 @@ enum AuditAction: string
     case FinanceCorrectionApproved = 'finance.correction_approved';
     case FinanceCorrectionRejected = 'finance.correction_rejected';
 
+    // Settlement — correction de résultat à double contrôle (P5-06)
+    case ResultCorrectionRequested = 'result.correction_requested';
+    case ResultCorrectionApproved = 'result.correction_approved';
+    case ResultCorrectionRejected = 'result.correction_rejected';
+
     // Audit
     case AuditViewed = 'audit.viewed';
     case AuditExported = 'audit.exported';

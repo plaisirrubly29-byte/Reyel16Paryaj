@@ -39,12 +39,12 @@ class ImportResultsCommand extends Command
             $report = $import->import($key, $daysFrom);
             $failed = $failed || ! $report->succeeded();
             $rows[] = [
-                $key, $report->recorded, $report->corrected, $report->unchanged,
+                $key, $report->recorded, $report->corrected, $report->awaitingApproval, $report->unchanged,
                 $report->inProgress, $report->unknown, $report->rejected, $report->error ?? '—',
             ];
         }
 
-        $this->table(['Compétition', 'Nouveaux', 'Corrigés', 'Inchangés', 'En cours', 'Inconnus', 'Rejetés', 'Erreur'], $rows);
+        $this->table(['Compétition', 'Nouveaux', 'Corrigés', 'À valider', 'Inchangés', 'En cours', 'Inconnus', 'Rejetés', 'Erreur'], $rows);
 
         return $failed ? self::FAILURE : self::SUCCESS;
     }
