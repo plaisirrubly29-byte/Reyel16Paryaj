@@ -7,6 +7,7 @@ use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Competition;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\SportsData\Services\LiveUpdateService;
@@ -79,16 +80,24 @@ class LiveUpdateTest extends TestCase
 
         $this->assertSame('live', $live['status']);
         $this->assertSame(['home' => '2', 'away' => '1'], $live['score']);
-        $this->assertTrue($live['markets'][0]['bettable']);
+        $this->assertFalse($live['markets'][0]['bettable']); // paris en direct désactivés par défaut (P8-02, E1)
         $this->assertNull($events->firstWhere('home_team', 'Liverpool')['score']);
         $this->getJson("/api/v1/events/{$live['id']}/markets")->assertOk()->assertJsonPath('data.status', 'live');
     }
 
     public function test_live_odds_stop_being_bettable_sooner_than_pre_match_odds(): void
     {
+        config(['betting.allow_live' => true]);
         $this->fake->setResult('fake-1', '0', '0', completed: false);
         $this->live();
         app(CatalogueSyncService::class)->sync('soccer_epl'); // cotes d'avant-match fraîches pour fake-2
+
+        $live = fn () => Market::bettable()->whereHas('event', fn ($e) => $e->where('external_id', 'fake-1'))->count();
+        $this->assertTrue(collect($this->getJson('/api/v1/events')->json('data'))->firstWhere('home_team', 'Arsenal')['markets'][0]['bettable']);
+        $this->assertGreaterThan(0, $live());
+        config(['betting.allow_live' => false]);
+        $this->assertSame(0, $live());
+        config(['betting.allow_live' => true]);
 
         $this->travel(21)->minutes();
 

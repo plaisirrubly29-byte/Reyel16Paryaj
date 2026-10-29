@@ -359,8 +359,8 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422":
           description: |
-            validation_failed ; selection_unavailable (details.selection_ids : match commencé ou terminé, marché fermé,
-            cote trop ancienne) ; same_event_selections ; multiple_not_allowed ; stake_out_of_range (details.min / max) ;
+            validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
+            direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ; multiple_not_allowed ; stake_out_of_range (details.min / max) ;
             currency_mismatch ; insufficient_funds.
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
@@ -815,7 +815,7 @@ components:
               line: { type: [string, "null"], example: "2.5", description: Ligne du plus/moins ; null pour les autres marchés }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
-              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable" }
+              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou match en direct (paris en direct désactivés, betting.allow_live), affichée mais non pariable" }
               selections:
                 type: array
                 items:

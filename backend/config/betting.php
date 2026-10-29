@@ -24,6 +24,11 @@ return [
     'allow_multiple' => (bool) env('BETTING_ALLOW_MULTIPLE', true),
     'max_selections' => (int) env('BETTING_MAX_SELECTIONS', 20),
 
+    // Paris sur les matchs en cours : HORS PÉRIMÈTRE V1 (docs/architecture.md, revue P8-02 E1). Un match en direct
+    // reste affiché avec son score, mais ses marchés ne sont pas pariables (selection_unavailable). Ne l'activer
+    // qu'après une décision écrite, avec des cotes rafraîchies en quelques secondes et un délai d'acceptation.
+    'allow_live' => (bool) env('BETTING_ALLOW_LIVE', false),
+
     // D-05 : "reject" — toute cote différente de celle vue par le joueur est refusée (409 odds_changed,
     // avec la nouvelle cote) ; le joueur confirme en renvoyant le pari avec la cote à jour.
     'odds_change_policy' => 'reject',
