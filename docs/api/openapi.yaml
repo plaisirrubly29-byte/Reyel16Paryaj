@@ -205,11 +205,30 @@ paths:
   /auth/mfa/recovery-codes:
     post:
       tags: [Auth]
-      summary: Régénérer les codes de secours (session MFA validée)
+      summary: Régénérer les codes de secours (session MFA validée + code TOTP courant)
+      description: |
+        Exige un code TOTP courant (pas un code de secours) : une session volée ne suffit pas.
+        Régénération auditée (`mfa.recovery_codes_regenerated`).
       security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "123456" }
       responses:
         "200": { description: Nouveaux codes (les anciens sont invalidés) }
+        "401":
+          description: "`mfa_too_many_failures` : trop d'échecs consécutifs (5), la session est fermée et il faut se reconnecter"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé) ; chaque échec est audité (`mfa.failed`)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/logout:
     post:
       tags: [Auth]
