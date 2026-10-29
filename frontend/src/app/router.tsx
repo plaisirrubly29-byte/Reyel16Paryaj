@@ -12,7 +12,11 @@ import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
+import { TransactionsPage } from '../features/wallet/pages/TransactionsPage';
 import { WalletPage } from '../features/wallet/pages/WalletPage';
+import { AccountLayout } from '../features/account/AccountLayout';
+import { LoyaltyPage, MessagesPage, ReferralPage } from '../features/account/ComingSoonPage';
+import { CouponsPage } from '../features/betting/pages/CouponsPage';
 import { RequirePermission } from '../admin/components/RequireAdmin';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { AdminHomePage } from '../admin/pages/AdminHomePage';
@@ -29,6 +33,8 @@ import { SettlementsPage } from '../admin/pages/SettlementsPage';
 import { UserDetailPage } from '../admin/pages/UserDetailPage';
 import { TicketDetailPage } from '../admin/pages/TicketDetailPage';
 import { TicketsPage } from '../admin/pages/TicketsPage';
+import { RiskPage } from '../admin/pages/RiskPage';
+import { SystemPage } from '../admin/pages/SystemPage';
 import { UsersPage } from '../admin/pages/UsersPage';
 import { Placeholder } from '../shared/components/Placeholder';
 
@@ -49,9 +55,20 @@ export const routes = [
       { path: 'register', element: <RegisterPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
       { path: 'reset-password', element: <ResetPasswordPage /> },
-      { path: 'account', element: <RequireAuth><AccountPage /></RequireAuth> },
-      { path: 'bets', element: <RequireAuth><MyBetsPage /></RequireAuth> },
-      { path: 'wallet', element: <RequireAuth><WalletPage /></RequireAuth> },
+      // Espace joueur : menu commun des rubriques, accessible une fois connecté.
+      {
+        element: <RequireAuth><AccountLayout /></RequireAuth>,
+        children: [
+          { path: 'wallet', element: <WalletPage /> },
+          { path: 'bets', element: <MyBetsPage /> },
+          { path: 'coupons', element: <CouponsPage /> },
+          { path: 'transactions', element: <TransactionsPage /> },
+          { path: 'loyalty', element: <LoyaltyPage /> },
+          { path: 'referral', element: <ReferralPage /> },
+          { path: 'account', element: <AccountPage /> },
+          { path: 'messages', element: <MessagesPage /> },
+        ],
+      },
     ],
   },
   // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
@@ -69,10 +86,12 @@ export const routes = [
       section('users/:id', <UserDetailPage />),
       section('tickets', <TicketsPage />),
       section('tickets/:id', <TicketDetailPage />),
+      section('risk', <RiskPage />),
       section('finance', <LedgerPage />),
       section('finance/reconciliation', <ReconciliationPage />),
       section('finance/corrections', <FinanceCorrectionsPage />),
       section('finance/corrections/:id', <FinanceCorrectionDetailPage />),
+      section('system', <SystemPage />),
       section('settings', <SettingsPage />),
       section('audit', <AuditPage />),
     ],

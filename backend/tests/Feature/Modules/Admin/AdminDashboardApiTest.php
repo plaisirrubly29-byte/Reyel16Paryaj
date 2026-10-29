@@ -7,6 +7,7 @@ use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\SportsData\Enums\MarketStatus;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Modules\Betting\BuildsBetTickets;
@@ -22,7 +23,9 @@ class AdminDashboardApiTest extends TestCase
         parent::setUp();
 
         $this->seed(PermissionSeeder::class);
-        $this->travelTo(now()->setTime(12, 0));
+        config(['app.display_timezone' => 'America/Port-au-Prince']);
+        // 15 h UTC = 11 h à Port-au-Prince (UTC-4 en octobre).
+        $this->travelTo(CarbonImmutable::parse('2026-10-29 15:00:00', 'UTC'));
     }
 
     private function admin(RoleSlug $role): User
@@ -30,41 +33,66 @@ class AdminDashboardApiTest extends TestCase
         return User::factory()->withRole($role)->create();
     }
 
-    public function test_super_admin_gets_every_section_with_daily_series(): void
+    public function test_figures_follow_the_period_and_local_days(): void
     {
         $player = User::factory()->create();
         User::factory()->withStatus(AccountStatus::Suspended)->create(['created_at' => now()->subDays(20)]);
 
-        $this->ticket($player, ['placed_at' => now()]);
-        $this->ticket($player, ['placed_at' => now()->subDays(2), 'status' => BetTicketStatus::Won, 'payout_minor' => 205_00, 'settled_at' => now()]);
+        $today = $this->ticket($player, ['placed_at' => now()]);
+        $this->select($today, $this->market());
+        // 2 h UTC le 29 = 22 h le 28 à Port-au-Prince : compté le 28 en heure locale.
+        $this->ticket($player, ['placed_at' => '2026-10-29 02:00:00', 'status' => BetTicketStatus::Won, 'payout_minor' => 205_00, 'settled_at' => now()]);
         $this->ticket($player, ['placed_at' => now()->subDays(3), 'status' => BetTicketStatus::Lost, 'payout_minor' => 0, 'settled_at' => now()]);
-        $this->ticket($player, ['placed_at' => now()->subDays(30), 'status' => BetTicketStatus::Lost, 'payout_minor' => 0, 'settled_at' => now()]);
-        $this->market()->update(['status' => MarketStatus::Suspended]);
+        $this->ticket($player, ['placed_at' => now()->subDays(30), 'status' => BetTicketStatus::Lost, 'payout_minor' => 0, 'settled_at' => now()->subDays(20)]);
+        $this->market('autre')->update(['status' => MarketStatus::Suspended]);
 
         $response = $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin))
-            ->getJson('/api/v1/admin/dashboard')
+            ->getJson('/api/v1/admin/dashboard?period=7d')
             ->assertOk()
-            ->assertJsonPath('data.currency', 'HTG')
+            ->assertJsonPath('data.period', ['preset' => '7d', 'from' => '2026-10-23', 'to' => '2026-10-29', 'days' => 7, 'timezone' => 'America/Port-au-Prince'])
             ->assertJsonPath('data.users.suspended', 1)
-            ->assertJsonPath('data.betting.tickets_today', 1)
-            ->assertJsonPath('data.betting.stake_today_minor', 100_00)
+            ->assertJsonPath('data.betting.tickets_placed', 3)
+            ->assertJsonPath('data.betting.stakes_minor', 300_00)
+            ->assertJsonPath('data.betting.tickets_settled', 2)
+            ->assertJsonPath('data.betting.payouts_minor', 205_00)
             ->assertJsonPath('data.betting.pending_count', 1)
             ->assertJsonPath('data.betting.pending_exposure_minor', 205_00)
-            // Période de 14 jours : le ticket d'il y a 30 jours est exclu.
+            ->assertJsonPath('data.betting.stakes_by_sport', [['sport' => 'soccer', 'name' => 'Football', 'tickets' => 1, 'stakes_minor' => 100_00]])
             ->assertJsonPath('data.finance.settled_stakes_minor', 200_00)
-            ->assertJsonPath('data.finance.payouts_minor', 205_00)
             ->assertJsonPath('data.finance.gross_gaming_revenue_minor', -5_00)
-            ->assertJsonPath('data.catalogue.markets_suspended', 1)
-            ->assertJsonPath('data.catalogue.events_next_24h', 1); // match de market() : demain à la même heure
+            ->assertJsonPath('data.finance.payments_available', false)
+            ->assertJsonPath('data.catalogue.markets_suspended', 1);
 
-        $tickets = $response->json('data.betting.tickets');
-        $this->assertCount(14, $tickets);
-        $this->assertSame(['date' => now()->toDateString(), 'value' => 1], end($tickets));
-        $this->assertSame(['date' => now()->subDays(13)->toDateString(), 'value' => 0], $tickets[0]);
-        $this->assertSame(100_00, $response->json('data.betting.stakes_minor.11.value'));
+        $tickets = collect($response->json('data.betting.tickets'))->pluck('value', 'date');
+        $this->assertCount(7, $tickets);
+        $this->assertSame(1, $tickets['2026-10-29']);
+        $this->assertSame(1, $tickets['2026-10-28']);
+        $this->assertSame(1, $tickets['2026-10-26']);
+    }
 
-        $breakdown = collect($response->json('data.betting.status_breakdown'))->pluck('count', 'status');
-        $this->assertSame(['pending' => 1, 'won' => 1, 'lost' => 1, 'void' => 0], $breakdown->all());
+    public function test_today_and_custom_periods(): void
+    {
+        $this->ticket(null, ['placed_at' => now()]);
+        $this->ticket(null, ['placed_at' => '2026-10-29 02:00:00']); // la veille en heure locale
+        $admin = $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin));
+
+        $admin->getJson('/api/v1/admin/dashboard?period=today')->assertJsonPath('data.betting.tickets_placed', 1);
+        $admin->getJson('/api/v1/admin/dashboard?period=yesterday')->assertJsonPath('data.betting.tickets_placed', 1);
+        $admin->getJson('/api/v1/admin/dashboard?period=custom&from=2026-10-28&to=2026-10-29')
+            ->assertJsonPath('data.period.days', 2)
+            ->assertJsonPath('data.betting.tickets_placed', 2);
+    }
+
+    public function test_invalid_periods_are_rejected(): void
+    {
+        $admin = $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin));
+
+        $admin->getJson('/api/v1/admin/dashboard?period=decade')->assertUnprocessable();
+        $admin->getJson('/api/v1/admin/dashboard?period=custom')->assertUnprocessable()->assertJsonStructure(['error' => ['details' => ['from', 'to']]]);
+        $admin->getJson('/api/v1/admin/dashboard?period=custom&from=2026-10-29&to=2026-10-01')->assertUnprocessable();
+        $admin->getJson('/api/v1/admin/dashboard?period=custom&from=2024-01-01&to=2026-10-29')
+            ->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['details' => ['to']]]);
     }
 
     public function test_support_does_not_receive_financial_figures(): void

@@ -30,11 +30,19 @@ class AssignRequestId
         return $response;
     }
 
-    /** Refuse les valeurs arbitraires (injection dans les logs, taille : 64 comme audit_logs.request_id). */
+    /**
+     * Identifiant sûr : refuse les valeurs arbitraires (injection dans les logs, taille : 64 comme audit_logs.request_id).
+     * « D » : « $ » n'accepte pas un retour à la ligne final (revue P8-02).
+     */
+    public static function isSafe(mixed $id): bool
+    {
+        return is_string($id) && preg_match('/^[A-Za-z0-9._-]{8,64}$/D', $id) === 1;
+    }
+
     private function incomingId(Request $request): ?string
     {
         $id = $request->headers->get(self::HEADER);
 
-        return is_string($id) && preg_match('/^[A-Za-z0-9._-]{8,64}$/', $id) ? $id : null;
+        return self::isSafe($id) ? $id : null;
     }
 }

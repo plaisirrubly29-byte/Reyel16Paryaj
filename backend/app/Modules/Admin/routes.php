@@ -6,6 +6,7 @@ use App\Modules\Admin\Http\Controllers\AdminLedgerController;
 use App\Modules\Admin\Http\Controllers\AdminMarketController;
 use App\Modules\Admin\Http\Controllers\AdminResponsibleGamingController;
 use App\Modules\Admin\Http\Controllers\AdminSettingsController;
+use App\Modules\Admin\Http\Controllers\AdminSupervisionController;
 use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
@@ -20,6 +21,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'show'])->middleware('permission:dashboard.view');
+    Route::get('/alerts', [AdminDashboardController::class, 'alerts'])->middleware('permission:dashboard.view');
+    Route::get('/search', [AdminSupervisionController::class, 'search'])->middleware(['permission:dashboard.view', 'throttle:60,1']);
+    // Supervision en lecture seule : technique (rôles qui consultent les paramètres), risques (rôles qui consultent les tickets).
+    Route::get('/system', [AdminSupervisionController::class, 'system'])->middleware('permission:settings.view');
+    Route::get('/risk/exposure', [AdminSupervisionController::class, 'exposure'])->middleware('permission:tickets.view');
 
     Route::get('/users', [AdminUserController::class, 'index'])->middleware('permission:users.view');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->middleware('permission:users.view');

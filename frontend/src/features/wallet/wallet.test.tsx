@@ -22,7 +22,7 @@ const page = (data: unknown[], meta: Partial<{ current_page: number; last_page: 
   meta: { current_page: 1, per_page: 20, total: data.length, last_page: 1, from: 1, to: data.length, ...meta },
 });
 
-describe('page portefeuille', () => {
+describe('solde et transactions', () => {
   it('affiche le solde fourni par le serveur, sans le recalculer', async () => {
     mockApi({
       'GET /me': { status: 200, body: { data: player } },
@@ -45,7 +45,7 @@ describe('page portefeuille', () => {
       'GET /wallet/transactions': { status: 200, body: page([entry('2', 'stake', -50_00, 1_234_50, { type: 'bet', id: '7' })]) },
     });
 
-    renderApp('/wallet');
+    renderApp('/transactions');
 
     const row = (await screen.findByRole('link', { name: 'ticket 7' })).closest('tr')!;
     expect(within(row).getByText('Mise', { exact: false })).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe('page portefeuille', () => {
         body: page([entry(url.searchParams.get('page') ?? '1', 'payout', 10_00, 1_234_50)], { current_page: Number(url.searchParams.get('page') ?? 1), last_page: 3, total: 41 }),
       }),
     });
-    const router = renderApp('/wallet');
+    const router = renderApp('/transactions');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Suivant' }));
     await waitFor(() => expect(router.state.location.search).toBe('?page=2'));
@@ -74,7 +74,7 @@ describe('page portefeuille', () => {
     expect(urls[urls.length - 1]).toContain('type=payout');
   });
 
-  it('affiche un état vide et prévient si le portefeuille est gelé', async () => {
+  it('affiche un état vide et prévient si le solde est gelé', async () => {
     mockApi({
       'GET /me': { status: 200, body: { data: player } },
       'GET /wallet': { status: 200, body: { data: { ...wallet.data, status: 'frozen' } } },
@@ -84,6 +84,66 @@ describe('page portefeuille', () => {
     renderApp('/wallet');
 
     expect(await screen.findByText('Aucune opération pour le moment.')).toBeInTheDocument();
-    expect(screen.getByText('Portefeuille gelé')).toBeInTheDocument();
+    expect(screen.getByText('Solde gelé')).toBeInTheDocument();
+  });
+});
+
+describe('espace joueur', () => {
+  it('présente le dépôt et le retrait comme indisponibles, sans formulaire factice', async () => {
+    mockApi({
+      'GET /me': { status: 200, body: { data: player } },
+      'GET /wallet': { status: 200, body: wallet },
+      'GET /wallet/transactions': { status: 200, body: page([entry('1', 'simulated_credit', 5_000_00, 5_000_00)]) },
+    });
+
+    renderApp('/wallet');
+
+    expect(await screen.findByRole('heading', { name: 'Solde', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dépôt' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retrait' })).toBeDisabled();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(await screen.findByText('Crédit de démonstration')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Toutes mes transactions' })).toHaveAttribute('href', '/transactions');
+  });
+
+  it('affiche les 8 rubriques du compte, celles à venir signalées', async () => {
+    mockApi({
+      'GET /me': { status: 200, body: { data: player } },
+      'GET /wallet': { status: 200, body: wallet },
+    });
+
+    renderApp('/loyalty');
+
+    const nav = await screen.findByRole('navigation', { name: 'Rubriques du compte' });
+    expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
+      '/wallet', '/bets', '/coupons', '/transactions', '/loyalty', '/referral', '/account', '/messages',
+    ]);
+    expect(within(nav).getAllByText('Bientôt')).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'Points de fidélité', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
+  });
+
+  it('liste les betcodes des tickets dans Mes coupons', async () => {
+    mockApi({
+      'GET /me': { status: 200, body: { data: player } },
+      'GET /wallet': { status: 200, body: wallet },
+      'GET /bets': {
+        status: 200,
+        body: page([{ id: '7', reference: 'R16-7KQ2M9XAPB', type: 'single', status: 'pending', stake: htg(100_00), total_odds: '2.05', potential_payout: htg(205_00), payout: null, placed_at: '2026-10-29T12:00:00+00:00', settled_at: null, selections: [] }]),
+      },
+    });
+
+    renderApp('/coupons');
+
+    expect(await screen.findByText('R16-7KQ2M9XAPB')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('href', expect.stringContaining('R16-7KQ2M9XAPB'));
+  });
+
+  it("renvoie un visiteur vers la connexion", async () => {
+    mockApi({ 'GET /me': { status: 401, body: { error: { code: 'unauthenticated', message: 'Non authentifié.' } } } });
+
+    const router = renderApp('/coupons');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
   });
 });

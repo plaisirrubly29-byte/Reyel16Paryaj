@@ -30,6 +30,23 @@ class SecurityHeadersTest extends TestCase
         $this->assertSecurityHeaders($this->getJson('/api/v1/me')->assertUnauthorized());
     }
 
+    public function test_responses_returned_before_the_route_carry_them_too(): void
+    {
+        // Préflight CORS : renvoyé par HandleCors, avant la route et les middlewares de groupe.
+        $this->assertSecurityHeaders($this->call('OPTIONS', '/api/v1/health', server: [
+            'HTTP_ORIGIN' => 'http://localhost:5173',
+            'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'POST',
+        ])->assertNoContent());
+
+        // Maintenance (php artisan down) : 503 renvoyé avant toute route.
+        $this->app->maintenanceMode()->activate([]);
+        try {
+            $this->assertSecurityHeaders($this->getJson('/api/v1/health')->assertStatus(503));
+        } finally {
+            $this->app->maintenanceMode()->deactivate();
+        }
+    }
+
     public function test_hsts_is_sent_over_https(): void
     {
         $this->getJson('https://localhost/api/v1/health')

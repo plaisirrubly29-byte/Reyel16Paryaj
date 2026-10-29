@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, type Paginated } from '../../shared/api/client';
 import { Alert } from '../../shared/components/Alert';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
@@ -8,7 +8,16 @@ import { Icon, type IconName } from '../../shared/components/Icon';
 import { Spinner } from '../../shared/components/Spinner';
 import { formatMoney } from '../../shared/format/money';
 import { useMe } from '../../features/auth/api/auth';
-import { useDashboard, type AuditEntry, type DailyPoint, type DashboardSummary } from '../api/dashboard';
+import {
+  useAlerts,
+  useDashboard,
+  type AdminAlert,
+  type AuditEntry,
+  type DailyPoint,
+  type DashboardSummary,
+  type PeriodPreset,
+  type PeriodQuery,
+} from '../api/dashboard';
 import { DailyBarChart, Sparkline } from '../components/Charts';
 import { ADMIN_SECTIONS, canAccess } from '../navigation';
 
@@ -36,15 +45,31 @@ const SUBJECT_LABELS: Record<string, string> = { user: 'Utilisateur', market: 'M
 
 const STATUS_LABELS = { pending: 'En cours', won: 'Gagnés', lost: 'Perdus', void: 'Annulés' } as const;
 
+const PRESETS: { value: PeriodPreset; label: string }[] = [
+  { value: 'today', label: 'Aujourd’hui' },
+  { value: 'yesterday', label: 'Hier' },
+  { value: '7d', label: '7 jours' },
+  { value: '30d', label: '30 jours' },
+  { value: 'month', label: 'Ce mois' },
+  { value: 'last_month', label: 'Mois dernier' },
+  { value: 'custom', label: 'Personnalisée' },
+];
+
+const SEVERITY_LABELS: Record<AdminAlert['severity'], string> = { critical: 'Critique', warning: 'Attention', info: 'Info' };
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 const money = (minor: number, currency: string) => formatMoney({ minor, currency });
 
-/** Montant court pour les axes (« 12,5 k HTG »), décimales tirées de la devise comme formatMoney. */
+/** Montant court pour les axes (« 12,5 k »), décimales tirées de la devise comme formatMoney. */
 function compactMoney(minor: number, currency: string): string {
   const digits = new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
   return new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(minor / 10 ** digits);
 }
 
 const count = (n: number) => n.toLocaleString('fr-FR');
+const plural = (n: number, word: string) => `${count(n)} ${word}${n > 1 ? 's' : ''}`;
+const localDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
 function relativeTime(iso: string): string {
   const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
@@ -61,36 +86,86 @@ function greeting(): string {
   return hour < 5 || hour >= 18 ? 'Bonsoir' : 'Bonjour';
 }
 
-/** Somme des 7 derniers jours comparée aux 7 précédents, en %. null si pas de base de comparaison. */
-function weekTrend(points: DailyPoint[]): number | null {
-  const sum = (list: DailyPoint[]) => list.reduce((s, p) => s + p.value, 0);
-  const recent = sum(points.slice(-7));
-  const before = sum(points.slice(-14, -7));
-  return before > 0 ? Math.round(((recent - before) / before) * 100) : null;
+/** Période lue dans l'URL (lien partageable) ; 7 jours par défaut. */
+function usePeriod(): [PeriodQuery, (next: PeriodQuery) => void] {
+  const [params, setParams] = useSearchParams();
+  const preset = PRESETS.some((p) => p.value === params.get('period')) ? (params.get('period') as PeriodPreset) : '7d';
+  const from = DATE.test(params.get('from') ?? '') ? params.get('from')! : undefined;
+  const to = DATE.test(params.get('to') ?? '') ? params.get('to')! : undefined;
+  const period: PeriodQuery = preset === 'custom' && from && to ? { period: 'custom', from, to } : { period: preset === 'custom' ? '7d' : preset };
+
+  function setPeriod(next: PeriodQuery) {
+    const p = new URLSearchParams();
+    p.set('period', next.period);
+    if (next.period === 'custom' && next.from && next.to) { p.set('from', next.from); p.set('to', next.to); }
+    setParams(p, { replace: true });
+  }
+
+  return [period, setPeriod];
 }
 
-type KpiProps = { icon: IconName; label: string; value: string; hint?: ReactNode; trend?: number | null; points?: DailyPoint[]; to?: string };
+function PeriodPicker({ value, onChange }: { value: PeriodQuery; onChange: (p: PeriodQuery) => void }) {
+  const [custom, setCustom] = useState(value.period === 'custom');
+  const [from, setFrom] = useState(value.from ?? '');
+  const [to, setTo] = useState(value.to ?? '');
+  const active = custom ? 'custom' : value.period;
 
-function Kpi({ icon, label, value, hint, trend, points, to }: KpiProps) {
+  return (
+    <div className="period-picker">
+      <div className="segmented" role="radiogroup" aria-label="Période">
+        {PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            role="radio"
+            aria-checked={active === p.value}
+            className={active === p.value ? 'is-active' : undefined}
+            onClick={() => {
+              if (p.value === 'custom') { setCustom(true); return; }
+              setCustom(false);
+              onChange({ period: p.value });
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {custom && (
+        <form
+          className="period-custom"
+          onSubmit={(e) => { e.preventDefault(); if (from && to) onChange({ period: 'custom', from, to }); }}
+        >
+          <label>Du <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} required /></label>
+          <label>au <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} required /></label>
+          <button type="submit" className="btn btn-secondary btn-sm" disabled={!from || !to}>Appliquer</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+type KpiProps = { icon: IconName; label: string; value: string; definition: string; hint?: ReactNode; points?: DailyPoint[]; to?: string; muted?: boolean };
+
+/** Tuile d'indicateur. La définition métier est lisible au survol et par les lecteurs d'écran. */
+function Kpi({ icon, label, value, definition, hint, points, to, muted }: KpiProps) {
   const body = (
     <>
       <div className="kpi-head">
         <span className="kpi-icon" aria-hidden="true"><Icon name={icon} size={18} /></span>
         <span className="kpi-label">{label}</span>
-        {trend !== undefined && trend !== null && (
-          <span className={`kpi-trend ${trend >= 0 ? 'is-up' : 'is-down'}`} title="7 derniers jours comparés aux 7 précédents">
-            <Icon name={trend >= 0 ? 'trendUp' : 'trendDown'} size={14} />
-            {trend > 0 ? '+' : ''}{trend} %
-          </span>
-        )}
+        <span className="kpi-info" title={definition}>
+          <Icon name="help" size={14} />
+          <span className="sr-only">Définition : {definition}</span>
+        </span>
       </div>
       <strong className="kpi-value">{value}</strong>
       {hint && <span className="kpi-hint">{hint}</span>}
-      {points && <Sparkline points={points} />}
+      {points && points.length > 1 && <Sparkline points={points} />}
     </>
   );
+  const className = ['kpi', to && 'kpi-link', muted && 'is-muted'].filter(Boolean).join(' ');
 
-  return to ? <Link to={to} className="kpi kpi-link">{body}</Link> : <article className="kpi">{body}</article>;
+  return to ? <Link to={to} className={className}>{body}</Link> : <article className={className}>{body}</article>;
 }
 
 function Panel({ title, subtitle, action, children, className }: { title: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
@@ -108,29 +183,32 @@ function Panel({ title, subtitle, action, children, className }: { title: string
   );
 }
 
-function Attention({ data }: { data: DashboardSummary }) {
-  const items: { icon: IconName; tone: 'warning' | 'info'; text: string; to: string; cta: string }[] = [];
-  const corrections = data.finance?.pending_corrections ?? 0;
-  const suspended = data.catalogue?.markets_suspended ?? 0;
-
-  if (corrections > 0) {
-    items.push({ icon: 'scale', tone: 'warning', text: `${corrections} correction${corrections > 1 ? 's' : ''} financière${corrections > 1 ? 's' : ''} en attente de validation`, to: '/admin/finance', cta: 'Valider' });
-  }
-  if (suspended > 0) {
-    items.push({ icon: 'alert', tone: 'warning', text: `${suspended} marché${suspended > 1 ? 's' : ''} suspendu${suspended > 1 ? 's' : ''}`, to: '/admin/events', cta: 'Examiner' });
-  }
-  if (items.length === 0) return null;
+/** Centre d'alertes : calculées par le serveur sur les données réelles, chacune avec son écran de traitement. */
+function AlertCenter() {
+  const alerts = useAlerts();
 
   return (
-    <ul className="attention" aria-label="À traiter">
-      {items.map((item) => (
-        <li key={item.to} className={`attention-item is-${item.tone}`}>
-          <Icon name={item.icon} size={18} />
-          <span>{item.text}</span>
-          <Link to={item.to}>{item.cta}<Icon name="arrowRight" size={14} /></Link>
-        </li>
-      ))}
-    </ul>
+    <Panel title="Centre d’alertes" subtitle="Points d’attention du moment, selon votre rôle" className="span-3">
+      <ErrorAlert error={alerts.error} onRetry={() => alerts.refetch()} />
+      {alerts.isPending && <div className="table-state"><Spinner /></div>}
+      {alerts.data?.length === 0 && (
+        <p className="dash-panel-empty"><Icon name="check" size={16} /> Aucune alerte : tout est en ordre.</p>
+      )}
+      {!!alerts.data?.length && (
+        <ul className="alert-list">
+          {alerts.data.map((a) => (
+            <li key={a.key} className={`alert-row is-${a.severity}`}>
+              <span className="severity-chip">{SEVERITY_LABELS[a.severity]}</span>
+              <div className="alert-text">
+                <strong>{a.title}</strong>
+                <span>{a.category} · {a.detail}</span>
+              </div>
+              {a.link && <Link to={a.link} className="dash-panel-link">Ouvrir<Icon name="arrowRight" size={14} /></Link>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 
@@ -138,7 +216,7 @@ function StatusBreakdown({ breakdown }: { breakdown: NonNullable<DashboardSummar
   const total = breakdown.reduce((s, b) => s + b.count, 0);
 
   return total === 0 ? (
-    <p className="dash-panel-empty">Aucun ticket sur la période.</p>
+    <p className="dash-panel-empty">Aucun ticket placé sur la période.</p>
   ) : (
     <ul className="breakdown">
       {breakdown.map((b) => {
@@ -159,6 +237,28 @@ function StatusBreakdown({ breakdown }: { breakdown: NonNullable<DashboardSummar
   );
 }
 
+/** Mises par sport : une seule série (barres horizontales d'une même couleur), valeurs écrites en clair. */
+function StakesBySport({ rows, currency }: { rows: NonNullable<DashboardSummary['betting']>['stakes_by_sport']; currency: string }) {
+  const max = Math.max(...rows.map((r) => r.stakes_minor), 1);
+
+  return rows.length === 0 ? (
+    <p className="dash-panel-empty">Aucune mise sur la période.</p>
+  ) : (
+    <ul className="breakdown">
+      {rows.map((r) => (
+        <li key={r.sport}>
+          <div className="breakdown-row">
+            <span>{r.name}</span>
+            <strong>{money(r.stakes_minor, currency)}</strong>
+            <span className="breakdown-pct">{plural(r.tickets, 'ticket')}</span>
+          </div>
+          <div className="breakdown-track" aria-hidden="true"><span style={{ width: `${(r.stakes_minor / max) * 100}%` }} /></div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Stat({ label, value, icon, tone }: { label: string; value: string; icon: IconName; tone?: 'live' | 'warning' }) {
   return (
     <div className={['mini-stat', tone && `is-${tone}`].filter(Boolean).join(' ')}>
@@ -169,12 +269,13 @@ function Stat({ label, value, icon, tone }: { label: string; value: string; icon
   );
 }
 
-/** Vue d'ensemble : indicateurs clés, tendances sur 14 jours, points d'attention et activité récente. */
+/** Vue d'ensemble : alertes, indicateurs de la période choisie, tendances et activité récente. */
 export function AdminHomePage() {
   const { data: user } = useMe();
   const permissions = user?.permissions ?? [];
   const canReadAudit = permissions.includes('audit.view');
-  const dashboard = useDashboard();
+  const [period, setPeriod] = usePeriod();
+  const dashboard = useDashboard(period);
 
   const audit = useQuery({
     queryKey: ['admin', 'audit-logs', { per_page: 6 }],
@@ -187,6 +288,7 @@ export function AdminHomePage() {
   const cur = data?.currency ?? 'HTG';
   const firstName = user?.name.split(' ')[0];
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const range = data && (data.period.from === data.period.to ? `le ${localDate(data.period.from)}` : `du ${localDate(data.period.from)} au ${localDate(data.period.to)}`);
 
   return (
     <div className="dash">
@@ -209,90 +311,119 @@ export function AdminHomePage() {
         </div>
       </header>
 
+      <div className="dash-grid">
+        <AlertCenter />
+      </div>
+
+      <div className="dash-toolbar">
+        <PeriodPicker key={period.period} value={period} onChange={setPeriod} />
+        {range && <p className="dash-range">Période {range} <span className="muted">({data.period.timezone})</span></p>}
+      </div>
+
       <ErrorAlert error={dashboard.error} onRetry={() => dashboard.refetch()} />
       {dashboard.isPending && <div className="table-state"><Spinner /></div>}
 
       {data && (
         <>
-          <Attention data={data} />
-
           <div className="kpi-grid">
             {data.betting && (
               <>
-                <Kpi icon="wallet" label="Mises du jour" value={money(data.betting.stake_today_minor, cur)} trend={weekTrend(data.betting.stakes_minor)} points={data.betting.stakes_minor} hint={`${count(data.betting.tickets_today)} ticket${data.betting.tickets_today > 1 ? 's' : ''} aujourd’hui`} to="/admin/tickets" />
-                <Kpi icon="coupon" label="Tickets en cours" value={count(data.betting.pending_count)} hint={<>Exposition max. <strong>{money(data.betting.pending_exposure_minor, cur)}</strong></>} points={data.betting.tickets} trend={weekTrend(data.betting.tickets)} to="/admin/tickets" />
+                <Kpi icon="wallet" label="Mises" value={money(data.betting.stakes_minor, cur)} points={data.betting.stakes_daily_minor}
+                  definition="Montant des tickets placés pendant la période (date de placement), réglés ou non."
+                  hint={`${plural(data.betting.tickets_placed, 'ticket')} placé${data.betting.tickets_placed > 1 ? 's' : ''}`} to="/admin/tickets" />
+                <Kpi icon="trophy" label="Gains payés" value={money(data.betting.payouts_minor, cur)}
+                  definition="Montants versés aux tickets gagnants réglés pendant la période (date de règlement)."
+                  hint={`${plural(data.betting.tickets_settled, 'ticket')} réglé${data.betting.tickets_settled > 1 ? 's' : ''} · remboursements ${money(data.betting.refunds_minor, cur)}`} />
               </>
             )}
-            {data.users && (
-              <Kpi icon="users" label="Joueurs inscrits" value={count(data.users.total)} hint={`+${count(data.users.new_7d)} sur 7 jours · ${count(data.users.suspended)} suspendu${data.users.suspended > 1 ? 's' : ''}`} points={data.users.registrations} trend={weekTrend(data.users.registrations)} to="/admin/users" />
-            )}
             {data.finance && (
-              <Kpi
-                icon="scale"
-                label={`Produit brut (${data.finance.period_days} j)`}
-                value={formatMoney({ minor: data.finance.gross_gaming_revenue_minor, currency: cur }, 'fr-FR', { signed: true })}
-                hint={`Mises ${money(data.finance.settled_stakes_minor, cur)} · gains ${money(data.finance.payouts_minor, cur)}`}
-                to="/admin/finance"
-              />
+              <Kpi icon="scale" label="Produit brut" value={formatMoney({ minor: data.finance.gross_gaming_revenue_minor, currency: cur }, 'fr-FR', { signed: true })}
+                definition="Mises des tickets réglés pendant la période (hors annulés) moins les gains versés. Ce n'est ni un solde ni un bénéfice net."
+                hint={`Mises réglées ${money(data.finance.settled_stakes_minor, cur)}`} to="/admin/finance" />
+            )}
+            {data.betting && (
+              <Kpi icon="coupon" label="Tickets en cours" value={count(data.betting.pending_count)} points={data.betting.tickets}
+                definition="Tickets non encore réglés, à l'instant présent. L'exposition est le total de leurs gains potentiels : un maximum théorique, pas une perte certaine."
+                hint={<>Exposition max. <strong>{money(data.betting.pending_exposure_minor, cur)}</strong></>} to="/admin/risk" />
+            )}
+            {data.users && (
+              <Kpi icon="users" label="Joueurs inscrits" value={count(data.users.total)} points={data.users.registrations}
+                definition="Tous les comptes, quel que soit leur statut. Les inscriptions du jour et de la période sont datées à la création du compte."
+                hint={`+${count(data.users.new_today)} aujourd’hui · +${count(data.users.new_in_period)} sur la période · ${plural(data.users.suspended, 'suspendu')}`} to="/admin/users" />
+            )}
+            {data.finance && !data.finance.payments_available && (
+              <Kpi icon="wallet" label="Dépôts et retraits" value="Non disponibles" muted
+                definition="Aucun prestataire de paiement n'est intégré : la V1 fonctionne en fonds fictifs (tâche P7-01, bloquée par la validation juridique)."
+                hint="Fonds fictifs en V1 · paiements bloqués (P7-01)" />
             )}
           </div>
 
           {data.betting && (
             <div className="dash-grid">
-              <Panel title="Mises par jour" subtitle="14 derniers jours, tous tickets confondus" className="span-2">
-                <DailyBarChart
-                  points={data.betting.stakes_minor}
-                  label="Mises"
-                  format={(v) => money(v, cur)}
-                  formatAxis={(v) => compactMoney(v, cur)}
-                />
+              <Panel title="Mises par jour" subtitle="Tickets placés, tous sports confondus" className="span-2">
+                <DailyBarChart points={data.betting.stakes_daily_minor} label="Mises" format={(v) => money(v, cur)} formatAxis={(v) => compactMoney(v, cur)} />
               </Panel>
-              <Panel title="Issue des tickets" subtitle="Tickets placés sur 14 jours">
+              <Panel title="Issue des tickets" subtitle="Tickets placés sur la période">
                 <StatusBreakdown breakdown={data.betting.status_breakdown} />
               </Panel>
+            </div>
+          )}
+
+          {(data.betting || data.users) && (
+            <div className="dash-grid">
+              {data.betting && (
+                <Panel title="Mises par sport" subtitle="Les combinés multisports sont comptés à part">
+                  <StakesBySport rows={data.betting.stakes_by_sport} currency={cur} />
+                </Panel>
+              )}
+              {data.users && (
+                <Panel title="Nouveaux joueurs" subtitle="Inscriptions par jour" className={data.betting ? 'span-2' : 'span-3'}>
+                  <DailyBarChart points={data.users.registrations} label="Inscriptions" format={(v) => plural(v, 'inscription')} formatAxis={(v) => count(v)} />
+                </Panel>
+              )}
             </div>
           )}
         </>
       )}
 
       {(data?.catalogue || canReadAudit) && (
-          <div className="dash-grid">
-            {data?.catalogue && (
-              <Panel title="Catalogue" subtitle="Matchs et marchés proposés" action={<Link to="/admin/events" className="dash-panel-link">Gérer<Icon name="arrowRight" size={14} /></Link>}>
-                <div className="mini-stats">
-                  <Stat icon="live" label="Matchs en direct" value={count(data.catalogue.events_live)} tone={data.catalogue.events_live > 0 ? 'live' : undefined} />
-                  <Stat icon="calendar" label="Dans les 24 h" value={count(data.catalogue.events_next_24h)} />
-                  <Stat icon="check" label="Marchés ouverts" value={count(data.catalogue.markets_open)} />
-                  <Stat icon="alert" label="Marchés suspendus" value={count(data.catalogue.markets_suspended)} tone={data.catalogue.markets_suspended > 0 ? 'warning' : undefined} />
-                </div>
-              </Panel>
-            )}
+        <div className="dash-grid">
+          {data?.catalogue && (
+            <Panel title="Catalogue" subtitle="Matchs et marchés, à l’instant présent">
+              <div className="mini-stats">
+                <Stat icon="live" label="Matchs en direct" value={count(data.catalogue.events_live)} tone={data.catalogue.events_live > 0 ? 'live' : undefined} />
+                <Stat icon="calendar" label="Matchs programmés" value={count(data.catalogue.events_scheduled)} />
+                <Stat icon="check" label="Marchés ouverts" value={count(data.catalogue.markets_open)} />
+                <Stat icon="alert" label="Marchés suspendus" value={count(data.catalogue.markets_suspended)} tone={data.catalogue.markets_suspended > 0 ? 'warning' : undefined} />
+              </div>
+            </Panel>
+          )}
 
-            {canReadAudit && (
-              <Panel title="Activité récente" subtitle="Journal d'audit" className={data?.catalogue ? 'span-2' : 'span-3'} action={<Link to="/admin/audit" className="dash-panel-link">Tout voir<Icon name="arrowRight" size={14} /></Link>}>
-                <ErrorAlert error={audit.error} onRetry={() => audit.refetch()} />
-                {audit.isPending && <div className="table-state"><Spinner /></div>}
-                {audit.data && audit.data.data.length === 0 && <p className="dash-panel-empty">Aucune action journalisée.</p>}
-                {audit.data && audit.data.data.length > 0 && (
-                  <ol className="timeline">
-                    {audit.data.data.map((e) => (
-                      <li key={e.id}>
-                        <span className="timeline-dot" aria-hidden="true"><Icon name="activity" size={14} /></span>
-                        <div className="timeline-body">
-                          <p><strong>{AUDIT_LABELS[e.action] ?? e.action}</strong>{e.subject && <span className="muted"> · {SUBJECT_LABELS[e.subject.type] ?? e.subject.type} #{e.subject.id}</span>}</p>
-                          <p className="timeline-meta">
-                            <span>{e.actor?.email ?? 'Système'}</span>
-                            {e.reason && <> · <q>{e.reason}</q></>}
-                          </p>
-                        </div>
-                        <time dateTime={e.created_at} title={new Date(e.created_at).toLocaleString('fr-FR')}>{relativeTime(e.created_at)}</time>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </Panel>
-            )}
-          </div>
+          {canReadAudit && (
+            <Panel title="Activité récente" subtitle="Journal d'audit" className={data?.catalogue ? 'span-2' : 'span-3'} action={<Link to="/admin/audit" className="dash-panel-link">Tout voir<Icon name="arrowRight" size={14} /></Link>}>
+              <ErrorAlert error={audit.error} onRetry={() => audit.refetch()} />
+              {audit.isPending && <div className="table-state"><Spinner /></div>}
+              {audit.data && audit.data.data.length === 0 && <p className="dash-panel-empty">Aucune action journalisée.</p>}
+              {audit.data && audit.data.data.length > 0 && (
+                <ol className="timeline">
+                  {audit.data.data.map((e) => (
+                    <li key={e.id}>
+                      <span className="timeline-dot" aria-hidden="true"><Icon name="activity" size={14} /></span>
+                      <div className="timeline-body">
+                        <p><strong>{AUDIT_LABELS[e.action] ?? e.action}</strong>{e.subject && <span className="muted"> · {SUBJECT_LABELS[e.subject.type] ?? e.subject.type} #{e.subject.id}</span>}</p>
+                        <p className="timeline-meta">
+                          <span>{e.actor?.email ?? 'Système'}</span>
+                          {e.reason && <> · <q>{e.reason}</q></>}
+                        </p>
+                      </div>
+                      <time dateTime={e.created_at} title={new Date(e.created_at).toLocaleString('fr-FR')}>{relativeTime(e.created_at)}</time>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Panel>
+          )}
+        </div>
       )}
 
       {shortcuts.length > 0 && (

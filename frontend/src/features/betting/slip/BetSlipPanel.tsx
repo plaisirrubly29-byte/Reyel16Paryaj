@@ -202,7 +202,7 @@ export function BetSlipPanel() {
               </div>
             </div>
             <div className="betslip-footer">
-              <p className="muted small">Fonds fictifs : la mise est débitée de votre portefeuille de démonstration, aucun argent réel n'est engagé.</p>
+              <p className="muted small">Fonds fictifs : la mise est débitée de votre solde de démonstration, aucun argent réel n'est engagé.</p>
               {!user && <Link to="/login" className="btn btn-green btn-block">Se connecter pour parier</Link>}
               {user && (
                 <button

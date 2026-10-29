@@ -1,6 +1,8 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMe } from '../../features/auth/api/auth';
+import { useWallet } from '../../features/wallet/api/wallet';
+import { MoneyText } from '../../shared/components/MoneyText';
 import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlipContext';
 import { SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
 import { Icon } from '../../shared/components/Icon';
@@ -45,6 +47,19 @@ function HeaderSearch() {
   );
 }
 
+/** Accès au solde dans l'en-tête, avec le montant fourni par l'API (rendu seulement une fois connecté). */
+function HeaderBalance() {
+  const wallet = useWallet();
+
+  return (
+    <NavLink to="/wallet" className="header-wallet">
+      <Icon name="wallet" size={18} />
+      <span>Solde</span>
+      {wallet.data && <strong className="header-wallet-amount"><MoneyText value={wallet.data.balance} /></strong>}
+    </NavLink>
+  );
+}
+
 function PublicShell() {
   const { data: user } = useMe();
   const slip = useBetSlip();
@@ -85,7 +100,7 @@ function PublicShell() {
           <div className="header-actions">
             {user ? (
               <>
-                <NavLink to="/wallet" className="header-wallet"><Icon name="wallet" size={18} />Portefeuille</NavLink>
+                <HeaderBalance />
                 <NavLink to="/account" className="header-user" aria-label={`Mon compte (${user.name})`}>
                   <span className="avatar" aria-hidden="true">{user.name.charAt(0).toUpperCase()}</span>
                   <span className="user-name">{user.name}</span>
