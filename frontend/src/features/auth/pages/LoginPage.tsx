@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type ComponentProps, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Button } from '../../../shared/components/Button';
@@ -14,7 +14,17 @@ function loginInput(login: string, password: string): LoginInput {
   return value.includes('@') ? { email: value, password } : { phone: digitsOnly(value), password };
 }
 
-export function LoginPage() {
+const ADMIN_VISUAL = {
+  heading: 'Espace administrateur',
+  highlights: [
+    { icon: 'shield', text: 'Double authentification obligatoire' },
+    { icon: 'lock', text: 'Accès selon votre rôle' },
+    { icon: 'eye', text: 'Actions sensibles journalisées' },
+  ],
+} satisfies NonNullable<ComponentProps<typeof AuthShell>['visual']>;
+
+/** Connexion joueur (/login) ou administrateur (/admin/login) : même formulaire, habillage et retour différents. */
+export function LoginPage({ admin = false }: { admin?: boolean }) {
   const login = useLogin();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -28,14 +38,19 @@ export function LoginPage() {
     login.mutate(loginInput(form.login, form.password), {
       onSuccess: ({ data }) => {
         // Un administrateur passe par la double authentification (P6-05) avant l'admin.
-        const fallback = data.is_admin ? '/admin' : '/';
+        const fallback = admin || data.is_admin ? '/admin' : '/';
         navigate(safeRedirect(params.get('redirect'), fallback), { replace: true });
       },
     });
   }
 
   return (
-    <AuthShell title="Connexion" subtitle="Accédez à votre compte pour suivre vos tickets." icon="lock">
+    <AuthShell
+      title={admin ? 'Connexion administrateur' : 'Connexion'}
+      subtitle={admin ? 'Réservé aux comptes de l’équipe REYEL 16 PARYAJ.' : 'Accédez à votre compte pour suivre vos tickets.'}
+      icon={admin ? 'shield' : 'lock'}
+      visual={admin ? ADMIN_VISUAL : undefined}
+    >
       {/* Identifiants invalides : message général (le serveur ne dit pas si le compte existe). */}
       {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
@@ -74,7 +89,7 @@ export function LoginPage() {
       <p className="auth-foot">
         <Link to="/forgot-password">Mot de passe oublié ?</Link>
         <span className="auth-foot-sep" aria-hidden="true">·</span>
-        <Link to="/register">Créer un compte</Link>
+        {admin ? <Link to="/">Retour au site</Link> : <Link to="/register">Créer un compte</Link>}
       </p>
     </AuthShell>
   );

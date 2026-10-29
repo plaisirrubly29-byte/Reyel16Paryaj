@@ -25,13 +25,15 @@ const admin = ({ mfa, ...overrides }: AdminOverrides = {}) => ({
 const emptyPage = { data: [], links: { first: null, last: null, prev: null, next: null }, meta: { current_page: 1, per_page: 5, total: 0, last_page: 1, from: null, to: null } };
 
 describe('accès à l\'administration', () => {
-  it('envoie un visiteur vers la connexion', async () => {
+  it('envoie un visiteur vers la connexion administrateur', async () => {
     mockApi({ 'GET /me': guest });
 
     const router = renderApp('/admin/users');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/login'));
     expect(router.state.location.search).toBe('?redirect=%2Fadmin%2Fusers');
+    expect(await screen.findByRole('heading', { name: 'Connexion administrateur' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Créer un compte' })).not.toBeInTheDocument();
   });
 
   it('refuse un joueur', async () => {

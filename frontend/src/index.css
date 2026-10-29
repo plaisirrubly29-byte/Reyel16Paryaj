@@ -283,6 +283,8 @@ p { margin: 0; }
 
 /* Page de connexion / inscription : panneau de marque + carte, côte à côte. */
 .auth-page { display: flex; justify-content: center; padding: 1.5rem 0; }
+/* Connexion administrateur : page seule, sans en-tête du site, centrée dans la fenêtre. */
+.admin-login { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 1rem; }
 .auth-shell {
   display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 440px); align-items: stretch;
   width: 100%; max-width: 860px; background: var(--surface); border: 1px solid var(--border);

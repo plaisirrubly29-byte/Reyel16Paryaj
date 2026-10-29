@@ -14,6 +14,8 @@ type Props = {
   /** Icône de l'en-tête, affichée dans un badge (visible seulement sur mobile : le panneau de marque la remplace sur ordinateur). */
   icon: IconName;
   children: ReactNode;
+  /** Panneau de marque (ordinateur) : texte joueur par défaut, remplacé pour l'espace administrateur. */
+  visual?: { heading: string; highlights: { icon: IconName; text: string }[] };
 };
 
 /**
@@ -21,7 +23,7 @@ type Props = {
  * panneau de marque à gauche (masqué sur mobile) et carte de formulaire à droite.
  * Sur mobile, un badge d'icône et un en-tête centré remplacent le panneau de marque.
  */
-export function AuthShell({ title, subtitle, icon, children }: Props) {
+export function AuthShell({ title, subtitle, icon, children, visual = { heading: 'Pariez en toute confiance', highlights: HIGHLIGHTS } }: Props) {
   return (
     <div className="auth-page">
       <div className="auth-shell">
@@ -30,9 +32,9 @@ export function AuthShell({ title, subtitle, icon, children }: Props) {
             <BrandLogo />
           </div>
           <div>
-            <h2 className="auth-visual-heading">Pariez en toute confiance</h2>
+            <h2 className="auth-visual-heading">{visual.heading}</h2>
             <ul className="auth-visual-list">
-              {HIGHLIGHTS.map((h) => (
+              {visual.highlights.map((h) => (
                 <li key={h.text}><Icon name={h.icon} size={16} />{h.text}</li>
               ))}
             </ul>

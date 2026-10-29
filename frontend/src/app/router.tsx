@@ -42,6 +42,8 @@ export const routes = [
       { path: 'wallet', element: <RequireAuth><WalletPage /></RequireAuth> },
     ],
   },
+  // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
+  { path: 'admin/login', element: <div className="admin-login"><LoginPage admin /></div> },
   {
     path: 'admin',
     element: <AdminLayout />,
