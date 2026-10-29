@@ -73,6 +73,15 @@ class RequestIdTest extends TestCase
         }
     }
 
+    public function test_a_trailing_newline_is_never_safe(): void
+    {
+        // Sans le modificateur D, « $ » accepte un « \n » final : 65 octets pour une colonne varchar(64).
+        $this->assertTrue(AssignRequestId::isSafe(str_repeat('a', 64)));
+        $this->assertFalse(AssignRequestId::isSafe(str_repeat('a', 64)."\n"));
+        $this->assertFalse(AssignRequestId::isSafe("abc12345\n"));
+        $this->assertFalse(AssignRequestId::isSafe(null));
+    }
+
     public function test_request_logs_contain_request_id(): void
     {
         $id = $this->getJson('/_test/log')->headers->get(AssignRequestId::HEADER);
