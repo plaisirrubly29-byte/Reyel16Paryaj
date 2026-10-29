@@ -14,14 +14,14 @@ L'essentiel est solide : **aucune injection, aucun XSS, aucun secret commité, a
 
 Avant la production, **3 points bloquants** devaient être réglés : B1 dépendait de P4-03, B2 se corrigeait dans le backend, B3 se règle dans la configuration de l'hébergement. S'y ajoute une **checklist de déploiement** (mode debug, cookies, proxies).
 
-> **État au 28 octobre 2026 :** B1 et B2 sont corrigés, B3 reste à l'hébergement. Un point **élevé** a été trouvé depuis : les paris sur les matchs en direct sont acceptés (E1). Les correctifs de la PR de P8-02 sont listés dans « Suivi des correctifs ».
+> **État au 29 octobre 2026 :** B1 et B2 sont corrigés, B3 reste à l'hébergement. Le point **élevé** E1 (paris en direct) est corrigé (#108). La relecture des correctifs a donné lieu à une PR de suivi. Voir « Suivi des correctifs ».
 
 | Gravité | Nombre | Corrigés |
 |---|---|---|
 | Bloquant | 3 | 2 (B1, B2) |
-| Élevé | 1 | 0 |
+| Élevé | 1 | 1 (E1) |
 | Moyen | 5 | 4 (M1, M2, M4, M5) |
-| Faible | 13 | 4 (F1, F2, F4, F13) |
+| Faible | 13 | 7 (F1, F2, F3, F4, F5, F6, F13) |
 | Info | 8 | — (I3 en partie) |
 
 Échelle : **Bloquant** = à corriger avant toute mise en production · **Élevé** = à corriger avant toute mise en production avec de l'argent réel, et avant le lancement contrôlé · **Moyen** = à corriger avant le lancement contrôlé · **Faible** = à planifier · **Info** = à connaître.
@@ -66,7 +66,7 @@ Statuts : **✅ corrigé** (commit ou PR indiqué) · **⏳ `responsable`** = à
 - **Problème :** `POST /bets` accepte un pari sur un match en cours tant que la cote a moins de 20 minutes. Un joueur qui voit un but (télévision, autre site) peut parier pendant plusieurs minutes sur la cote d'avant le but : exploitation classique des cotes en direct en retard. Vérifié par un test : un match en direct depuis 80 minutes est pariable dès que la cote est assez récente.
 - **Écart de périmètre :** `docs/architecture.md:13` **exclut les paris en direct** de la V1 ; aucune décision de `docs/decisions.md` ne les autorise (D-04 et D-05 sont « à décider »). Afficher les scores en direct (#96) n'est pas en cause, seul le pari l'est.
 - **Correctif :** paramètre `betting.allow_live` à `false` par défaut (un match en direct renvoie `selection_unavailable`) et test associé ; ne l'activer qu'après une décision écrite, avec des cotes de quelques secondes et un délai d'acceptation.
-- **Statut :** ⏳ Rubly (module Betting) + décision d'équipe sur le périmètre.
+- **Statut :** ✅ corrigé par #108 (`betting.allow_live` à `false` par défaut). Les activer reste une décision d'équipe sur le périmètre.
 
 ---
 
@@ -175,22 +175,33 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 | B2 | `5dd7810` | `TRUSTED_PROXIES`, cookie `Secure` par défaut en production |
 | Checklist, I3 | `65d61a6` | Démarrage refusé en production si `APP_DEBUG=true`, ou `*` dans `TRUSTED_PROXIES`, CORS ou Sanctum |
 
-**Par d'autres PR :** B1 (#97, #86), M1 et M2 (#98), M4 (#97), `phone[]` de F4 (#98), limite de 64 caractères de `X-Request-Id` (#91).
+**Par d'autres PR :** B1 (#97, #86), M1 et M2 (#98), M4 (#97), `phone[]` de F4 (#98), limite de 64 caractères de `X-Request-Id` (#91), E1 (#108), déconnexion MFA avant l'audit (#109), F3, F5 et F6 (#110).
+
+### Relecture des correctifs (29 octobre 2026)
+
+Une relecture de la PR #101 après sa fusion a montré que plusieurs correctifs n'allaient pas au bout. PR de suivi
+(branche `fix/P8-02-review-followups`), chaque point avec un test qui échoue sans lui :
+
+| Point | Défaut trouvé | Correctif |
+|---|---|---|
+| M5 | La ligne `DETAIL` de PostgreSQL cite les valeurs refusées : le doublon, ou **toute la ligne** pour `NOT NULL` et `CHECK` (nom, téléphone, email, hash). Vérifié sur une vraie base. | `App\Support\QueryErrorSanitizer`, branché par `$exceptions->map()` : la ligne `DETAIL` est retirée avant les logs et la réponse ; le code applicatif voit l'exception d'origine |
+| B2 | `TRUSTED_PROXIES` acceptait `REMOTE_ADDR`, `0.0.0.0/0` et `::/0`, qui font confiance à tout client | Refusés au démarrage en production, seuls ou dans une liste |
+| B2 | Sans `APP_ENV`, l'application est en production mais le cookie n'était pas `Secure` par défaut | `env('APP_ENV', 'production')`, comme `config/app.php` |
+| I3 | `"site.ht, *"` passait le garde-fou, alors que Sanctum retire les espaces | Listes comparées sans espaces |
+| F13 | En-têtes absents des réponses rendues avant la route (préflight CORS, maintenance, 413) | Middleware en tête de pile (`prepend`) |
+| Garde-fou | Il bloquait aussi `artisan config:clear` : une configuration dangereuse mise en cache ne se corrigeait plus | Commandes de réparation permises (`config:clear`, `config:cache`, `optimize:clear`, `down`, `up`) |
+| F2 | `$` acceptait un `\n` final (64 caractères + `\n` = 65 octets pour `varchar(64)`) ; règle dupliquée | Modificateur `D` ; règle unique `AssignRequestId::isSafe()`, utilisée par `AuditLogger` |
 
 **Risques résiduels :**
-- E1 (paris en direct) ouvert, voir plus haut.
 - M1 : n'importe qui connaissant un numéro peut bloquer la connexion de ce compte une heure, de façon renouvelable (30 essais/heure). Décision d'équipe : accepter et surveiller, ne compter que les échecs (`Limit::after`), ou verrouillage progressif.
-- M2 : dans `MfaService::recordFailure`, la déconnexion vient après l'écriture d'audit ; F2 supprime le cas connu d'échec d'écriture, mais déconnecter d'abord reste plus sûr.
-- M5 : la ligne `DETAIL` d'une erreur PostgreSQL cite encore la valeur en doublon.
 - Les limiteurs de débit vérifient puis incrémentent en deux étapes (Laravel) : une rafale de requêtes simultanées peut dépasser un plafond d'environ le nombre de processus PHP.
+- F13 : la CSP `default-src 'none'` s'applique aussi aux rares pages HTML du backend (`/up`, page d'erreur en développement), qui s'affichent sans style.
 
 ## Actions
 
 | Qui | Quoi | Quand |
 |---|---|---|
-| Équipe | Relire la PR de P8-02 et décider pour E1 (périmètre) et le blocage volontaire de compte (M1) | Avant le lancement contrôlé |
-| Rubly | E1 (`betting.allow_live` à `false` par défaut) et déconnexion avant audit (M2) | **Avant tout pari réel** |
-| Rubly | F3, F5, F6 (renforcement MFA) | Avant le lancement contrôlé |
+| Équipe | Décider pour le blocage volontaire de compte (M1) et, le cas échéant, l'activation des paris en direct (E1) | Avant le lancement contrôlé |
 | Rubly + Widsondelne7376 | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
 | Rubly | F7, F8, F9, F10, F11, F12 | À planifier |
 | Hébergement (P0-07 / P1-06) | B3 (en-têtes du frontend), checklist de déploiement (`TRUSTED_PROXIES`, `expose_php`, `.env.production.example`), HTTPS, rôle PostgreSQL restreint (F9) | Avant la mise en ligne du staging |
