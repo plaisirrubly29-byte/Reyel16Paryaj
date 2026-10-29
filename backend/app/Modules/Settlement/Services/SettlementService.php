@@ -2,6 +2,7 @@
 
 namespace App\Modules\Settlement\Services;
 
+use App\Models\User;
 use App\Modules\Betting\Enums\BetSelectionStatus;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Models\BetSelection;
@@ -11,6 +12,7 @@ use App\Modules\Settlement\Models\Settlement;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +29,7 @@ use InvalidArgumentException;
  * - Gain : celui fixé à l'acceptation (potential_payout_minor) ; avec des sélections annulées (cote 1),
  *   mise × cotes gagnantes, arrondi à l'unité inférieure et jamais au-delà du gain prévu (politique D-05/D-06).
  * - Seules les sélections encore "pending" sont réglées : un résultat corrigé après règlement relève de la
- *   correction auditée (P5-06).
+ *   correction auditée (P5-06, reevaluate()), qui ajoute une révision et des écritures compensatoires.
  */
 class SettlementService
 {
@@ -126,16 +128,18 @@ class SettlementService
             }
 
             [$status, $payout] = $this->outcome($locked, $selections->all());
+            // 1 au premier règlement ; davantage si une correction (P5-06) a rouvert le ticket.
+            $revision = $this->nextRevision($locked);
 
             $entry = match ($status) {
-                BetTicketStatus::Won => $this->ledger->payout($locked->wallet, $payout, $this->reference($locked, 'payout'), (string) $locked->id),
-                BetTicketStatus::Void => $this->ledger->refund($locked->wallet, $payout, $this->reference($locked, 'refund'), (string) $locked->id),
+                BetTicketStatus::Won => $this->ledger->payout($locked->wallet, $payout, $this->reference($locked, 'payout', $revision), (string) $locked->id),
+                BetTicketStatus::Void => $this->ledger->refund($locked->wallet, $payout, $this->reference($locked, 'refund', $revision), (string) $locked->id),
                 default => null,
             };
 
             $settlement = Settlement::create([
                 'bet_ticket_id' => $locked->id,
-                'revision' => 1,
+                'revision' => $revision,
                 'status' => $status,
                 'payout_minor' => $payout->minor,
                 'currency' => $locked->currency,
@@ -186,9 +190,154 @@ class SettlementService
     }
 
     /** Référence unique de l'écriture du ledger d'un règlement (révision 1 ; P5-06 ajoute les suivantes). */
-    private function reference(BetTicket $ticket, string $kind): string
+    private function reference(BetTicket $ticket, string $kind, int $revision): string
     {
-        return "settlement:{$ticket->id}:r1:{$kind}";
+        return "settlement:{$ticket->id}:r{$revision}:{$kind}";
+    }
+
+    private function nextRevision(BetTicket $ticket): int
+    {
+        return (int) Settlement::where('bet_ticket_id', $ticket->id)->max('revision') + 1;
+    }
+
+    /**
+     * Réévaluation des sélections déjà réglées d'un match, avec une nouvelle version de son résultat (P5-06).
+     *
+     * Pour chaque ticket dont l'issue change : écriture compensatoire du gain ou du remboursement précédent,
+     * nouvelle écriture si besoin, nouvelle révision du règlement. Un ticket perdu à cause de ce match redevient
+     * « pending » si d'autres matchs du combiné ne sont pas encore réglés. Le solde peut devenir négatif (reprise).
+     *
+     * @param  bool  $apply  false : aperçu, rien n'est écrit ($result peut alors être une version non enregistrée)
+     * @return list<array{ticket_id: string, reference: string, user_id: string, from: array{status: string, payout_minor: int}, to: array{status: string, payout_minor: int}, ledger_delta_minor: int}>
+     */
+    public function reevaluate(Event $event, Result $result, bool $apply, ?User $actor = null, string $reason = ''): array
+    {
+        $changed = [];
+        foreach (BetSelection::where('event_id', $event->id)->where('status', '!=', BetSelectionStatus::Pending)->get() as $selection) {
+            try {
+                $status = $this->outcomes->resolve($selection->market_key, $selection->market_line, $selection->selection_key, $result);
+            } catch (InvalidArgumentException $e) {
+                Log::error('settlement.selection_unresolvable', ['bet_selection_id' => $selection->id, 'error' => $e->getMessage()]);
+
+                continue; // marché inconnu : la sélection garde son règlement, signalé
+            }
+
+            if ($status !== $selection->status) {
+                $changed[$selection->id] = $status;
+            }
+        }
+
+        $ticketIds = BetSelection::whereKey(array_keys($changed))->distinct()->orderBy('bet_ticket_id')->pluck('bet_ticket_id');
+
+        $changes = [];
+        foreach ($ticketIds as $ticketId) {
+            $change = $apply
+                ? DB::transaction(fn () => $this->reevaluateTicket($ticketId, $changed, $result, true, $actor, $reason))
+                : $this->reevaluateTicket($ticketId, $changed, $result, false, $actor, $reason);
+
+            if ($change !== null) {
+                $changes[] = $change;
+            }
+        }
+
+        if ($apply) {
+            $this->resettleCatalogue($event, $result);
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  array<int, BetSelectionStatus>  $changed  nouveau statut des sélections dont l'issue change
+     * @return array<string, mixed>|null null si l'issue du ticket ne change pas
+     */
+    private function reevaluateTicket(int $ticketId, array $changed, Result $result, bool $apply, ?User $actor, string $reason): ?array
+    {
+        /** @var BetTicket $ticket */
+        $ticket = $apply ? BetTicket::whereKey($ticketId)->lockForUpdate()->firstOrFail() : BetTicket::findOrFail($ticketId);
+        $selections = $ticket->selections()->get();
+
+        foreach ($selections as $selection) {
+            if (isset($changed[$selection->id])) {
+                $selection->status = $changed[$selection->id];
+                $selection->result_id = $result->id;
+                $selection->settled_at = now();
+            }
+        }
+
+        $statuses = $selections->pluck('status');
+        [$to, $payout] = match (true) {
+            $statuses->contains(BetSelectionStatus::Lost) => [BetTicketStatus::Lost, Money::zero($ticket->currency)],
+            $statuses->contains(BetSelectionStatus::Pending) => [BetTicketStatus::Pending, Money::zero($ticket->currency)],
+            default => $this->outcome($ticket, $selections->all()),
+        };
+        $from = $ticket->status;
+        $fromPayout = $ticket->status === BetTicketStatus::Pending ? 0 : (int) $ticket->payout_minor;
+
+        if ($apply) {
+            $selections->filter(fn (BetSelection $s) => $s->isDirty())->each->save();
+        }
+
+        if ($from === $to && $fromPayout === $payout->minor) {
+            return null;
+        }
+
+        if ($apply) {
+            $last = Settlement::where('bet_ticket_id', $ticket->id)->orderByDesc('revision')->first();
+            $revision = ($last->revision ?? 0) + 1;
+
+            if ($last?->ledger_entry_id !== null) {
+                $this->ledger->reverse(LedgerEntry::findOrFail($last->ledger_entry_id), $this->reference($ticket, 'reversal', $revision), $reason, $actor);
+            }
+
+            $entry = match ($to) {
+                BetTicketStatus::Won => $this->ledger->payout($ticket->wallet, $payout, $this->reference($ticket, 'payout', $revision), (string) $ticket->id),
+                BetTicketStatus::Void => $this->ledger->refund($ticket->wallet, $payout, $this->reference($ticket, 'refund', $revision), (string) $ticket->id),
+                default => null,
+            };
+
+            // Un ticket rouvert (pending) n'a pas de règlement : il en aura un quand ses matchs seront joués.
+            if ($to !== BetTicketStatus::Pending) {
+                Settlement::create([
+                    'bet_ticket_id' => $ticket->id,
+                    'revision' => $revision,
+                    'status' => $to,
+                    'payout_minor' => $payout->minor,
+                    'currency' => $ticket->currency,
+                    'ledger_entry_id' => $entry?->id,
+                    'results' => $selections->mapWithKeys(fn (BetSelection $s) => [(string) $s->event_id => $s->result_id])->all(),
+                ]);
+            }
+
+            $ticket->update($to === BetTicketStatus::Pending
+                ? ['status' => $to, 'payout_minor' => null, 'settled_at' => null]
+                : ['status' => $to, 'payout_minor' => $payout->minor, 'settled_at' => now()]);
+
+            Log::warning('settlement.ticket_reevaluated', ['ticket' => $ticket->reference, 'from' => $from->value, 'to' => $to->value, 'payout_minor' => $payout->minor]);
+        }
+
+        return [
+            'ticket_id' => (string) $ticket->id,
+            'reference' => $ticket->reference,
+            'user_id' => (string) $ticket->user_id,
+            'from' => ['status' => $from->value, 'payout_minor' => $fromPayout],
+            'to' => ['status' => $to->value, 'payout_minor' => $payout->minor],
+            'ledger_delta_minor' => $payout->minor - $fromPayout,
+        ];
+    }
+
+    /** Issue des sélections du catalogue d'un match déjà réglé, recalculée avec la version corrigée. */
+    private function resettleCatalogue(Event $event, Result $result): void
+    {
+        foreach ($event->markets()->with('selections')->get() as $market) {
+            try {
+                foreach ($market->selections as $selection) {
+                    $selection->update(['result' => $this->outcomes->resolve($market->key, $market->line, $selection->key, $result)->value]);
+                }
+            } catch (InvalidArgumentException) {
+                continue;
+            }
+        }
     }
 
     /** Issue des sélections du catalogue (affichage) et marchés réglés. */

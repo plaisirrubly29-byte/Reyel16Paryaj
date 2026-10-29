@@ -4,8 +4,11 @@ namespace Tests\Feature\Acceptance;
 
 use App\Models\User;
 use App\Modules\Betting\Models\BetTicket;
+use App\Modules\Settlement\Enums\ResultCorrectionStatus;
 use App\Modules\Settlement\Enums\ResultStatus;
 use App\Modules\Settlement\Models\Result;
+use App\Modules\Settlement\Models\ResultCorrection;
+use App\Modules\Settlement\Services\ResultCorrectionService;
 use App\Modules\Settlement\Services\ResultImportService;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Enums\MarketStatus;
@@ -18,6 +21,7 @@ use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
+use App\Support\Http\ApiException;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -276,9 +280,28 @@ class TicketAcceptanceTest extends TestCase
         $this->bet()->assertCreated();
         $this->finishMatch('2', '1');
 
-        // Le fournisseur corrige le score (Chelsea gagne) : nouvelle version tracée, aucun second paiement.
+        // Le fournisseur corrige le score (Chelsea gagne) après le paiement : demande de correction en attente
+        // (P5-06), rien ne change tant qu'un administrateur ne l'a pas validée.
         $this->fake->setResult('fake-1', '1', '2');
         $this->assertTrue(app(ResultImportService::class)->import('soccer_epl')->succeeded());
+        Artisan::call('settlement:run');
+
+        $this->assertSame(1, Result::count());
+        $correction = ResultCorrection::sole();
+        $this->assertSame(ResultCorrectionStatus::Pending, $correction->status);
+        $this->assertNull($correction->requested_by);
+        $this->assertSame(1, LedgerEntry::where('type', LedgerEntryType::Payout)->count());
+        $this->assertSame(self::BALANCE - self::STAKE + 210_00, $this->balance());
+
+        // Validée : nouvelle version tracée, gain repris par écriture compensatoire, une seule fois.
+        $approver = User::factory()->create();
+        app(ResultCorrectionService::class)->approve($approver, $correction, 'Score officiel confirmé par la ligue');
+        try {
+            app(ResultCorrectionService::class)->approve($approver, $correction, 'Rejeu');
+            $this->fail('Une correction a pu être validée deux fois.');
+        } catch (ApiException $e) {
+            $this->assertSame('correction_not_pending', $e->errorCode);
+        }
         Artisan::call('settlement:run');
 
         $results = Result::orderBy('version')->get();
@@ -287,8 +310,10 @@ class TicketAcceptanceTest extends TestCase
         $this->assertNotNull($results[1]->correction_reason);
         $this->assertSame(ResultStatus::Final, $results[1]->status);
 
+        $this->assertSame('lost', BetTicket::sole()->status->value);
         $this->assertSame(1, LedgerEntry::where('type', LedgerEntryType::Payout)->count());
-        $this->assertSame(self::BALANCE - self::STAKE + 210_00, $this->balance());
+        $this->assertSame(1, LedgerEntry::where('type', LedgerEntryType::Reversal)->count());
+        $this->assertSame(self::BALANCE - self::STAKE, $this->balance());
     }
 
     // §11.6 — Permissions au niveau API, y compris l'accès direct par identifiant.

@@ -27,6 +27,7 @@ class ResultImportService
     public function __construct(
         private readonly SportsDataProvider $provider,
         private readonly ResultRecorder $recorder,
+        private readonly ResultCorrectionService $corrections,
     ) {}
 
     public function import(string $competitionKey, int $daysFrom = 1): ResultImportReport
@@ -94,6 +95,24 @@ class ResultImportService
                 $scores = $this->liveScore($data);
                 $event->update(['status' => EventStatus::Live] + ($scores === null ? [] : ['home_score' => $scores[0], 'away_score' => $scores[1]]));
             }
+
+            return;
+        }
+
+        // Tickets déjà réglés avec ce match : une correction du fournisseur attend la validation d'un administrateur
+        // avant de toucher à l'argent (P5-06).
+        if ($this->corrections->requiresApproval($event)) {
+            try {
+                $pending = $this->corrections->requestFromProvider($event, ResultStatus::Final, $data->homeScore, $data->awayScore,
+                    $this->provider->name(), $data->externalId, $data->updatedAt);
+            } catch (InvalidArgumentException $e) {
+                $report->rejected++;
+                Log::warning('settlement.result_rejected', ['competition' => $report->competitionKey, 'id' => $data->externalId, 'error' => $e->getMessage()]);
+
+                return;
+            }
+
+            $pending === null ? $report->unchanged++ : $report->awaitingApproval++;
 
             return;
         }

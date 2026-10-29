@@ -101,6 +101,18 @@ class ResultRecorder
         });
     }
 
+    /**
+     * Scores normalisés d'une issue, sans rien enregistrer (demande de correction, P5-06).
+     *
+     * @return array{0: ?string, 1: ?string}
+     *
+     * @throws InvalidArgumentException résultat invalide
+     */
+    public function normalized(ResultStatus $status, ?string $homeScore, ?string $awayScore): array
+    {
+        return $this->validate($status, $homeScore, $awayScore);
+    }
+
     /** @return array{0: ?string, 1: ?string} scores normalisés ("02" → "2") */
     private function validate(ResultStatus $status, ?string $homeScore, ?string $awayScore): array
     {
