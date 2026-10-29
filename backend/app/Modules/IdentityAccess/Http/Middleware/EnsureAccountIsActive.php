@@ -2,7 +2,6 @@
 
 namespace App\Modules\IdentityAccess\Http\Middleware;
 
-use App\Support\Http\ApiException;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,7 +24,7 @@ class EnsureAccountIsActive
                 $request->session()->invalidate();
             }
 
-            throw new ApiException('account_suspended', __('Ce compte est suspendu ou fermé. Contactez le support.'), 423);
+            throw $user->status->accessDenied();
         }
 
         return $next($request);

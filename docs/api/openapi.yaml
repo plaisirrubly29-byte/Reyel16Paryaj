@@ -18,6 +18,7 @@ tags:
   - name: Catalogue
   - name: Bets
   - name: Wallet
+  - name: ResponsibleGaming
   - name: Admin
 
 paths:
@@ -89,7 +90,7 @@ paths:
           description: "`invalid_credentials` ou `validation_failed`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
-          description: "`account_suspended` — compte suspendu, exclu ou fermé"
+          description: "`account_suspended` — compte suspendu ou fermé ; `account_excluded` — auto-exclusion du joueur (jeu responsable)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/forgot-password:
@@ -379,8 +380,10 @@ paths:
         "422":
           description: |
             validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
-            direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ; multiple_not_allowed ; stake_out_of_range (details.min / max) ;
-            currency_mismatch ; insufficient_funds.
+            direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ;
+            multiple_not_allowed ; stake_out_of_range (details.min / max) ; currency_mismatch ; insufficient_funds ;
+            jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
+            limit_minor, remaining_minor).
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
         "428": { description: En-tête Idempotency-Key manquant }
@@ -421,6 +424,109 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
         "423": { description: Compte suspendu ou fermé }
+
+  /responsible-gaming:
+    get:
+      tags: [ResponsibleGaming]
+      summary: Limites de mise, pause et options de jeu responsable du joueur connecté
+      description: |
+        Limites sur des périodes glissantes (day = 24 dernières heures, week = 7 jours, month = 30 jours), mises de la
+        période et reste. Valeurs par défaut les plus protectrices en attendant l'avis juridique (D-09, J-8).
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /responsible-gaming/limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de mise (journalisé)
+      description: |
+        Une baisse (ou une première limite) s'applique tout de suite et annule une hausse en attente. Une hausse ou une
+        suppression (amount_minor null) ne s'applique qu'après le délai de réflexion (7 jours par défaut), qui repart à
+        chaque nouvelle demande. Même valeur : rien ne change.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 50000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/pause:
+    post:
+      tags: [ResponsibleGaming]
+      summary: Faire une pause dans les paris (irrévocable, journalisé)
+      description: |
+        Pendant la pause, POST /bets renvoie 422 betting_paused ; le joueur reste connecté (solde, tickets). Une pause en
+        cours n'est jamais raccourcie : une durée plus courte ne change rien, une durée plus longue la prolonge.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [duration], properties: { duration: { type: string, enum: ["24h", "7d", "30d"] } } } } }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/self-exclusion:
+    post:
+      tags: [ResponsibleGaming]
+      summary: S'exclure du jeu (irrévocable, mot de passe requis, journalisé et audité)
+      description: |
+        Le compte passe en « excluded » et la session est fermée : toute connexion renvoie 423 account_excluded.
+        À l'échéance, le compte reste exclu jusqu'à une demande de réouverture traitée par la Conformité.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [duration, password]
+              properties:
+                duration: { type: string, enum: ["6m", "1y", "5y"] }
+                password: { type: string, description: Mot de passe du compte (confirmation) }
+      responses:
+        "200":
+          description: Compte exclu, session fermée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      excluded_until: { type: string, format: date-time }
+                      reopening: { type: string, enum: [on_request] }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { description: "`invalid_password` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /wallet:
     get:
@@ -902,6 +1008,38 @@ components:
         related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
         description: { type: [string, "null"] }
         created_at: { type: string, format: date-time }
+    ResponsibleGamingLimit:
+      type: object
+      properties:
+        amount: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: "null : aucune limite" }
+        used: { $ref: "#/components/schemas/Money" }
+        remaining: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        pending:
+          type: [object, "null"]
+          description: Hausse ou suppression en attente du délai de réflexion
+          properties:
+            amount: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: "null : suppression" }
+            effective_at: { type: string, format: date-time }
+    ResponsibleGaming:
+      type: object
+      properties:
+        limits:
+          type: object
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        pause:
+          type: object
+          properties:
+            active: { type: boolean }
+            ends_at: { type: [string, "null"], format: date-time }
+        options:
+          type: object
+          properties:
+            pause_durations: { type: array, items: { type: string }, example: ["24h", "7d", "30d"] }
+            exclusion_durations: { type: array, items: { type: string }, example: ["6m", "1y", "5y"] }
+            limit_increase_delay_days: { type: integer, example: 7 }
     AdminUser:
       type: object
       properties:

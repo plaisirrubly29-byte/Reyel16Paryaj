@@ -7,6 +7,8 @@ use App\Modules\Betting\Enums\BetType;
 use App\Modules\Betting\Models\BetSelection;
 use App\Modules\Betting\Models\BetTicket;
 use App\Modules\Catalogue\Http\Resources\MarketResource;
+use App\Modules\Compliance\Exceptions\ResponsibleGamingException;
+use App\Modules\Compliance\Services\ResponsibleGamingService;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Models\Selection;
@@ -35,7 +37,10 @@ use Illuminate\Support\Facades\DB;
  */
 class BetPlacementService
 {
-    public function __construct(private readonly LedgerService $ledger) {}
+    public function __construct(
+        private readonly LedgerService $ledger,
+        private readonly ResponsibleGamingService $responsibleGaming,
+    ) {}
 
     /**
      * @param  list<array{selection_id: int|string, odds: string}>  $picks
@@ -43,7 +48,7 @@ class BetPlacementService
      *
      * @throws ApiException stake_out_of_range, multiple_not_allowed, selection_unavailable,
      *                      same_event_selections, odds_changed, insufficient_funds, wallet_frozen,
-     *                      idempotency_key_reused
+     *                      idempotency_key_reused, betting_paused, stake_limit_exceeded
      */
     public function place(User $user, array $picks, int $stakeMinor, ?string $currency = null, ?string $placementKey = null): BetTicket
     {
@@ -54,6 +59,11 @@ class BetPlacementService
 
         try {
             return $this->accept($user, $picks, $stakeMinor, $currency, $placementKey);
+        } catch (ResponsibleGamingException $e) {
+            // Journalisé ici, après l'annulation de la transaction du pari (P7-02).
+            $this->responsibleGaming->recordRefusal($user, $e, $stakeMinor);
+
+            throw $e;
         } catch (UniqueConstraintViolationException $e) {
             // Deux requêtes simultanées avec la même clé : la contrainte unique a arrêté la seconde.
             if ($placementKey !== null && ($existing = $this->replayed($user, $placementKey, $picks, $stakeMinor)) !== null) {
@@ -115,6 +125,9 @@ class BetPlacementService
         }
 
         return DB::transaction(function () use ($user, $wallet, $picks, $stakeMinor, $placementKey) {
+            // Jeu responsable (pause, limites de mise) : verrou sur le joueur, ses paris simultanés passent un par un.
+            $this->responsibleGaming->assertCanBet($user, $stakeMinor);
+
             $selections = $this->lockSelections($picks);
             $this->assertAvailable($picks, $selections);
             $this->assertOddsUnchanged($picks, $selections);

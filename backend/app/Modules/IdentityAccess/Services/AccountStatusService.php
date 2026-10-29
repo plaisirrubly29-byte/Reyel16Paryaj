@@ -11,12 +11,31 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Suspension / réactivation d'un compte par un administrateur. Seul chemin qui modifie users.status
- * côté administration ; chaque changement est audité avec motif.
+ * Suspension / réactivation d'un compte par un administrateur, et auto-exclusion du joueur. Seul chemin
+ * qui modifie users.status ; chaque changement est audité (avec motif pour l'administration).
  */
 class AccountStatusService
 {
     public function __construct(private readonly AuditLogger $audit) {}
+
+    /**
+     * Auto-exclusion demandée par le joueur lui-même (jeu responsable, P7-02) : le compte ne peut plus se
+     * connecter. Aucun administrateur ne peut la lever par reactivate() ; la réouverture relève de la Conformité.
+     */
+    public function selfExclude(User $user): User
+    {
+        if ($user->status !== AccountStatus::Active) {
+            throw new ApiException('invalid_status_transition', __('Seul un compte actif peut être exclu.'), 409);
+        }
+
+        return DB::transaction(function () use ($user) {
+            $user->forceFill(['status' => AccountStatus::Excluded, 'status_changed_at' => now()])->save();
+
+            $this->audit->record(AuditAction::UserSelfExcluded, $user, ['status' => AccountStatus::Active->value], ['status' => AccountStatus::Excluded->value], actor: $user);
+
+            return $user;
+        });
+    }
 
     public function suspend(User $actor, User $target, string $reason): User
     {
