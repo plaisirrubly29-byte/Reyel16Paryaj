@@ -28,7 +28,8 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): UserResource
     {
-        $user = $this->auth->verifyCredentials($request->validated('phone'), $request->validated('password'));
+        $login = $request->identifier();
+        $user = $this->auth->verifyCredentials($login['field'], $login['value'], $request->validated('password'));
 
         $this->startSession($request, $user);
         $this->auth->recordLogin($user);

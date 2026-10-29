@@ -171,6 +171,36 @@ class AuthApiTest extends TestCase
             ->assertJsonPath('data.id', (string) $user->id);
     }
 
+    public function test_login_by_email_whatever_the_case(): void
+    {
+        $user = User::factory()->create(['email' => 'chef@example.com', 'password' => 'motdepasse123']);
+
+        $this->postJson('/api/v1/auth/login', ['email' => '  Chef@Example.COM ', 'password' => 'motdepasse123'])
+            ->assertOk()
+            ->assertJsonPath('data.id', (string) $user->id);
+
+        $this->assertAuthenticatedAs($user, 'web');
+    }
+
+    public function test_login_requires_a_phone_or_an_email(): void
+    {
+        $this->postJson('/api/v1/auth/login', ['password' => 'motdepasse123'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'validation_failed');
+    }
+
+    public function test_unknown_email_and_wrong_password_return_the_same_error(): void
+    {
+        User::factory()->create(['email' => 'chef@example.com', 'password' => 'motdepasse123']);
+
+        $wrongPassword = $this->postJson('/api/v1/auth/login', ['email' => 'chef@example.com', 'password' => 'mauvais-mdp1']);
+        $unknownAccount = $this->postJson('/api/v1/auth/login', ['email' => 'personne@example.com', 'password' => 'mauvais-mdp1']);
+
+        $wrongPassword->assertStatus(422)->assertJsonPath('error.code', 'invalid_credentials');
+        $this->assertSame($wrongPassword->json(), $unknownAccount->json());
+        $this->assertGuest('web');
+    }
+
     public function test_unknown_account_and_wrong_password_return_the_same_error(): void
     {
         User::factory()->create(['phone' => '34123456', 'password' => 'motdepasse123']);
@@ -239,6 +269,23 @@ class AuthApiTest extends TestCase
 
         // Les autres comptes ne sont pas touchés.
         $this->postJson('/api/v1/auth/login', ['phone' => '37654321', 'password' => 'mauvais-mdp1'])->assertStatus(422);
+    }
+
+    public function test_phone_and_email_of_the_same_account_share_the_per_account_limit(): void
+    {
+        User::factory()->create(['phone' => '34123456', 'email' => 'chef@example.com']);
+
+        for ($i = 0; $i < config('identity.login.max_attempts_per_account'); $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.{$i}"])
+                ->postJson('/api/v1/auth/login', $i % 2 === 0
+                    ? ['phone' => '34123456', 'password' => 'mauvais-mdp1']
+                    : ['email' => 'Chef@example.com', 'password' => 'mauvais-mdp1'])
+                ->assertStatus(422);
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.1'])
+            ->postJson('/api/v1/auth/login', ['email' => 'chef@example.com', 'password' => 'mauvais-mdp1'])
+            ->assertStatus(429);
     }
 
     public function test_login_with_a_non_string_phone_is_a_validation_error(): void

@@ -94,18 +94,23 @@ class AppServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         RateLimiter::for('login', function (Request $request) {
-            // Le limiteur passe avant LoginRequest : il normalise lui-même le numéro, sinon "3412-3456"
+            // Le limiteur passe avant LoginRequest : il normalise lui-même le numéro (ou l'email), sinon "3412-3456"
             // et "+509 34123456" auraient chacun leur compteur (revue P8-02, M1).
             $phone = is_string($request->input('phone')) ? PhoneNumber::normalize($request->input('phone')) : '';
+            $email = $phone === '' && is_string($request->input('email')) ? Str::lower(trim($request->input('email'))) : '';
+            $login = $phone !== '' ? $phone : ($email !== '' ? 'email:'.$email : '');
 
             $limits = [
-                Limit::perMinute(config('identity.login.max_attempts_per_phone'))->by('login:'.$phone.'|'.$request->ip()),
+                Limit::perMinute(config('identity.login.max_attempts_per_phone'))->by('login:'.$login.'|'.$request->ip()),
                 Limit::perMinute(config('identity.login.max_attempts_per_ip'))->by('login-ip:'.$request->ip()),
             ];
 
             // Par compte, quelle que soit l'IP : borne une attaque répartie sur de nombreuses adresses.
-            if ($phone !== '') {
-                $limits[] = Limit::perHour(config('identity.login.max_attempts_per_account'))->by('login-account:'.$phone);
+            // Compteur commun au téléphone et à l'email d'un même compte (sinon deux plafonds pour un compte).
+            if ($login !== '') {
+                $accountId = User::where($phone !== '' ? 'phone' : 'email', $phone !== '' ? $phone : $email)->value('id');
+                $limits[] = Limit::perHour(config('identity.login.max_attempts_per_account'))
+                    ->by('login-account:'.($accountId !== null ? 'id:'.$accountId : $login));
             }
 
             return $limits;

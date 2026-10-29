@@ -25,7 +25,8 @@ export type User = {
 };
 
 /** Numéro local à 8 chiffres (sans l'indicatif +509, ajouté par le serveur). */
-export type LoginInput = { phone: string; password: string };
+/** Connexion par téléphone (8 chiffres) ou par email. */
+export type LoginInput = { phone: string; password: string } | { email: string; password: string };
 
 export type RegisterInput = {
   name: string;
