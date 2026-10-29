@@ -3,15 +3,19 @@
 namespace App\Modules\IdentityAccess\Services;
 
 use App\Models\User;
+use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
+use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class AuthService
 {
+    public function __construct(private readonly LedgerService $ledger) {}
+
     /**
-     * Crée un compte joueur actif (sans rôle) et son profil.
+     * Crée un compte joueur actif (sans rôle), son profil et, en V1 (fonds fictifs), son crédit de bienvenue.
      *
      * @param  array{name: string, phone: string, email?: string|null, password: string, birth_date: string, country?: string|null}  $data
      */
@@ -33,8 +37,30 @@ class AuthService
                 'country' => $data['country'] ?? null,
             ]);
 
+            $this->creditWelcomeFunds($user);
+
             return $user;
         });
+    }
+
+    /**
+     * Fonds fictifs de bienvenue : sans eux, un nouveau joueur ne peut placer aucun pari en V1.
+     * Écrit par le Ledger (référence unique par compte : jamais crédité deux fois), dans la transaction
+     * de l'inscription : pas de compte sans crédit, ni de crédit sans compte.
+     */
+    private function creditWelcomeFunds(User $user): void
+    {
+        $amount = (int) config('wallet.welcome_credit_minor');
+        if (! config('wallet.simulated') || $amount <= 0) {
+            return;
+        }
+
+        $this->ledger->creditSimulated(
+            $this->ledger->walletFor($user),
+            Money::ofMinor($amount, config('wallet.currency')),
+            "welcome:user:{$user->id}",
+            'Fonds fictifs de bienvenue',
+        );
     }
 
     /**
