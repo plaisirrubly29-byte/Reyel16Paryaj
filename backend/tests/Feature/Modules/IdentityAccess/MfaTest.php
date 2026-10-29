@@ -6,7 +6,9 @@ use App\Models\User;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
+use App\Modules\IdentityAccess\Services\MfaService;
 use App\Modules\IdentityAccess\Services\Totp;
+use App\Support\Http\ApiException;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -94,6 +96,21 @@ class MfaTest extends TestCase
         $this->getJson('/api/v1/me')->assertJsonPath('data.mfa', ['enabled' => true, 'verified' => true, 'required' => true]);
     }
 
+    public function test_confirm_changes_the_session_id(): void
+    {
+        // Revue P8-02, F3 : un identifiant de session fixé avant ne doit pas devenir une session MFA validée.
+        // Appel direct : en test, chaque requête HTTP sans cookie repart déjà d'un nouvel identifiant.
+        $mfa = app(MfaService::class);
+        $session = $this->app['session.store'];
+        $mfa->setup($this->admin);
+        $before = $session->getId();
+
+        $mfa->confirm($this->admin, $this->currentCode($this->admin), $session);
+
+        $this->assertNotSame($before, $session->getId());
+        $this->assertTrue($mfa->isVerified($this->admin, $session));
+    }
+
     public function test_confirm_rejects_a_wrong_code(): void
     {
         $this->login($this->admin);
@@ -158,6 +175,75 @@ class MfaTest extends TestCase
         $this->relogin();
         $this->postJson('/api/v1/auth/mfa/verify', ['recovery_code' => $codes[0]])->assertStatus(422);
         $this->assertCount(7, $this->admin->fresh()->mfa_recovery_codes);
+    }
+
+    public function test_a_code_consumed_by_a_concurrent_request_is_refused(): void
+    {
+        // Revue P8-02, F5 : l'état MFA est relu sous verrou, pas pris dans un modèle chargé avant l'autre requête.
+        $this->login($this->admin);
+        $recovery = $this->enableMfa();
+        $this->relogin();
+        $stale = $this->admin->fresh();
+        $code = $this->currentCode($this->admin);
+
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => $code])->assertNoContent();
+        $this->postJson('/api/v1/auth/mfa/verify', ['recovery_code' => $recovery[0]])->assertNoContent();
+
+        foreach ([[$code, null], [null, $recovery[0]]] as [$totp, $recoveryCode]) {
+            try {
+                app(MfaService::class)->verify($stale, $totp, $recoveryCode, $this->app['session.store']);
+                $this->fail('Code déjà consommé accepté une seconde fois.');
+            } catch (ApiException $e) {
+                $this->assertSame('invalid_mfa_code', $e->errorCode);
+            }
+        }
+        $this->assertCount(7, $this->admin->fresh()->mfa_recovery_codes);
+    }
+
+    public function test_regenerating_recovery_codes_requires_a_current_totp_code_and_is_audited(): void
+    {
+        // Revue P8-02, F6 : une session admin volée ne suffit pas à obtenir de nouveaux codes de secours.
+        $this->login($this->admin);
+        $old = $this->enableMfa();
+
+        $this->postJson('/api/v1/auth/mfa/recovery-codes')->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+        $this->postJson('/api/v1/auth/mfa/recovery-codes', ['code' => '000000'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'invalid_mfa_code');
+        $this->assertSame(1, AuditLog::where('action', AuditAction::MfaFailed)->count());
+        $this->assertSame(0, AuditLog::where('action', AuditAction::MfaRecoveryCodesRegenerated)->count());
+
+        $code = $this->nextRealTimeCode($this->admin);
+        $new = $this->postJson('/api/v1/auth/mfa/recovery-codes', ['code' => $code])->assertOk()->json('data.recovery_codes');
+
+        $this->assertCount(8, $new);
+        $this->assertEmpty(array_intersect($old, $new));
+        $log = AuditLog::where('action', AuditAction::MfaRecoveryCodesRegenerated)->sole();
+        $this->assertSame($this->admin->id, $log->actor_id);
+        $this->assertSame(['count' => 8], $log->metadata);
+        $this->assertStringNotContainsString($new[0], json_encode($log->toArray()));
+
+        // Le code TOTP utilisé ne sert pas deux fois, et un ancien code de secours ne marche plus.
+        $this->travel(61)->seconds(); // hors de la limite par minute
+        $this->postJson('/api/v1/auth/mfa/recovery-codes', ['code' => $code])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'invalid_mfa_code');
+        $this->relogin();
+        $this->postJson('/api/v1/auth/mfa/verify', ['recovery_code' => $old[0]])->assertStatus(422);
+        $this->postJson('/api/v1/auth/mfa/verify', ['recovery_code' => $new[0]])->assertNoContent();
+    }
+
+    public function test_regenerating_recovery_codes_is_rate_limited(): void
+    {
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->travel(61)->seconds(); // la confirmation ne compte plus dans la limite par minute
+
+        for ($i = 0; $i < config('identity.mfa.max_attempts_per_minute'); $i++) {
+            $this->postJson('/api/v1/auth/mfa/recovery-codes', ['code' => '000000']);
+        }
+
+        $this->postJson('/api/v1/auth/mfa/recovery-codes', ['code' => '000000'])->assertStatus(429);
     }
 
     public function test_verify_is_rate_limited(): void

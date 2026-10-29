@@ -13,6 +13,7 @@ enum AuditAction: string
     case UserReactivated = 'user.reactivated';
     case MfaReset = 'mfa.reset';
     case MfaFailed = 'mfa.failed';
+    case MfaRecoveryCodesRegenerated = 'mfa.recovery_codes_regenerated';
     case UserPersonalDataViewed = 'user.personal_data_viewed';
 
     // Audit
@@ -23,7 +24,7 @@ enum AuditAction: string
     public function requiresReason(): bool
     {
         return match ($this) {
-            self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed => false,
+            self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::MfaRecoveryCodesRegenerated => false,
             default => true,
         };
     }

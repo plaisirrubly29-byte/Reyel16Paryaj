@@ -77,6 +77,8 @@ class MfaService
 
         $codes = $this->newRecoveryCodes($user);
         $user->forceFill(['mfa_confirmed_at' => now()])->save();
+        // Nouvel identifiant de session, comme verify : un identifiant fixé avant ne devient pas une session MFA (P8-02, F3).
+        $session->migrate(true);
         $session->put(self::SESSION_KEY, $user->getKey());
 
         return $codes;
@@ -108,10 +110,30 @@ class MfaService
         $session->put(self::SESSION_KEY, $user->getKey());
     }
 
-    /** @return list<string> */
-    public function regenerateRecoveryCodes(User $user): array
+    /**
+     * Nouveaux codes de secours (les anciens sont invalidés). Exige un code TOTP courant, pas un code de secours :
+     * une session admin volée ne suffit pas à obtenir 8 codes durables (revue P8-02, F6). Audité.
+     *
+     * @return list<string>
+     *
+     * @throws ApiException invalid_mfa_code, mfa_too_many_failures
+     */
+    public function regenerateRecoveryCodes(User $user, string $code, Session $session): array
     {
-        return $this->newRecoveryCodes($user);
+        try {
+            $this->consumeTotp($user, $code);
+        } catch (ApiException $e) {
+            $this->recordFailure($user, 'totp', $session);
+
+            throw $e;
+        }
+
+        return DB::transaction(function () use ($user) {
+            $codes = $this->newRecoveryCodes($user);
+            $this->audit->record(AuditAction::MfaRecoveryCodesRegenerated, $user, actor: $user, metadata: ['count' => count($codes)]);
+
+            return $codes;
+        });
     }
 
     /** Réinitialise le MFA d'un autre administrateur (appareil perdu). Audité. */
@@ -177,26 +199,46 @@ class MfaService
 
     private function consumeTotp(User $user, string $code): void
     {
-        $step = Totp::verify((string) $user->mfa_secret, $code);
+        $this->underLock($user, function (User $locked) use ($code) {
+            $step = Totp::verify((string) $locked->mfa_secret, $code);
 
-        // Un code déjà utilisé (même période ou antérieure) est refusé : pas de rejeu.
-        if ($step === null || ($user->mfa_last_used_step !== null && $step <= $user->mfa_last_used_step)) {
-            throw new ApiException('invalid_mfa_code', __('Code de vérification invalide.'), 422);
-        }
+            // Un code déjà utilisé (même période ou antérieure) est refusé : pas de rejeu.
+            if ($step === null || ($locked->mfa_last_used_step !== null && $step <= $locked->mfa_last_used_step)) {
+                throw new ApiException('invalid_mfa_code', __('Code de vérification invalide.'), 422);
+            }
 
-        $user->forceFill(['mfa_last_used_step' => $step])->save();
+            $locked->forceFill(['mfa_last_used_step' => $step])->save();
+        });
     }
 
     private function consumeRecoveryCode(User $user, string $code): void
     {
         $hash = $this->hashRecoveryCode($code);
-        $remaining = collect($user->mfa_recovery_codes ?? []);
 
-        if (! $remaining->contains(fn (string $stored) => hash_equals($stored, $hash))) {
-            throw new ApiException('invalid_mfa_code', __('Code de vérification invalide.'), 422);
-        }
+        $this->underLock($user, function (User $locked) use ($hash) {
+            $remaining = collect($locked->mfa_recovery_codes ?? []);
 
-        $user->forceFill(['mfa_recovery_codes' => $remaining->reject(fn (string $stored) => hash_equals($stored, $hash))->values()->all()])->save();
+            if (! $remaining->contains(fn (string $stored) => hash_equals($stored, $hash))) {
+                throw new ApiException('invalid_mfa_code', __('Code de vérification invalide.'), 422);
+            }
+
+            $locked->forceFill(['mfa_recovery_codes' => $remaining->reject(fn (string $stored) => hash_equals($stored, $hash))->values()->all()])->save();
+        });
+    }
+
+    /**
+     * Lit l'état MFA verrouillé (SELECT … FOR UPDATE) avant de consommer un code : deux requêtes simultanées
+     * ne peuvent pas utiliser le même code TOTP ou de secours (revue P8-02, F5). $user est ensuite mis à jour.
+     *
+     * @param  \Closure(User): void  $consume
+     */
+    private function underLock(User $user, \Closure $consume): void
+    {
+        DB::transaction(function () use ($user, $consume) {
+            $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
+            $consume($locked);
+            $user->setRawAttributes($locked->getAttributes(), sync: true);
+        });
     }
 
     /** @return list<string> */
