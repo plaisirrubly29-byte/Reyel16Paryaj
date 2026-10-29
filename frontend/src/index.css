@@ -1394,3 +1394,71 @@ a.match-line-teams:hover { color: var(--brand); }
   .profile-balance, .profile-shortcut { transition: none; }
   .profile-balance:hover, .profile-shortcut:hover { transform: none; }
 }
+
+/* =====================================================================
+   Espace joueur : menu des rubriques, solde, coupons, rubriques à venir
+   ===================================================================== */
+.header-wallet-amount { font-variant-numeric: tabular-nums; padding-left: 0.45rem; margin-left: 0.1rem; border-left: 1px solid rgba(255, 255, 255, 0.22); }
+
+.account-shell { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 1.5rem; align-items: start; max-width: 1240px; width: 100%; margin: 0 auto; padding-left: 1rem; }
+.account-side { position: sticky; top: calc(var(--nav-h) + 1rem); display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.account-side-head { display: flex; align-items: center; gap: 0.7rem; padding: 0 0.4rem 0.8rem; border-bottom: 1px solid var(--border); min-width: 0; }
+.account-side-head > div { display: flex; flex-direction: column; min-width: 0; }
+.account-side-head strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-side-head span { font-size: 0.82rem; color: var(--muted); }
+.account-side-head .money { color: var(--text); font-weight: 700; }
+.account-avatar { display: inline-grid; place-items: center; width: 2.6rem; height: 2.6rem; flex: none; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--navy)); color: #fff; font-weight: 800; }
+.account-nav { display: flex; flex-direction: column; gap: 0.15rem; }
+.account-nav a { display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.7rem; border-radius: 10px; color: var(--text); font-weight: 600; font-size: 0.92rem; }
+.account-nav a svg { color: var(--muted); flex: none; }
+.account-nav a:hover { background: var(--surface-2); text-decoration: none; }
+.account-nav a.active { background: var(--accent-soft); color: var(--accent); }
+.account-nav a.active svg { color: var(--accent); }
+.soon-tag { margin-left: auto; padding: 0.1rem 0.45rem; border-radius: 999px; background: #fff4d6; color: #8a5a00; font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.account-main { min-width: 0; }
+
+/* Solde : dépôt et retrait */
+.money-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.money-card { display: flex; flex-direction: column; gap: 0.9rem; padding: 1.2rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.money-card-head { display: flex; align-items: flex-start; gap: 0.8rem; }
+.money-card-head h2 { margin: 0; font-size: 1.1rem; }
+.money-card-head p { margin: 0.15rem 0 0; }
+.money-card-head .soon-tag { margin-top: 0.2rem; }
+.money-card-icon { display: inline-grid; place-items: center; width: 2.8rem; height: 2.8rem; flex: none; border-radius: 12px; background: #eaf1fd; color: var(--brand); }
+#withdraw .money-card-icon, .money-card:nth-child(2) .money-card-icon { background: var(--accent-soft); color: var(--accent); }
+.money-card-body { display: flex; flex-direction: column; align-items: flex-start; gap: 0.6rem; font-size: 0.9rem; }
+.money-card-body p { margin: 0; }
+.recent-ops { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.recent-ops li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+.recent-ops li:last-child { border-bottom: 0; }
+.recent-ops li > span { display: flex; flex-direction: column; }
+
+/* Mes coupons */
+.coupon-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.coupon-card { display: flex; flex-direction: column; gap: 0.6rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); }
+.coupon-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.coupon-figures { margin: 0; font-size: 0.92rem; }
+
+/* Rubriques à venir */
+.coming-soon { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; padding: 2rem 1.25rem; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.coming-soon .soon-tag { margin: 0; font-size: 0.72rem; }
+.coming-soon-icon { display: inline-grid; place-items: center; width: 4rem; height: 4rem; border-radius: 50%; background: #fff4d6; color: #b07800; }
+.coming-soon-promise { margin: 0; max-width: 32rem; font-size: 1.05rem; font-weight: 600; }
+.coming-soon-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; text-align: left; }
+.coming-soon-list li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+.coming-soon-list svg { color: var(--success); flex: none; }
+
+@media (max-width: 960px) {
+  .account-shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding-left: 0; }
+  .account-side { position: static; padding: 0.6rem; border-radius: 14px; }
+  .account-side-head { display: none; }
+  /* Rubriques en bande défilante horizontale. */
+  .account-nav { flex-direction: row; gap: 0.35rem; overflow-x: auto; scrollbar-width: none; }
+  .account-nav::-webkit-scrollbar { display: none; }
+  .account-nav a { flex: none; padding: 0.5rem 0.75rem; font-size: 0.85rem; white-space: nowrap; }
+  .account-nav .soon-tag { margin-left: 0.2rem; }
+  .money-grid { grid-template-columns: minmax(0, 1fr); }
+  .header-wallet-amount { display: none; }
+}
+/* En-tête chargé (sports, live, mes paris, recherche) : le montant du solde ne s'affiche qu'en grand écran. */
+@media (max-width: 1199px) { .header-wallet-amount { display: none; } }

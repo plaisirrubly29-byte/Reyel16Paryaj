@@ -205,11 +205,11 @@ describe("page d'accueil : matchs", () => {
     expect(await screen.findByText('Connexion impossible', {}, { timeout: 8000 })).toBeInTheDocument();
   });
 
-  it('propose le portefeuille à un joueur connecté', async () => {
+  it('propose le solde à un joueur connecté', async () => {
     catalogue({ status: 200, body: { data: player } });
     renderApp('/');
 
-    expect(await screen.findByRole('link', { name: 'Portefeuille' })).toHaveAttribute('href', '/wallet');
+    expect(await screen.findByRole('link', { name: /^Solde/ })).toHaveAttribute('href', '/wallet');
     expect(screen.queryByRole('link', { name: "S'inscrire" })).toBeNull();
   });
 });

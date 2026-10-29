@@ -12,7 +12,11 @@ import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
+import { TransactionsPage } from '../features/wallet/pages/TransactionsPage';
 import { WalletPage } from '../features/wallet/pages/WalletPage';
+import { AccountLayout } from '../features/account/AccountLayout';
+import { LoyaltyPage, MessagesPage, ReferralPage } from '../features/account/ComingSoonPage';
+import { CouponsPage } from '../features/betting/pages/CouponsPage';
 import { RequirePermission } from '../admin/components/RequireAdmin';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { AdminHomePage } from '../admin/pages/AdminHomePage';
@@ -39,9 +43,20 @@ export const routes = [
       { path: 'register', element: <RegisterPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
       { path: 'reset-password', element: <ResetPasswordPage /> },
-      { path: 'account', element: <RequireAuth><AccountPage /></RequireAuth> },
-      { path: 'bets', element: <RequireAuth><MyBetsPage /></RequireAuth> },
-      { path: 'wallet', element: <RequireAuth><WalletPage /></RequireAuth> },
+      // Espace joueur : menu commun des rubriques, accessible une fois connecté.
+      {
+        element: <RequireAuth><AccountLayout /></RequireAuth>,
+        children: [
+          { path: 'wallet', element: <WalletPage /> },
+          { path: 'bets', element: <MyBetsPage /> },
+          { path: 'coupons', element: <CouponsPage /> },
+          { path: 'transactions', element: <TransactionsPage /> },
+          { path: 'loyalty', element: <LoyaltyPage /> },
+          { path: 'referral', element: <ReferralPage /> },
+          { path: 'account', element: <AccountPage /> },
+          { path: 'messages', element: <MessagesPage /> },
+        ],
+      },
     ],
   },
   // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
