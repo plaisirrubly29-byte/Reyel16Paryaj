@@ -67,6 +67,17 @@ class MfaTest extends TestCase
         $this->login($this->admin);
     }
 
+    public function test_an_admin_without_email_can_set_up_mfa(): void
+    {
+        // L'email est facultatif depuis la connexion par téléphone : le compte de l'URI est alors le numéro (P8-02, F1).
+        $this->admin->forceFill(['email' => null])->save();
+        $this->login($this->admin);
+
+        $uri = $this->postJson('/api/v1/auth/mfa/setup')->assertOk()->json('data.otpauth_uri');
+
+        $this->assertStringContainsString(':'.$this->admin->phone.'?', $uri);
+    }
+
     public function test_admin_without_mfa_cannot_reach_admin_routes(): void
     {
         $this->login($this->admin);
