@@ -89,6 +89,21 @@ class FinanceCorrectionsApiTest extends TestCase
         $this->assertSame('Crédit attribué deux fois', $log->reason);
     }
 
+    public function test_a_correction_can_be_shown_with_its_entry(): void
+    {
+        $id = $this->requestCorrection()->json('data.id');
+        $support = User::factory()->withRole(RoleSlug::Support)->create();
+
+        $this->actingAsVerifiedAdmin($this->approver)->getJson("/api/v1/admin/finance/corrections/{$id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $id)
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.ledger_entry.amount.minor', 500_00)
+            ->assertJsonPath('data.requested_by.name', $this->requester->name);
+        $this->actingAsVerifiedAdmin($support)->getJson("/api/v1/admin/finance/corrections/{$id}")->assertForbidden();
+        $this->actingAsVerifiedAdmin($this->approver)->getJson('/api/v1/admin/finance/corrections/999999')->assertNotFound();
+    }
+
     public function test_the_requester_cannot_approve_their_own_correction(): void
     {
         $id = $this->requestCorrection()->json('data.id');

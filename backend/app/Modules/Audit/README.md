@@ -20,7 +20,10 @@
 
 ## Routes prévues
 
-- `GET /api/v1/admin/audit-logs`
+- `GET /api/v1/admin/audit-logs` (audit.view) : consultation, elle-même journalisée (`audit.viewed`).
+- `POST /api/v1/admin/audit-logs/export` (audit.export, P6-08) : CSV des lignes filtrées (10 000 au plus), avec
+  motif ; l'export est journalisé (`audit.exported` : filtres, nombre de lignes) avant l'envoi. Les cellules
+  commençant par `= + - @` sont préfixées d'une apostrophe (injection de formules dans un tableur).
 
 ## Utilisation (P6-01)
 

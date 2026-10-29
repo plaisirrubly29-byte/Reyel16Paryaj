@@ -1075,6 +1075,129 @@ paths:
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/audit-logs/export:
+    post:
+      tags: [Admin]
+      summary: Exporter le journal d'audit en CSV (permission audit.export, motif requis, export journalisé)
+      description: |
+        Mêmes filtres que la liste. L'export est enregistré (`audit.exported` : filtres, nombre de lignes, motif)
+        avant l'envoi du fichier. CSV UTF-8 avec BOM, séparateur « ; » ; les cellules commençant par = + - @ sont
+        préfixées d'une apostrophe (injection de formules). Au-delà de 10 000 lignes : `422 export_too_large`.
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                action: { type: string, example: roles.updated }
+                actor_id: { type: integer }
+                subject_type: { type: string }
+                subject_id: { type: string }
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Fichier journal-audit-AAAAMMJJ-HHMMSS.csv (lignes de la plus ancienne à la plus récente)
+          content: { text/csv: { schema: { type: string } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: "Validation (motif), ou `export_too_large` (details.count, details.max)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/settings:
+    get:
+      tags: [Admin]
+      summary: Paramètres de la plateforme en vigueur, avec leur valeur par défaut (permission settings.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Version en vigueur (0 = valeurs de la configuration du serveur) et paramètres modifiables
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PlatformSettings" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Admin]
+      summary: Enregistrer une nouvelle version des paramètres (permission settings.update, motif requis, auditée)
+      description: |
+        Seules les valeurs envoyées changent ; la nouvelle version est un instantané complet, en ajout seul, et
+        s'applique immédiatement. `base_version` est la version affichée : si une autre version a été enregistrée
+        entre-temps, `409 settings_changed` (rien n'est écrasé). Les paramètres déjà figés sur un ticket ne changent pas.
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, base_version, reason]
+              properties:
+                values:
+                  type: object
+                  description: Valeurs groupées par préfixe ; toute autre clé est refusée.
+                  properties:
+                    betting:
+                      type: object
+                      properties:
+                        min_stake_minor: { type: integer, minimum: 1 }
+                        max_stake_minor: { type: integer, minimum: 1, description: ">= min_stake_minor" }
+                        max_payout_minor: { type: integer, minimum: 1, description: ">= max_stake_minor" }
+                        allow_multiple: { type: boolean }
+                        max_selections: { type: integer, minimum: 1, maximum: 30 }
+                        allow_live: { type: boolean }
+                    wallet:
+                      type: object
+                      properties:
+                        welcome_credit_minor: { type: integer, minimum: 0 }
+                    sports_data:
+                      type: object
+                      properties:
+                        provider: { type: string, enum: [fake, theodds], description: "theodds exige SPORTS_DATA_API_KEY" }
+                  example: { betting: { min_stake_minor: 2500, allow_live: true } }
+                base_version: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Nouvelle version en vigueur
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PlatformSettings" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`settings_changed` (details.version : version en vigueur)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "Validation (valeurs incohérentes ou clé inconnue), ou `no_change`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/settings/versions:
+    get:
+      tags: [Admin]
+      summary: Historique des versions des paramètres (permission settings.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Versions, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SettingVersion" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /admin/tickets:
     get:
       tags: [Admin]
@@ -1222,6 +1345,21 @@ paths:
           description: "Validation, ou `entry_not_correctable` (details.reason : reversal_entry, linked_to_ticket, already_reversed)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "428": { description: En-tête Idempotency-Key manquant }
+  /admin/finance/corrections/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une correction financière et de son écriture (permission ledger.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Correction
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /admin/finance/corrections/{id}/approve:
     post:
       tags: [Admin]
@@ -1767,6 +1905,44 @@ components:
         decision_reason: { type: [string, "null"] }
         decided_at: { type: [string, "null"], format: date-time }
         reversal_entry_id: { type: [string, "null"], description: Écriture compensatoire passée à la validation }
+    PlatformSettings:
+      type: object
+      properties:
+        version: { type: integer, description: "0 : aucune version enregistrée (configuration du serveur)" }
+        updated_at: { type: [string, "null"], format: date-time }
+        updated_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, example: betting.min_stake_minor }
+              group: { type: string, example: Paris }
+              label: { type: string, example: Mise minimale }
+              type: { type: string, enum: [money, integer, boolean, choice] }
+              help: { type: [string, "null"] }
+              options: { type: [array, "null"], items: { type: string } }
+              currency: { type: [string, "null"], description: "Type money : montants en unité mineure" }
+              value: { description: Valeur en vigueur }
+              default: { description: "Valeur de la configuration du serveur (.env)" }
+    SettingVersion:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              label: { type: string }
+              type: { type: string, enum: [money, integer, boolean, choice] }
+              from: {}
+              to: {}
+        reason: { type: string }
+        created_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        created_at: { type: string, format: date-time }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.

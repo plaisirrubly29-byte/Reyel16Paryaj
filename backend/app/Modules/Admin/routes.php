@@ -5,6 +5,7 @@ use App\Modules\Admin\Http\Controllers\AdminEventController;
 use App\Modules\Admin\Http\Controllers\AdminLedgerController;
 use App\Modules\Admin\Http\Controllers\AdminMarketController;
 use App\Modules\Admin\Http\Controllers\AdminResponsibleGamingController;
+use App\Modules\Admin\Http\Controllers\AdminSettingsController;
 use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
@@ -52,9 +53,15 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/ledger', [AdminLedgerController::class, 'index'])->middleware('permission:ledger.view');
     Route::get('/finance/reconciliation', [AdminLedgerController::class, 'reconciliation'])->middleware('permission:ledger.view');
     Route::get('/finance/corrections', [FinanceCorrectionController::class, 'index'])->middleware('permission:ledger.view');
+    Route::get('/finance/corrections/{correction}', [FinanceCorrectionController::class, 'show'])->whereNumber('correction')->middleware('permission:ledger.view');
     Route::post('/finance/corrections', [FinanceCorrectionController::class, 'store'])->middleware(['permission:finance.correct', 'idempotent']);
     Route::post('/finance/corrections/{correction}/approve', [FinanceCorrectionController::class, 'approve'])
         ->whereNumber('correction')->middleware(['permission:finance.approve', 'idempotent']);
     Route::post('/finance/corrections/{correction}/reject', [FinanceCorrectionController::class, 'reject'])
         ->whereNumber('correction')->middleware(['permission:finance.approve', 'idempotent']);
+
+    // Paramètres de la plateforme versionnés (P6-08)
+    Route::get('/settings', [AdminSettingsController::class, 'show'])->middleware('permission:settings.view');
+    Route::get('/settings/versions', [AdminSettingsController::class, 'versions'])->middleware('permission:settings.view');
+    Route::put('/settings', [AdminSettingsController::class, 'update'])->middleware(['permission:settings.update', 'idempotent']);
 });

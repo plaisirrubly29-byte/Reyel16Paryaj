@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Modules\Admin\Services\PlatformSettings;
 use App\Modules\Betting\Services\TicketStakeHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
@@ -40,6 +41,9 @@ class AppServiceProvider extends ServiceProvider
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
         });
 
+        // Paramètres versionnés (P6-08) : une instance par processus, qui retient les valeurs par défaut de config/.
+        $this->app->singleton(PlatformSettings::class);
+
         // Mises d'un joueur pour les limites de jeu responsable : fournies par Betting à Compliance (P7-02).
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
 
@@ -60,6 +64,9 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->isProduction()) {
             ProductionSafety::assertSafe();
         }
+
+        // Dernière version des paramètres modifiés depuis l'administration, par-dessus config/ (P6-08).
+        $this->app->make(PlatformSettings::class)->apply();
 
         $this->configurePasswords();
         $this->configureRateLimiting();
