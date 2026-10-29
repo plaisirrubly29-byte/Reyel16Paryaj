@@ -7,6 +7,8 @@ use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
 use App\Support\Http\ApiErrorRenderer;
+use App\Support\QueryErrorSanitizer;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -31,8 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Identifiant de corrélation X-Request-Id (P1-04) : en tête, pour figurer dans tous les logs de la requête.
         $middleware->prepend(AssignRequestId::class);
 
-        // En-têtes de sécurité (nosniff, DENY, CSP, Referrer-Policy, HSTS en HTTPS) sur toutes les réponses (P8-02, F13).
-        $middleware->append(SecurityHeaders::class);
+        // En-têtes de sécurité (nosniff, DENY, CSP, Referrer-Policy, HSTS en HTTPS) sur toutes les réponses (P8-02, F13) :
+        // en tête de pile, pour couvrir aussi les réponses rendues avant la route (préflight CORS, maintenance, 413).
+        $middleware->prepend(SecurityHeaders::class);
 
         // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
         $middleware->statefulApi();
@@ -57,6 +60,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Erreurs SQL : sans la ligne DETAIL de PostgreSQL, qui cite les valeurs refusées (revue P8-02, M5).
+        $exceptions->map(fn (QueryException $e) => QueryErrorSanitizer::sanitize($e));
 
         // Format d'erreur unique de l'API (docs/api/README.md).
         $exceptions->render(function (Throwable $e, Request $request) {

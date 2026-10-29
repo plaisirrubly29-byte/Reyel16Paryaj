@@ -57,7 +57,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Mode debug, proxy « * », CORS ou Sanctum « * » : refus de démarrer en production (revue P8-02).
-        if ($this->app->isProduction()) {
+        // Sauf pour les commandes qui permettent de corriger une configuration mise en cache.
+        if ($this->app->isProduction() && ! $this->app->runningConsoleCommand(...ProductionSafety::REPAIR_COMMANDS)) {
             ProductionSafety::assertSafe();
         }
 
