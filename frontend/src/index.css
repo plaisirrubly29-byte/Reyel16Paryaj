@@ -559,6 +559,80 @@ p { margin: 0; }
 .quick-text strong { font-size: 0.92rem; }
 .quick-text span { font-size: 0.8rem; color: var(--muted); }
 
+/* --- Écrans admin : en-tête, cartes, filtres, fiches --- */
+.admin-page { display: flex; flex-direction: column; gap: 1.25rem; }
+.page-head { display: flex; flex-direction: column; gap: 0.5rem; }
+.page-back { display: inline-flex; align-items: center; gap: 0.25rem; width: max-content; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.page-back svg { transform: rotate(180deg); }
+.page-back:hover { color: var(--accent); text-decoration: none; }
+.page-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; }
+.page-head-text { min-width: 0; }
+.page-head h1 { margin: 0; font-size: clamp(1.35rem, 2.2vw, 1.7rem); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.page-head-text p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.9rem; }
+.page-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+
+.admin-card {
+  display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem 1.25rem; min-width: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+.card-title { margin: 0; font-size: 1rem; }
+.admin-card .table-wrap { border-radius: 12px; box-shadow: none; }
+.admin-card .pagination { margin-top: 0; }
+.filters-tickets { grid-template-columns: 2fr 1fr 1fr 1fr auto; }
+.filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: -0.25rem; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.7rem; border-radius: 999px; cursor: pointer;
+  background: #eaf1fd; border: 1px solid #cddcf7; color: var(--brand); font: inherit; font-size: 0.82rem; font-weight: 600;
+}
+.chip:hover { border-color: var(--brand); }
+.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.92em; letter-spacing: 0.02em; }
+.nowrap { white-space: nowrap; }
+.cell-stack { display: flex; flex-direction: column; gap: 0.15rem; }
+.admin-card .table td.num { white-space: nowrap; }
+
+.user-cell { display: inline-flex; align-items: center; gap: 0.7rem; min-width: 0; }
+.user-avatar {
+  display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; flex: none; border-radius: 50%;
+  background: linear-gradient(135deg, #eaf1fd, #d6e2fa); color: var(--brand); font-weight: 800; font-size: 0.78rem;
+}
+.user-avatar-lg { width: 2.8rem; height: 2.8rem; font-size: 0.95rem; }
+
+.badge.ticket-status { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text); white-space: nowrap; }
+.badge.ticket-status.is-won { background: var(--success-soft); border-color: #bfe3cb; }
+.badge.ticket-status.is-lost { background: #fff5f5; border-color: #f1c4c4; }
+.badge.ticket-status.is-pending { background: #eef4fd; border-color: #cddcf7; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 0; }
+.summary-item { padding: 1rem 1.1rem; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); min-width: 0; }
+.summary-item dt { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.summary-item dd { margin: 0.3rem 0 0; font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.selections { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.selections li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid #f0f2f6; }
+.selections li:first-child { padding-top: 0; }
+.selections li:last-child { border-bottom: 0; padding-bottom: 0; }
+.selection-main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; font-size: 0.92rem; }
+.selection-side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; flex: none; }
+.odds-pill { padding: 0.2rem 0.6rem; border-radius: 8px; background: var(--odds); color: #fff; font-weight: 800; font-variant-numeric: tabular-nums; }
+.player-card p { margin: 0; }
+.player-links { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-top: 0.4rem; font-size: 0.88rem; font-weight: 600; }
+.rules-snapshot summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+.rules-snapshot .details { margin-top: 0.6rem; font-size: 0.82rem; }
+.details-row { display: contents; }
+
+@container admin-content (max-width: 900px) {
+  .detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters-tickets { grid-template-columns: 1fr 1fr; }
+  .filters-tickets .field:first-child { grid-column: 1 / -1; }
+}
+@container admin-content (max-width: 480px) {
+  .filters-tickets { grid-template-columns: 1fr; }
+  .selections li { flex-direction: column; }
+  .selection-side { flex-direction: row; align-items: center; }
+}
+
 /* Pages admin existantes */
 .filters { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: var(--gap); align-items: end; }
 .shortcuts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
