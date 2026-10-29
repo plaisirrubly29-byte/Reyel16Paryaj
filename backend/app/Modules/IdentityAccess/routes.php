@@ -27,7 +27,7 @@ Route::prefix('auth')->group(function () {
         Route::post('/setup', [MfaController::class, 'setup']);
         Route::post('/confirm', [MfaController::class, 'confirm'])->middleware('throttle:mfa');
         Route::post('/verify', [MfaController::class, 'verify'])->middleware('throttle:mfa');
-        Route::post('/recovery-codes', [MfaController::class, 'regenerateRecoveryCodes'])->middleware('mfa');
+        Route::post('/recovery-codes', [MfaController::class, 'regenerateRecoveryCodes'])->middleware(['mfa', 'throttle:mfa']);
     });
 });
 

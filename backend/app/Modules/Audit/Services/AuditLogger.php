@@ -7,6 +7,7 @@ use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Context;
 use InvalidArgumentException;
 
 /**
@@ -57,7 +58,18 @@ class AuditLogger
             'metadata' => $metadata ?: null,
             'ip_address' => $this->request->ip(),
             'user_agent' => mb_substr((string) $this->request->userAgent(), 0, 255) ?: null,
-            'request_id' => $this->request->headers->get('X-Request-Id'),
+            'request_id' => $this->requestId(),
         ]);
+    }
+
+    /**
+     * Identifiant fixé par AssignRequestId (P1-04) ; à défaut, l'en-tête du client seulement s'il est sûr.
+     * Une valeur trop longue ferait échouer l'insertion (varchar(64)) et annulerait l'action (revue P8-02, F2).
+     */
+    private function requestId(): ?string
+    {
+        $id = Context::get('request_id') ?? $this->request->headers->get('X-Request-Id');
+
+        return is_string($id) && preg_match('/^[A-Za-z0-9._-]{8,64}$/', $id) ? $id : null;
     }
 }

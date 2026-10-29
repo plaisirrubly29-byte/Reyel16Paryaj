@@ -8,7 +8,7 @@ import { Spinner } from '../../../shared/components/Spinner';
 import { sportIcon } from '../../../shared/components/sportIcon';
 import { BetSlipPanel } from '../../betting/slip/BetSlipPanel';
 import { useEventMarkets, type CatalogueEvent } from '../api/catalogue';
-import { formatKickoff, liveLabel } from '../format';
+import { formatKickoff, isLiveStatus, liveLabel } from '../format';
 import { MarketOdds } from '../components/OddsButtons';
 import { marketCategory, marketMatchesSearch, type MarketCategory } from '../markets';
 import { SportsSidebar } from '../components/SportsSidebar';
@@ -98,7 +98,9 @@ function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) 
                 <section key={market.id} className="market-card" aria-labelledby={`market-${market.id}`}>
                   <header className="market-head">
                     <h2 id={`market-${market.id}`}><span className="market-help" aria-hidden="true"><Icon name="help" size={24} /></span>{market.name}</h2>
-                    {market.bettable === false && <span className="market-note">Cotes en cours de mise à jour</span>}
+                    {market.bettable === false && (
+                      <span className="market-note">{isLiveStatus(event.status) ? 'Paris fermés pendant le match' : 'Cotes en cours de mise à jour'}</span>
+                    )}
                   </header>
                   <MarketOdds event={event} market={market} variant="wide" selectionSearch={search} />
                 </section>

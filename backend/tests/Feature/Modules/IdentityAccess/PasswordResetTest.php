@@ -75,6 +75,21 @@ class PasswordResetTest extends TestCase
         Notification::assertSentTimes(ResetPasswordNotification::class, 1);
     }
 
+    public function test_a_non_string_email_is_a_validation_error(): void
+    {
+        // Le limiteur passe avant la validation : un email envoyé en tableau provoquait une erreur 500 (P8-02, F4).
+        $this->postJson('/api/v1/auth/forgot-password', ['email' => ['a@example.com']])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'validation_failed');
+
+        $this->postJson('/api/v1/auth/reset-password', [
+            'email' => ['a@example.com'],
+            'token' => 'jeton',
+            'password' => 'nouveaumdp456',
+            'password_confirmation' => 'nouveaumdp456',
+        ])->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+    }
+
     public function test_reset_link_points_to_the_frontend_and_is_queued(): void
     {
         $user = User::factory()->create(['email' => 'a@example.com']);
