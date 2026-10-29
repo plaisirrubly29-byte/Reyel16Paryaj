@@ -142,6 +142,7 @@ class MfaService
     /**
      * Échec de mfa/verify : audité (mfa.failed, base des alertes de sécurité) ; après N échecs consécutifs,
      * la session est fermée et il faut repasser par le mot de passe (revue P8-02, M2).
+     * La session est fermée AVANT l'écriture d'audit : une base indisponible ne la laisse jamais ouverte.
      *
      * @throws ApiException mfa_too_many_failures
      */
@@ -150,24 +151,24 @@ class MfaService
         $failures = RateLimiter::hit($this->failuresKey($user), 3600);
         $loggedOut = $failures >= (int) config('identity.mfa.max_failures_before_logout');
 
+        if ($loggedOut) {
+            Log::warning('mfa.too_many_failures', ['user_id' => $user->getKey(), 'consecutive_failures' => $failures]);
+
+            // Le compteur n'est pas remis à zéro : après reconnexion, un nouvel échec referme la session.
+            Auth::guard('web')->logout();
+            $session->invalidate();
+            $session->regenerateToken();
+        }
+
         $this->audit->record(AuditAction::MfaFailed, $user, actor: $user, metadata: [
             'method' => $method,
             'consecutive_failures' => $failures,
             'logged_out' => $loggedOut,
         ]);
 
-        if (! $loggedOut) {
-            return;
+        if ($loggedOut) {
+            throw new ApiException('mfa_too_many_failures', __('Trop de codes invalides : vous avez été déconnecté. Reconnectez-vous.'), 401);
         }
-
-        Log::warning('mfa.too_many_failures', ['user_id' => $user->getKey(), 'consecutive_failures' => $failures]);
-
-        // Le compteur n'est pas remis à zéro : après reconnexion, un nouvel échec referme la session.
-        Auth::guard('web')->logout();
-        $session->invalidate();
-        $session->regenerateToken();
-
-        throw new ApiException('mfa_too_many_failures', __('Trop de codes invalides : vous avez été déconnecté. Reconnectez-vous.'), 401);
     }
 
     private function failuresKey(User $user): string

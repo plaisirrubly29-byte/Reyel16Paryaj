@@ -11,6 +11,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Tests\TestCase;
 
 class MfaTest extends TestCase
@@ -256,6 +257,28 @@ class MfaTest extends TestCase
         $this->login($this->admin);
         $this->postJson('/api/v1/auth/mfa/verify', ['code' => $this->nextRealTimeCode($this->admin)])->assertNoContent();
         $this->getJson('/api/v1/admin/audit-logs')->assertOk();
+    }
+
+    public function test_the_session_is_closed_even_if_the_audit_write_fails(): void
+    {
+        // Revue P8-02, M2 : la déconnexion ne doit pas dépendre de l'écriture en base.
+        $max = config('identity.mfa.max_failures_before_logout');
+        $this->login($this->admin);
+        $this->enableMfa();
+        $this->relogin();
+        $this->travel(61)->seconds();
+
+        for ($i = 1; $i < $max; $i++) {
+            $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertStatus(422);
+        }
+
+        AuditLog::creating(fn () => throw new RuntimeException('base indisponible'));
+        $this->postJson('/api/v1/auth/mfa/verify', ['code' => '000000'])->assertServerError();
+        AuditLog::flushEventListeners();
+
+        $this->assertGuest('web');
+        $this->app['auth']->forgetGuards(); // nouvelle requête : seul compte ce que la session contient encore
+        $this->getJson('/api/v1/admin/audit-logs')->assertUnauthorized();
     }
 
     public function test_successful_verification_resets_the_failure_count(): void
