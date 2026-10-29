@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\RequireIdempotencyKey;
+use App\Http\Middleware\SecurityHeaders;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
@@ -25,6 +26,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Identifiant de corrélation X-Request-Id (P1-04) : en tête, pour figurer dans tous les logs de la requête.
         $middleware->prepend(AssignRequestId::class);
+
+        // En-têtes de sécurité (nosniff, DENY, CSP, Referrer-Policy, HSTS en HTTPS) sur toutes les réponses (P8-02, F13).
+        $middleware->append(SecurityHeaders::class);
 
         // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
         $middleware->statefulApi();

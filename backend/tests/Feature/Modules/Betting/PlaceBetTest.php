@@ -159,6 +159,25 @@ class PlaceBetTest extends TestCase
         $this->assertSame(0, BetTicket::count());
     }
 
+    public function test_a_live_match_cannot_be_bet_unless_live_betting_is_allowed(): void
+    {
+        // Revue P8-02, E1 : un joueur qui voit un but parierait sur la cote d'avant le but.
+        $selection = $this->selection();
+        Event::where('external_id', 'fake-1')->update(['status' => EventStatus::Live, 'starts_at' => now()->subMinutes(80)]);
+        $selection->market->update(['odds_updated_at' => now()]);
+
+        $this->assertFalse(config('betting.allow_live'));
+        $this->bet([[$selection]])->assertUnprocessable()
+            ->assertJsonPath('error.code', 'selection_unavailable')
+            ->assertJsonPath('error.details.selection_ids', [(string) $selection->id]);
+        $this->assertSame(0, BetTicket::count());
+        $this->assertSame(1000_00, $this->balance());
+
+        config(['betting.allow_live' => true]);
+        $this->bet([[$selection]])->assertCreated();
+        $this->assertTrue(BetTicket::sole()->rules_snapshot['allow_live']);
+    }
+
     public function test_stale_odds_cannot_be_bet(): void
     {
         $selection = $this->selection();

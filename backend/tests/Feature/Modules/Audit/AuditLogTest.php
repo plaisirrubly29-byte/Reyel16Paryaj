@@ -137,4 +137,24 @@ class AuditLogTest extends TestCase
 
         $this->assertSame(1, AuditLog::where('action', AuditAction::AuditViewed)->where('actor_id', $compliance->id)->count());
     }
+
+    public function test_only_a_safe_request_id_is_recorded(): void
+    {
+        $compliance = User::factory()->withRole(RoleSlug::Compliance)->create();
+        $this->actingAsVerifiedAdmin($compliance);
+
+        $this->getJson('/api/v1/admin/audit-logs', ['X-Request-Id' => str_repeat('a', 64)])->assertOk();
+        $this->assertSame(str_repeat('a', 64), AuditLog::latest('id')->first()->request_id);
+
+        // Trop long pour la colonne varchar(64) (500 sur PostgreSQL), ou dangereux dans les logs : non repris ;
+        // l'audit garde l'identifiant généré par AssignRequestId, le même que celui de la réponse et des logs.
+        foreach ([str_repeat('a', 65), "abc12345\ninjection", 'court'] as $unsafe) {
+            $response = $this->getJson('/api/v1/admin/audit-logs', ['X-Request-Id' => $unsafe])->assertOk();
+            $recorded = AuditLog::latest('id')->first()->request_id;
+            $this->assertTrue(Str::isUuid($recorded), "Valeur reprise : {$unsafe}");
+            $this->assertSame($response->headers->get('X-Request-Id'), $recorded);
+        }
+
+        $this->assertSame(4, AuditLog::where('action', AuditAction::AuditViewed)->count());
+    }
 }

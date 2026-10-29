@@ -10,6 +10,7 @@ use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
 use App\Modules\SportsData\Services\CreditBudget;
+use App\Support\ProductionSafety;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
@@ -55,6 +56,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Mode debug, proxy « * », CORS ou Sanctum « * » : refus de démarrer en production (revue P8-02).
+        if ($this->app->isProduction()) {
+            ProductionSafety::assertSafe();
+        }
+
         $this->configurePasswords();
         $this->configureRateLimiting();
         $this->configureAuthorization();
@@ -118,8 +124,9 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Le limiteur passe avant la validation : un email envoyé en tableau ne doit pas provoquer de 500 (revue P8-02, F4).
         RateLimiter::for('password-reset', fn (Request $request) => [
-            Limit::perMinute(3)->by('password-reset:'.Str::lower((string) $request->input('email'))),
+            Limit::perMinute(3)->by('password-reset:'.(is_string($request->input('email')) ? Str::lower($request->input('email')) : '')),
             Limit::perMinute(10)->by('password-reset-ip:'.$request->ip()),
         ]);
 

@@ -16,7 +16,13 @@ enum AuditAction: string
     case ResponsibleGamingViewed = 'responsible_gaming.viewed';
     case MfaReset = 'mfa.reset';
     case MfaFailed = 'mfa.failed';
+    case MfaRecoveryCodesRegenerated = 'mfa.recovery_codes_regenerated';
     case UserPersonalDataViewed = 'user.personal_data_viewed';
+
+    // Admin — corrections financières à double validation (P6-04)
+    case FinanceCorrectionRequested = 'finance.correction_requested';
+    case FinanceCorrectionApproved = 'finance.correction_approved';
+    case FinanceCorrectionRejected = 'finance.correction_rejected';
 
     // Audit
     case AuditViewed = 'audit.viewed';
@@ -26,7 +32,7 @@ enum AuditAction: string
     public function requiresReason(): bool
     {
         return match ($this) {
-            self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::UserSelfExcluded,
+            self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::MfaRecoveryCodesRegenerated, self::UserSelfExcluded,
             self::ResponsibleGamingViewed => false,
             default => true,
         };

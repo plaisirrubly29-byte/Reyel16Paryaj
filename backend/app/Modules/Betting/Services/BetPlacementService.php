@@ -228,7 +228,10 @@ class BetPlacementService
         }
     }
 
-    /** Match pas encore commencé (ou en direct), marché ouvert et cote assez récente. */
+    /**
+     * Match pas encore commencé, marché ouvert et cote assez récente. Un match en direct n'est pariable que si
+     * betting.allow_live est activé (vérifié par Market::isBettable, comme le "bettable" du catalogue).
+     */
     private function isOpen(Market $market): bool
     {
         $event = $market->event;
@@ -275,6 +278,7 @@ class BetPlacementService
             'max_payout_minor' => (int) config('betting.max_payout_minor'),
             'allow_multiple' => (bool) config('betting.allow_multiple'),
             'max_selections' => (int) config('betting.max_selections'),
+            'allow_live' => (bool) config('betting.allow_live'),
             'odds_change_policy' => (string) config('betting.odds_change_policy'),
         ];
     }
