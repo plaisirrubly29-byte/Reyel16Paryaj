@@ -85,7 +85,7 @@ export function AccountPage() {
             {wallet.data ? <MoneyText value={wallet.data.balance} /> : wallet.isPending ? '…' : '—'}
           </strong>
           {wallet.data?.simulated && <span className="profile-balance-badge">Fonds fictifs</span>}
-          <span className="profile-balance-cta">Voir le portefeuille<Icon name="arrowRight" size={15} /></span>
+          <span className="profile-balance-cta">Voir le solde<Icon name="arrowRight" size={15} /></span>
         </Link>
       </header>
 
@@ -96,7 +96,7 @@ export function AccountPage() {
         </Link>
         <Link to="/wallet" className="profile-shortcut">
           <span className="profile-shortcut-icon"><Icon name="wallet" /></span>
-          <span><strong>Portefeuille</strong><span>Solde et opérations</span></span>
+          <span><strong>Solde</strong><span>Dépôt, retrait et opérations</span></span>
         </Link>
         <Link to="/sports" className="profile-shortcut">
           <span className="profile-shortcut-icon"><Icon name="ball" /></span>

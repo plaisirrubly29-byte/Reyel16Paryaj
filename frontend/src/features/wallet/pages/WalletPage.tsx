@@ -1,55 +1,51 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Alert } from '../../../shared/components/Alert';
-import { DataTable, type Column } from '../../../shared/components/DataTable';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
+import { Icon, type IconName } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
-import { Pagination } from '../../../shared/components/Pagination';
 import { Spinner } from '../../../shared/components/Spinner';
-import { ENTRY_LABELS, useWallet, useWalletTransactions, type LedgerEntry, type LedgerEntryType } from '../api/wallet';
+import { ENTRY_LABELS, useWallet, useWalletTransactions } from '../api/wallet';
 
-const columns: Column<LedgerEntry>[] = [
-  { key: 'date', header: 'Date', render: (e) => new Date(e.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) },
-  {
-    key: 'type',
-    header: 'Opération',
-    render: (e) => (
-      <>
-        {ENTRY_LABELS[e.type]}
-        {e.related?.type === 'bet' && <> · <Link to={`/bets/${e.related.id}`}>ticket {e.related.id}</Link></>}
-        {e.description && <div className="muted small">{e.description}</div>}
-      </>
-    ),
-  },
-  { key: 'amount', header: 'Montant', align: 'right', render: (e) => <MoneyText value={e.amount} signed /> },
-  // Solde après opération : fourni par le serveur pour chaque écriture.
-  { key: 'balance', header: 'Solde', align: 'right', render: (e) => <MoneyText value={e.balance_after} /> },
-];
+/**
+ * Dépôt ou retrait. Aucun prestataire de paiement n'est intégré (P7-01, bloqué par la validation
+ * juridique) : la section explique pourquoi l'opération est fermée, sans formulaire factice.
+ */
+function MoneyMovement({ id, icon, title, intro, simulated }: { id: string; icon: IconName; title: string; intro: string; simulated: boolean }) {
+  return (
+    <section className="money-card" aria-labelledby={id}>
+      <header className="money-card-head">
+        <span className="money-card-icon" aria-hidden="true"><Icon name={icon} size={22} /></span>
+        <div>
+          <h2 id={id}>{title}</h2>
+          <p className="muted small">{intro}</p>
+        </div>
+        <span className="soon-tag">Bientôt</span>
+      </header>
+      <div className="money-card-body">
+        <p>
+          {simulated
+            ? 'La plateforme fonctionne pour l’instant en fonds fictifs : aucun argent réel n’est accepté ni versé.'
+            : 'Les paiements ne sont pas encore ouverts.'}
+          {' '}Cette opération sera disponible dès que les moyens de paiement locaux seront autorisés et intégrés.
+        </p>
+        <button type="button" className="btn btn-secondary" disabled aria-describedby={`${id}-why`}>
+          {title}
+        </button>
+        <p id={`${id}-why`} className="muted small">Indisponible pour le moment.</p>
+      </div>
+    </section>
+  );
+}
 
-const TYPES = Object.keys(ENTRY_LABELS) as LedgerEntryType[];
-
-/** Portefeuille du joueur connecté. Aucun calcul de solde côté client : tout vient de l'API. */
+/** Solde du joueur connecté. Aucun calcul de solde côté client : tout vient de l'API. */
 export function WalletPage() {
-  const [params, setParams] = useSearchParams();
-  const page = Math.max(1, Number(params.get('page')) || 1);
-  const typeParam = params.get('type');
-  const type = TYPES.includes(typeParam as LedgerEntryType) ? (typeParam as LedgerEntryType) : undefined;
-
   const wallet = useWallet();
-  const transactions = useWalletTransactions({ page, type });
-
-  function update(next: { page?: number; type?: string }) {
-    const merged = new URLSearchParams(params);
-    if (next.type !== undefined) {
-      if (next.type) merged.set('type', next.type); else merged.delete('type');
-      merged.delete('page');
-    }
-    if (next.page !== undefined) merged.set('page', String(next.page));
-    setParams(merged);
-  }
+  const recent = useWalletTransactions({ page: 1 });
+  const simulated = wallet.data?.simulated ?? true;
 
   return (
     <section className="stack">
-      <h1>Portefeuille</h1>
+      <h1>Solde</h1>
 
       {wallet.isPending && <Spinner />}
       <ErrorAlert error={wallet.error} onRetry={() => wallet.refetch()} />
@@ -61,30 +57,36 @@ export function WalletPage() {
         </div>
       )}
       {wallet.data?.status === 'frozen' && (
-        <Alert tone="warning" title="Portefeuille gelé">Aucune mise n'est possible pour le moment. Contactez le support.</Alert>
+        <Alert tone="warning" title="Solde gelé">Aucune mise n'est possible pour le moment. Contactez le support.</Alert>
       )}
 
-      <div className="toolbar">
-        <h2>Historique</h2>
-        <div className="field field-inline">
-          <label htmlFor="type-filter">Type</label>
-          <select id="type-filter" value={type ?? ''} onChange={(e) => update({ type: e.target.value })}>
-            <option value="">Toutes les opérations</option>
-            {TYPES.map((t) => <option key={t} value={t}>{ENTRY_LABELS[t]}</option>)}
-          </select>
-        </div>
+      <div className="money-grid">
+        <MoneyMovement id="deposit" icon="deposit" title="Dépôt" intro="Alimenter votre solde." simulated={simulated} />
+        <MoneyMovement id="withdraw" icon="withdraw" title="Retrait" intro="Retirer vos gains." simulated={simulated} />
       </div>
 
-      <ErrorAlert error={transactions.error} onRetry={() => transactions.refetch()} />
-      <DataTable
-        caption="Historique des opérations"
-        columns={columns}
-        rows={transactions.data?.data}
-        rowKey={(e) => e.id}
-        loading={transactions.isFetching}
-        empty="Aucune opération pour le moment."
-      />
-      <Pagination meta={transactions.data?.meta} onPage={(p) => update({ page: p })} />
+      <section className="stack-sm" aria-labelledby="recent-ops">
+        <div className="toolbar">
+          <h2 id="recent-ops">Dernières opérations</h2>
+          <Link to="/transactions">Toutes mes transactions</Link>
+        </div>
+        <ErrorAlert error={recent.error} onRetry={() => recent.refetch()} />
+        {recent.isPending && <Spinner />}
+        {recent.data?.data.length === 0 && <p className="muted">Aucune opération pour le moment.</p>}
+        {!!recent.data?.data.length && (
+          <ul className="recent-ops">
+            {recent.data.data.slice(0, 5).map((e) => (
+              <li key={e.id}>
+                <span>
+                  <strong>{ENTRY_LABELS[e.type]}</strong>
+                  <span className="muted small">{new Date(e.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                </span>
+                <MoneyText value={e.amount} signed />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </section>
   );
 }
