@@ -1,6 +1,8 @@
 <?php
 
+use App\Modules\Admin\Http\Controllers\AdminEventController;
 use App\Modules\Admin\Http\Controllers\AdminLedgerController;
+use App\Modules\Admin\Http\Controllers\AdminMarketController;
 use App\Modules\Admin\Http\Controllers\AdminResponsibleGamingController;
 use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
@@ -21,6 +23,12 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     // Jeu responsable d'un joueur (P7-02) : consultation auditée ; réouverture d'une auto-exclusion échue (motif).
     Route::get('/users/{user}/responsible-gaming', [AdminResponsibleGamingController::class, 'show'])->middleware('permission:responsible_gaming.view');
     Route::post('/users/{user}/responsible-gaming/reopen', [AdminResponsibleGamingController::class, 'reopen'])->middleware(['permission:responsible_gaming.manage', 'idempotent']);
+
+    // Événements et marchés (P6-02) : origine et fraîcheur ; suspendre / rouvrir un marché avec motif.
+    Route::get('/events', [AdminEventController::class, 'index'])->middleware('permission:events.view');
+    Route::get('/events/{event}', [AdminEventController::class, 'show'])->middleware('permission:events.view')->whereNumber('event');
+    Route::get('/markets/{market}', [AdminMarketController::class, 'show'])->middleware('permission:events.view')->whereNumber('market');
+    Route::patch('/markets/{market}', [AdminMarketController::class, 'update'])->middleware(['permission:markets.suspend', 'idempotent'])->whereNumber('market');
 
     // Tickets et finance (P6-04)
     Route::get('/tickets', [AdminTicketController::class, 'index'])->middleware('permission:tickets.view');

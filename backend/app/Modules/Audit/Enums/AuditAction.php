@@ -19,6 +19,10 @@ enum AuditAction: string
     case MfaRecoveryCodesRegenerated = 'mfa.recovery_codes_regenerated';
     case UserPersonalDataViewed = 'user.personal_data_viewed';
 
+    // Admin — événements et marchés (P6-02)
+    case MarketSuspended = 'market.suspended';
+    case MarketReopened = 'market.reopened';
+
     // Admin — corrections financières à double validation (P6-04)
     case FinanceCorrectionRequested = 'finance.correction_requested';
     case FinanceCorrectionApproved = 'finance.correction_approved';

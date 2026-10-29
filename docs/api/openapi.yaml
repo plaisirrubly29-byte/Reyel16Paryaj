@@ -572,20 +572,6 @@ paths:
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
 
-  /admin/events/{id}:
-    patch:
-      tags: [Admin]
-      summary: Modifier l'état d'un événement (motif requis)
-      x-task: P6-02
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
-  /admin/markets/{id}:
-    patch:
-      tags: [Admin]
-      summary: Suspendre / masquer un marché (motif requis)
-      x-task: P6-02
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
   /admin/users/{id}/roles:
     put:
       tags: [Admin]
@@ -708,6 +694,94 @@ paths:
           description: "`invalid_status_transition`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/events:
+    get:
+      tags: [Admin]
+      summary: Événements de tous statuts, avec origine et synchronisation (permission events.view)
+      description: Triés par heure de début. Nombre de marchés par statut ; marchés complets dans le détail.
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: search, in: query, description: "Équipe, identifiant fournisseur ou identifiant", schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, live, finished, postponed, cancelled] } }
+        - { name: competition, in: query, schema: { type: integer } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: market_status, in: query, description: "Événements ayant au moins un marché dans ce statut", schema: { type: string, enum: [open, suspended, closed, settled] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminEvent" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/events/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'un événement et de tous ses marchés, origine et fraîcheur (permission events.view)
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/markets/{id}:
+    get:
+      tags: [Admin]
+      summary: Consulter un marché, origine et fraîcheur de la cote (permission events.view)
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminMarket" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin]
+      summary: Suspendre ou rouvrir un marché (motif requis, audité)
+      description: |
+        Permission markets.suspend (Super Admin, Opérations). Un marché suspendu n'est plus affiché au catalogue
+        ni pariable ; la synchronisation du fournisseur ne lève jamais une suspension posée ici. Rouvrir ne rend
+        pariable que si la cote est assez récente. Même statut demandé : rien ne change, rien n'est audité.
+        Marché fermé ou réglé : 409 invalid_status_transition. Audit : market.suspended / market.reopened.
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [suspended, open] }
+                reason: { type: string, minLength: 5, maxLength: 255, description: "Ne peut pas commencer par « auto: » (réservé aux suspensions automatiques)" }
+      responses:
+        "200":
+          description: Statut appliqué
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminMarket" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`invalid_status_transition` (marché fermé ou réglé)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
   /admin/users/{id}/responsible-gaming:
     get:
       tags: [Admin]
@@ -1125,6 +1199,53 @@ components:
         roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
         mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
         profile: { type: object, description: "Avec users.view_personal_data uniquement" }
+    AdminEvent:
+      type: object
+      properties:
+        id: { type: string }
+        sport: { type: object, properties: { slug: { type: string }, name: { type: string } } }
+        competition: { type: object, properties: { id: { type: string }, name: { type: string }, country: { type: [string, "null"] } } }
+        home_team: { type: string }
+        away_team: { type: string }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled, live, finished, postponed, cancelled] }
+        score: { type: [object, "null"], properties: { home: { type: string }, away: { type: string } } }
+        origin: { type: object, properties: { provider: { type: string, example: the_odds_api }, external_id: { type: string } } }
+        last_synced_at: { type: [string, "null"], format: date-time }
+        result_received_at: { type: [string, "null"], format: date-time }
+        markets_count:
+          type: object
+          description: Nombre de marchés par statut
+          properties: { open: { type: integer }, suspended: { type: integer }, closed: { type: integer }, settled: { type: integer } }
+        markets: { type: array, items: { $ref: "#/components/schemas/AdminMarket" }, description: "Détail uniquement" }
+    AdminMarket:
+      type: object
+      properties:
+        id: { type: string }
+        event_id: { type: string }
+        key: { type: string, example: h2h }
+        name: { type: string, example: Résultat du match (1X2) }
+        line: { type: [string, "null"], example: "2.5" }
+        status: { type: string, enum: [open, suspended, closed, settled] }
+        suspension:
+          type: [object, "null"]
+          properties:
+            automatic: { type: boolean, description: "true : posée par la synchronisation (cotes périmées), levée par des cotes fraîches" }
+            reason: { type: string }
+        odds_version: { type: integer }
+        origin: { type: object, properties: { provider: { type: string }, external_id: { type: string }, bookmaker: { type: [string, "null"] } } }
+        freshness:
+          type: object
+          properties:
+            odds_updated_at: { type: [string, "null"], format: date-time }
+            age_seconds: { type: [integer, "null"] }
+            max_age_minutes: { type: integer, description: "Règle de fraîcheur (plus courte pendant le match)" }
+            stale: { type: boolean }
+        bettable: { type: boolean }
+        selections:
+          type: array
+          items: { type: object, properties: { id: { type: string }, key: { type: string }, label: { type: string }, name: { type: string }, odds: { type: string, example: "2.10" } } }
+        updated_at: { type: [string, "null"], format: date-time }
     AuditLog:
       type: object
       properties:
