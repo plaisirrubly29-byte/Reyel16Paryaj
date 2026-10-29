@@ -635,12 +635,19 @@ paths:
   /admin/dashboard:
     get:
       tags: [Admin]
-      summary: Indicateurs de la vue d'ensemble (permission dashboard.view)
+      summary: Indicateurs de la vue d'ensemble sur une période (permission dashboard.view)
       description: |
         Chaque section n'est présente que si le rôle a la permission correspondante :
         users (users.view), betting (tickets.view), finance (ledger.view), catalogue (events.view).
-        Montants en unités mineures ; séries quotidiennes sur 14 jours, jours vides à 0.
+        Journées découpées dans le fuseau d'affichage (APP_DISPLAY_TIMEZONE), dates stockées en UTC.
+        Définitions : mises = tickets PLACÉS dans la période ; gains payés et remboursements = tickets RÉGLÉS
+        dans la période ; produit brut = mises réglées (hors annulés) - gains payés ; exposition = gains
+        potentiels des tickets en cours (pas une perte certaine). Montants en unités mineures.
       security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [today, yesterday, 7d, 30d, month, last_month, custom], default: 7d } }
+        - { name: from, in: query, description: "Obligatoire si period=custom", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Obligatoire si period=custom ; 366 jours au plus", schema: { type: string, format: date } }
       responses:
         "200":
           description: OK
@@ -654,6 +661,14 @@ paths:
                     properties:
                       generated_at: { type: string, format: date-time }
                       currency: { type: string, example: HTG }
+                      period:
+                        type: object
+                        properties:
+                          preset: { type: string }
+                          from: { type: string, format: date }
+                          to: { type: string, format: date }
+                          days: { type: integer }
+                          timezone: { type: string, example: America/Port-au-Prince }
                       users:
                         type: object
                         properties:
@@ -661,33 +676,156 @@ paths:
                           active: { type: integer }
                           suspended: { type: integer }
                           excluded: { type: integer }
-                          new_7d: { type: integer }
+                          new_today: { type: integer }
+                          new_in_period: { type: integer }
                           registrations: { $ref: "#/components/schemas/DailySeries" }
                       betting:
                         type: object
                         properties:
-                          tickets_today: { type: integer }
-                          stake_today_minor: { type: integer }
+                          tickets_placed: { type: integer }
+                          stakes_minor: { type: integer }
+                          tickets_settled: { type: integer }
+                          payouts_minor: { type: integer }
+                          refunds_minor: { type: integer }
                           pending_count: { type: integer }
                           pending_exposure_minor: { type: integer, description: "Gains potentiels des tickets en cours" }
                           status_breakdown: { type: array, items: { type: object, properties: { status: { type: string }, count: { type: integer } } } }
+                          stakes_by_sport:
+                            type: array
+                            description: Un combiné mêlant plusieurs sports est compté dans « multisport ».
+                            items: { type: object, properties: { sport: { type: string }, name: { type: string }, tickets: { type: integer }, stakes_minor: { type: integer } } }
                           tickets: { $ref: "#/components/schemas/DailySeries" }
-                          stakes_minor: { $ref: "#/components/schemas/DailySeries" }
+                          stakes_daily_minor: { $ref: "#/components/schemas/DailySeries" }
                       finance:
                         type: object
                         properties:
-                          period_days: { type: integer, example: 14 }
                           settled_stakes_minor: { type: integer }
                           payouts_minor: { type: integer }
                           gross_gaming_revenue_minor: { type: integer, description: "Mises réglées - gains versés" }
                           pending_corrections: { type: integer }
+                          payments_available: { type: boolean, description: "false tant qu'aucun prestataire de paiement n'est intégré (P7-01)" }
                       catalogue:
                         type: object
                         properties:
                           events_live: { type: integer }
+                          events_scheduled: { type: integer }
                           events_next_24h: { type: integer }
                           markets_open: { type: integer }
                           markets_suspended: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/alerts:
+    get:
+      tags: [Admin]
+      summary: Points d'attention du moment (permission dashboard.view)
+      description: |
+        Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
+        Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
+        settlement_overdue, finance_corrections, reconciliation, failed_jobs, mfa_failures.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        severity: { type: string, enum: [critical, warning, info] }
+                        category: { type: string }
+                        title: { type: string }
+                        detail: { type: string }
+                        link: { type: [string, "null"], example: /admin/tickets?status=pending }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/search:
+    get:
+      tags: [Admin]
+      summary: Recherche globale (permission dashboard.view)
+      description: Comptes (users.view), tickets par début de référence (tickets.view) et matchs par équipe (events.view) ; 5 résultats par type au plus.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      users: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, status: { type: string } } } }
+                      tickets: { type: array, items: { type: object, properties: { id: { type: string }, reference: { type: string }, status: { type: string } } } }
+                      events: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, starts_at: { type: string, format: date-time }, status: { type: string } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/system:
+    get:
+      tags: [Admin]
+      summary: Supervision technique en lecture seule (permission settings.view)
+      description: Planificateur, fournisseur de données sportives (crédits, synchronisations, échecs), file d'attente. Ne renvoie jamais de secret ni de trace d'exception.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      generated_at: { type: string, format: date-time }
+                      scheduler: { type: object, properties: { running: { type: boolean }, last_heartbeat: { type: [string, "null"], format: date-time } } }
+                      sports_provider: { type: object, description: "provider, credits, sync_cron, last_call_at, last_event_sync_at, competitions, recent_failures" }
+                      queue: { type: object, properties: { connection: { type: string }, failed_24h: { type: integer }, recent_failures: { type: array, items: { type: object } } } }
+                      payments: { type: object, properties: { integrated: { type: boolean }, providers: { type: array, items: { type: object } } } }
+                      backups: { type: object, properties: { tracked: { type: boolean } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/risk/exposure:
+    get:
+      tags: [Admin]
+      summary: Exposition par match sur les tickets en cours (permission tickets.view)
+      description: |
+        Paris simples : pire cas d'un marché = gains de l'issue la plus chère - mises du marché (une seule issue gagne).
+        Pire cas d'un match = somme de ses marchés (majorant). Combinés listés à part, hors pire cas. 50 matchs au plus.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency: { type: string }
+                      total_events: { type: integer }
+                      events:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event_id: { type: string }
+                            name: { type: string }
+                            starts_at: { type: string, format: date-time }
+                            single_tickets: { type: integer }
+                            single_stakes_minor: { type: integer }
+                            worst_case_minor: { type: integer }
+                            markets: { type: array, items: { type: object } }
+                            multiple_tickets: { type: integer }
+                            multiple_potential_payout_minor: { type: integer }
         "403": { $ref: "#/components/responses/Forbidden" }
   /admin/users:
     get:
