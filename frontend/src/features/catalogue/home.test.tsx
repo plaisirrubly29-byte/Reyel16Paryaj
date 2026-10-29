@@ -398,6 +398,20 @@ describe('onglet Live', () => {
     expect(within(region).getAllByLabelText('Score : 2 à 1').length).toBeGreaterThan(0);
     expect(within(region).queryByText('Fulham')).not.toBeInTheDocument();
   });
+
+  it('affiche les cotes du match en cours sans permettre de parier (paris en direct fermés)', async () => {
+    const base = event('1', 'Everton', 'Chelsea', ['1.40', '4.33', '7.50']);
+    const live = { ...base, status: 'live', starts_at: inHours(-0.5), markets: [{ ...base.markets[0], bettable: false }] };
+    mockApi({
+      'GET /me': guest,
+      'GET /health': { status: 200, body: { status: 'ok', version: 'v1', time: '' } },
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([live]) },
+    });
+    renderApp('/sports?tab=live');
+
+    expect(await oddsButton('1 Everton à 1.40 (paris fermés pendant le match)')).toBeDisabled();
+  });
 });
 
 describe('formatKickoff', () => {

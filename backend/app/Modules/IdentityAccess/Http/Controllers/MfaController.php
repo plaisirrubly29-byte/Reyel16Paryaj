@@ -41,7 +41,11 @@ class MfaController extends Controller
 
     public function regenerateRecoveryCodes(Request $request): JsonResponse
     {
-        return response()->json(['data' => ['recovery_codes' => $this->mfa->regenerateRecoveryCodes($request->user())]]);
+        $data = $request->validate(['code' => ['required', 'string', 'max:10']]);
+
+        $codes = $this->mfa->regenerateRecoveryCodes($request->user(), $data['code'], $request->session());
+
+        return response()->json(['data' => ['recovery_codes' => $codes]]);
     }
 
     public function reset(Request $request, User $user): Response

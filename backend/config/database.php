@@ -42,6 +42,7 @@ return [
             'journal_mode' => null,
             'synchronous' => null,
             'transaction_mode' => 'DEFERRED',
+            'mask_bindings_in_exception_messages' => true, // comme pgsql (base des tests)
         ],
 
         'mysql' => [
@@ -97,6 +98,9 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Valeurs des requêtes masquées dans les messages d'erreur (logs, réponse en mode debug) :
+            // un INSERT refusé n'y écrit plus nom, téléphone, email ni hash du mot de passe (revue P8-02, M5).
+            'mask_bindings_in_exception_messages' => true,
         ],
 
         'sqlsrv' => [
