@@ -29,3 +29,18 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 
 Règles : aucun rôle ne peut s'accorder lui-même des permissions ; MFA obligatoire pour tous ces rôles ;
 toute action ✅/2️⃣ sur une donnée sensible est journalisée avec motif.
+
+## Tests API (P6-09)
+
+[`backend/tests/Feature/Modules/Admin/PermissionMatrixTest.php`](../backend/tests/Feature/Modules/Admin/PermissionMatrixTest.php) :
+un test par ligne du tableau. Chaque route de la ligne est appelée par un administrateur de chacun des cinq rôles
+(MFA vérifiée) : rôle autorisé → la requête passe le contrôle de permission ; rôle interdit → `403 forbidden`.
+
+- Les permissions de `config/permissions.php` (et celles appliquées en base) sont comparées à ce tableau, rôle par rôle.
+- Toute route `/api/v1/admin/*` doit appartenir à une ligne : une nouvelle route sans ligne fait échouer les tests.
+- 👁 « données minimales » (Support) : ni profil ni rôles dans la fiche utilisateur.
+- 2️⃣ : le demandeur ne valide jamais sa propre demande (`self_approval_forbidden`) ; « jamais les siens » pour les rôles
+  (`cannot_modify_own_roles`). Détail des circuits : `FinanceCorrectionsApiTest`, `ResultCorrectionApiTest`, `RbacTest`.
+- **Règlement — lancer / relancer** : aucune route API à ce jour (règlement automatique : `SettleEventJob`, commande
+  `settlement:run`). Le test vérifie les permissions `settlement.run` / `settlement.approve` et qu'aucune route ne les expose ;
+  une future route devra être ajoutée à la ligne correspondante du test.
