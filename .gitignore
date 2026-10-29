@@ -16,6 +16,10 @@ dist/
 # Logs
 *.log
 
+# Sauvegardes de base (données personnelles) : jamais dans Git — scripts/db/backup.sh
+backups/
+*.dump
+
 # IDE / OS
 .idea/
 .vscode/*
