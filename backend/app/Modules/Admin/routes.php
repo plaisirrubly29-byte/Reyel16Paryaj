@@ -1,8 +1,8 @@
 <?php
 
 use App\Modules\Admin\Http\Controllers\AdminEventController;
-use App\Modules\Admin\Http\Controllers\AdminMarketController;
 use App\Modules\Admin\Http\Controllers\AdminLedgerController;
+use App\Modules\Admin\Http\Controllers\AdminMarketController;
 use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
