@@ -123,7 +123,7 @@ describe('menu selon les permissions', () => {
     expect(within(nav).getByRole('link', { name: 'Tickets' })).toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: 'Finance' })).toBeNull();
     expect(within(nav).queryByRole('link', { name: 'Audit & rapports' })).toBeNull();
-    expect(within(nav).getByText(/Support/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Compte connecté')).getByText('Support')).toBeInTheDocument();
   });
 
   it('bloque une section saisie directement dans l\'URL sans la permission', async () => {
@@ -152,5 +152,46 @@ describe('menu selon les permissions', () => {
   it('calcule les sections visibles (une permission suffit)', () => {
     expect(visibleSections(['settlement.run']).map((s) => s.label)).toEqual(['Résultats & règlement']);
     expect(visibleSections([])).toEqual([]);
+  });
+});
+
+describe('tableau de bord', () => {
+  const series = (values: number[]) => values.map((value, i) => ({ date: `2026-10-${String(16 + i).padStart(2, '0')}`, value }));
+
+  it('affiche les indicateurs reçus de l\'API et les points à traiter', async () => {
+    mockApi({
+      'GET /me': { status: 200, body: { data: admin({ roles: ['super_admin'], permissions: ['dashboard.view', 'tickets.view', 'users.view', 'ledger.view', 'events.view'] }) } },
+      'GET /admin/dashboard': {
+        status: 200,
+        body: {
+          data: {
+            generated_at: '2026-10-29T14:00:00+00:00',
+            currency: 'HTG',
+            users: { total: 1250, active: 1200, suspended: 3, excluded: 1, new_7d: 42, registrations: series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) },
+            betting: {
+              tickets_today: 12,
+              stake_today_minor: 1_500_00,
+              pending_count: 7,
+              pending_exposure_minor: 9_800_00,
+              status_breakdown: [{ status: 'pending', count: 7 }, { status: 'won', count: 3 }, { status: 'lost', count: 10 }, { status: 'void', count: 0 }],
+              tickets: series(Array(14).fill(2)),
+              stakes_minor: series(Array(14).fill(100_00)),
+            },
+            finance: { period_days: 14, settled_stakes_minor: 5_000_00, payouts_minor: 3_000_00, gross_gaming_revenue_minor: 2_000_00, pending_corrections: 2 },
+            catalogue: { events_live: 1, events_next_24h: 8, markets_open: 40, markets_suspended: 0 },
+          },
+        },
+      },
+    });
+
+    renderApp('/admin');
+
+    const stakes = (await screen.findByText('Mises du jour')).closest('a')!;
+    expect(stakes).toHaveAttribute('href', '/admin/tickets');
+    expect(within(stakes).getByText(/1\s500,00/)).toBeInTheDocument();
+    expect(screen.getByText('1 250')).toBeInTheDocument();
+    expect(screen.getByText(/2 corrections financières en attente/)).toBeInTheDocument();
+    expect(screen.queryByText(/marché.* suspendu/)).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Mises par jour' })).toBeInTheDocument();
   });
 });
