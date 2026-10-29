@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { RequireAdmin } from '../../admin/components/RequireAdmin';
+import { AlertsBell, GlobalSearch, ServiceStatus, UserMenu } from '../../admin/components/TopbarTools';
 import { sectionFor, visibleSections, type AdminSection } from '../../admin/navigation';
 import { initials, ROLE_LABELS } from '../../admin/roles';
 import { useLogout, useMe } from '../../features/auth/api/auth';
@@ -132,12 +133,12 @@ function AdminShell() {
             <strong>{current?.label ?? 'Administration'}</strong>
           </div>
 
-          <div className="admin-user" aria-label="Compte connecté">
-            <span className="admin-avatar" aria-hidden="true">{initials(user?.name)}</span>
-            <span className="admin-user-text">
-              <strong>{user?.name}</strong>
-              <span>{roles}</span>
-            </span>
+          <GlobalSearch />
+
+          <div className="admin-topbar-tools">
+            <ServiceStatus />
+            <AlertsBell />
+            <UserMenu name={user?.name} initials={initials(user?.name)} roles={roles} onSignOut={signOut} />
           </div>
         </header>
 

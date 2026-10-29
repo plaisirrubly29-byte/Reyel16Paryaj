@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\IdempotencyKey;
+use App\Modules\Admin\Services\SystemStatusService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -11,6 +13,12 @@ Artisan::command('inspire', function () {
 
 // Purge des clés d'idempotence expirées (App\Models\IdempotencyKey::prunable).
 Schedule::command('model:prune', ['--model' => [IdempotencyKey::class]])->daily();
+
+// Signal de vie du planificateur, lu par la supervision admin (SystemStatusService) : si le cron
+// ou schedule:work s'arrête, l'écran le montre au lieu de laisser croire que les synchros tournent.
+Schedule::call(fn () => Cache::forever(SystemStatusService::HEARTBEAT_KEY, now()->toIso8601String()))
+    ->name('scheduler-heartbeat')
+    ->everyMinute();
 
 // Synchronisation des matchs et cotes (P3-03). Fréquence réglée par SPORTS_DATA_SYNC_CRON pour respecter
 // le quota du fournisseur ; jamais deux synchronisations en parallèle.

@@ -23,6 +23,8 @@ import { AdminHomePage } from '../admin/pages/AdminHomePage';
 import { UserDetailPage } from '../admin/pages/UserDetailPage';
 import { TicketDetailPage } from '../admin/pages/TicketDetailPage';
 import { TicketsPage } from '../admin/pages/TicketsPage';
+import { RiskPage } from '../admin/pages/RiskPage';
+import { SystemPage } from '../admin/pages/SystemPage';
 import { UsersPage } from '../admin/pages/UsersPage';
 import { Placeholder } from '../shared/components/Placeholder';
 
@@ -72,7 +74,9 @@ export const routes = [
       section('users/:id', <UserDetailPage />),
       section('tickets', <TicketsPage />),
       section('tickets/:id', <TicketDetailPage />),
+      section('risk', <RiskPage />),
       section('finance', <Placeholder title="Finance" task="P6-08" />),
+      section('system', <SystemPage />),
       section('settings', <Placeholder title="Paramètres" task="P6-08" />),
       section('audit', <Placeholder title="Audit & rapports" task="P6-08" />),
     ],
