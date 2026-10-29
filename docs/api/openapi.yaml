@@ -67,20 +67,24 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
-      summary: Connexion
+      summary: Connexion par téléphone ou par email
       description: |
+        Fournir `phone` OU `email` (si les deux sont fournis, le téléphone est utilisé).
         Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
-        Limité à 5 tentatives/minute par téléphone+IP, 20/minute par IP et 30/heure par téléphone, quelle que soit l'IP.
-        Le numéro est normalisé avant d'être compté : `34123456`, `3412-3456` et `+509 3412 3456` partagent les mêmes compteurs.
+        Limité à 5 tentatives/minute par identifiant+IP, 20/minute par IP et 30/heure par compte, quelle que soit l'IP
+        (compteur commun au téléphone et à l'email d'un même compte).
+        Le numéro est normalisé avant d'être compté : `34123456`, `3412-3456` et `+509 3412 3456` partagent les mêmes compteurs ;
+        l'email est comparé en minuscules.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [phone, password]
+              required: [password]
               properties:
                 phone: { type: string, example: "34123456" }
+                email: { type: string, format: email, example: "chef@example.com" }
                 password: { type: string }
       responses:
         "200":

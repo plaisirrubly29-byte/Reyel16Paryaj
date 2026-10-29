@@ -41,11 +41,13 @@ class AuthService
      * Vérifie les identifiants. Même erreur et même coût (hachage) que le compte existe ou non,
      * pour ne pas permettre l'énumération des comptes.
      *
+     * @param  'phone'|'email'  $field  identifiant déjà normalisé (téléphone sans indicatif, email en minuscules)
+     *
      * @throws ApiException invalid_credentials | account_suspended | account_excluded
      */
-    public function verifyCredentials(string $phone, string $password): User
+    public function verifyCredentials(string $field, string $login, string $password): User
     {
-        $user = User::where('phone', $phone)->first();
+        $user = User::where($field === 'email' ? 'email' : 'phone', $login)->first();
 
         // Hachage factice si le compte n'existe pas : le temps de réponse ne trahit pas son existence.
         $valid = Hash::check($password, $user?->password ?? $this->dummyHash());

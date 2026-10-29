@@ -4,22 +4,28 @@ import { ApiError } from '../../../shared/api/client';
 import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { TextField } from '../../../shared/components/TextField';
-import { safeRedirect, useLogin } from '../api/auth';
+import { safeRedirect, useLogin, type LoginInput } from '../api/auth';
 import { AuthShell } from '../components/AuthShell';
 import { digitsOnly } from '../phone';
+
+/** Un « @ » désigne un email ; sinon un numéro haïtien, normalisé comme à l'inscription (+509 et séparateurs retirés). */
+function loginInput(login: string, password: string): LoginInput {
+  const value = login.trim();
+  return value.includes('@') ? { email: value, password } : { phone: digitsOnly(value), password };
+}
 
 export function LoginPage() {
   const login = useLogin();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [form, setForm] = useState({ phone: '', password: '' });
+  const [form, setForm] = useState({ login: '', password: '' });
 
   const error = login.error instanceof ApiError ? login.error : null;
   const fieldErrors = error?.fieldErrors ?? {};
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    login.mutate(form, {
+    login.mutate(loginInput(form.login, form.password), {
       onSuccess: ({ data }) => {
         // Un administrateur passe par la double authentification (P6-05) avant l'admin.
         const fallback = data.is_admin ? '/admin' : '/';
@@ -35,19 +41,19 @@ export function LoginPage() {
 
       <form className="stack" onSubmit={submit} noValidate>
         <TextField
-          label="Numéro de téléphone"
+          label="Téléphone ou email"
           labelHidden
-          type="tel"
-          inputMode="numeric"
-          name="phone"
-          autoComplete="tel-national"
-          prefix="+509"
-          maxLength={8}
-          placeholder="34 12 34 56"
+          type="text"
+          name="login"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={255}
+          placeholder="Téléphone (34 12 34 56) ou email"
           required
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })}
-          error={fieldErrors.phone}
+          value={form.login}
+          onChange={(e) => setForm({ ...form, login: e.target.value })}
+          error={fieldErrors.phone ?? fieldErrors.email}
         />
         <TextField
           label="Mot de passe"
