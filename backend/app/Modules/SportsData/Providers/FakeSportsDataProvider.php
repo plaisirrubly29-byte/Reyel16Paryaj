@@ -11,6 +11,9 @@ use App\Modules\SportsData\Data\SelectionData;
 use App\Modules\SportsData\Data\SportData;
 use App\Modules\SportsData\Exceptions\SportsDataException;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Support\Str;
+use LogicException;
 
 /**
  * Faux fournisseur déterministe pour le développement et les tests (aucun appel réseau, aucun quota).
@@ -22,11 +25,22 @@ use Carbon\CarbonImmutable;
  * $fake->setResult('fake-1', '2', '1') publie un score final (completed: false = match en cours) ;
  * $fake->setStartsAt('fake-1', now()->subMinutes(30)) fait commencer un match (cotes en direct).
  * Les matchs de football ont un 1X2 (h2h) et un plus/moins 2.5 buts (totals) ; la NBA n'a que le h2h.
+ *
+ * Matchs de scénario (tests de bout en bout, P8-01) : avec un dépôt (le cache de l'application, partagé entre les
+ * processus), addScenarioMatch() ajoute un match de Premier League unique, puis finishScenarioMatch() le fait
+ * commencer dans le passé et publie son score. La synchronisation, l'import des résultats et le règlement suivent
+ * ensuite leur chemin normal. Commande : sports-data:fake-match (jamais en production).
  */
 class FakeSportsDataProvider implements SportsDataProvider
 {
     /** Ligne par défaut du marché totals. */
     private const TOTALS_LINE = '2.5';
+
+    /** Clé du dépôt des matchs de scénario. */
+    public const SCENARIO_KEY = 'sports-data:fake:scenario-matches';
+
+    /** Cotes 1X2 des matchs de scénario : gagner à domicile rapporte 2 fois la mise. */
+    public const SCENARIO_ODDS = ['home' => '2.00', 'draw' => '3.20', 'away' => '3.60'];
 
     private ?string $failure = null;
 
@@ -40,6 +54,9 @@ class FakeSportsDataProvider implements SportsDataProvider
     private array $startsAt = [];
 
     private ?CarbonImmutable $updatedAtOverride = null;
+
+    /** @param ?Repository $store dépôt des matchs de scénario (sans dépôt : aucun match de scénario) */
+    public function __construct(private readonly ?Repository $store = null) {}
 
     public function name(): string
     {
@@ -151,11 +168,76 @@ class FakeSportsDataProvider implements SportsDataProvider
             ],
         ];
 
+        if ($sportKey === 'soccer_epl') {
+            foreach ($this->scenarioMatches() as $id => $m) {
+                $fixtures['soccer_epl'][] = [$id, $m['home'], $m['away'], CarbonImmutable::parse($m['starts_at']), [
+                    'h2h' => [$m['home'] => self::SCENARIO_ODDS['home'], 'Draw' => self::SCENARIO_ODDS['draw'], $m['away'] => self::SCENARIO_ODDS['away']],
+                ]];
+            }
+        }
+
         return array_map(function (array $f) {
             $f[3] = $this->startsAt[$f[0]] ?? $f[3];
 
             return $f;
         }, $fixtures[$sportKey] ?? []);
+    }
+
+    /**
+     * Ajoute un match de scénario (Premier League, coup d'envoi dans une heure), à synchroniser ensuite.
+     *
+     * @return array{id: string, home: string, away: string, starts_at: string}
+     */
+    public function addScenarioMatch(): array
+    {
+        $suffix = Str::upper(Str::random(6));
+        $match = [
+            'id' => 'e2e-'.Str::lower($suffix),
+            'home' => "E2E Lions {$suffix}",
+            'away' => "E2E Tigres {$suffix}",
+            'starts_at' => CarbonImmutable::now()->startOfMinute()->addHour()->toIso8601String(),
+            'result' => null,
+        ];
+
+        $this->saveScenarioMatches([...$this->scenarioMatches(), $match['id'] => $match]);
+
+        return array_diff_key($match, ['result' => true]);
+    }
+
+    /**
+     * Fait commencer le match de scénario il y a deux heures et publie son score final.
+     *
+     * @return CarbonImmutable le nouveau coup d'envoi
+     */
+    public function finishScenarioMatch(string $id, string $homeScore, string $awayScore): CarbonImmutable
+    {
+        $matches = $this->scenarioMatches();
+        if (! isset($matches[$id])) {
+            throw new LogicException("Match de scénario inconnu : {$id}.");
+        }
+
+        $kickOff = CarbonImmutable::now()->startOfMinute()->subHours(2);
+        $matches[$id]['starts_at'] = $kickOff->toIso8601String();
+        $matches[$id]['result'] = ['home' => $homeScore, 'away' => $awayScore];
+        $this->saveScenarioMatches($matches);
+
+        return $kickOff;
+    }
+
+    /** @return array<string, array{id: string, home: string, away: string, starts_at: string, result: ?array{home: string, away: string}}> */
+    private function scenarioMatches(): array
+    {
+        return $this->store?->get(self::SCENARIO_KEY) ?? [];
+    }
+
+    /** @param array<string, array<string, mixed>> $matches */
+    private function saveScenarioMatches(array $matches): void
+    {
+        if ($this->store === null) {
+            throw new LogicException('Matchs de scénario indisponibles : faux fournisseur sans dépôt.');
+        }
+
+        $this->store->forever(self::SCENARIO_KEY, $matches);
     }
 
     /** @param array<string, string> $odds */
@@ -191,8 +273,12 @@ class FakeSportsDataProvider implements SportsDataProvider
             $results[] = new ResultData('fake-0', 'soccer_epl', 'Manchester City', 'Tottenham', $yesterday, true, '2', '1', $yesterday->addHours(2));
         }
 
+        $scenario = $this->scenarioMatches();
         foreach ($this->fixtures($sportKey) as [$id, $home, $away, $startsAt]) {
-            if (isset($this->results[$id])) {
+            if (isset($scenario[$id]['result'])) {
+                $r = $scenario[$id]['result'];
+                $results[] = new ResultData($id, $sportKey, $home, $away, $startsAt, true, $r['home'], $r['away'], $now);
+            } elseif (isset($this->results[$id])) {
                 $r = $this->results[$id];
                 $results[] = new ResultData($id, $sportKey, $home, $away, $startsAt, $r['completed'], $r['home'], $r['away'], $now);
             }

@@ -89,6 +89,7 @@ npm run dev                 # http://localhost:5173
 | frontend | `npm run build` | Vérification TypeScript + build |
 | racine | `node scripts/github/bootstrap.mjs --markdown` | Régénérer `docs/TASKS.md` |
 | racine | `node scripts/github/bootstrap.mjs --github` | Créer labels, milestones et issues |
+| e2e | `npx playwright test` | Parcours complet de bout en bout (voir [`e2e/README.md`](e2e/README.md)) |
 
 ## Organisation de l'équipe
 

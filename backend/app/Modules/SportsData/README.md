@@ -49,6 +49,10 @@ $provider->results('soccer_epl', 2); // 2 crédits (1 sans daysFrom)
 - **Quota** : offre gratuite = 500 crédits/mois. Le quota restant est lu dans les en-têtes `x-requests-*`
   et mémorisé ; sous `SPORTS_DATA_MIN_REMAINING`, les appels payants sont refusés (`quota_exhausted`).
 - **Diagnostic sans coût** : `php artisan sports-data:check` (connexion, sports configurés, quota).
+- **Matchs de scénario** (tests de bout en bout, P8-01, faux fournisseur hors production) :
+  `sports-data:fake-match create` ajoute un match unique, mémorisé dans le cache ; `sports-data:fake-match finish
+  <id> 2-1` le fait commencer dans le passé et publie son score. Import et règlement suivent leur chemin normal
+  (voir `e2e/README.md`).
 
 ## Marchés synchronisés
 

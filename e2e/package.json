@@ -1,0 +1,13 @@
+{
+  "name": "reyel16paryaj-e2e",
+  "private": true,
+  "description": "Tests de bout en bout (Playwright) du parcours complet — P8-01",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}
