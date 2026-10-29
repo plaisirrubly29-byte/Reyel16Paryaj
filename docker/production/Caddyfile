@@ -1,0 +1,37 @@
+# Serveur web de Staging / Production (P1-06) : HTTPS automatique (Let's Encrypt), frontend et API sur la même origine.
+#   SITE_ADDRESS : nom de domaine (ex. staging.reyel16.ht) ; « localhost » pour un essai local (certificat interne).
+#   ACME_EMAIL   : adresse de contact Let's Encrypt (expiration, incidents).
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# API Laravel (php-fpm) : /api/v1/…, cookie CSRF de Sanctum, santé de Laravel (/up).
+	@backend path /api/* /sanctum/* /up
+	handle @backend {
+		root * /var/www/backend/public
+		php_fastcgi {$PHP_FPM_ADDRESS:backend:9000}
+	}
+
+	# Frontend React : fichiers statiques, routes de l'application renvoyées vers index.html.
+	handle {
+		root * /srv/frontend
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /assets/*
+		header @pages Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log
+}
