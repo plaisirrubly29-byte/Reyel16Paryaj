@@ -17,6 +17,8 @@ import { RequirePermission } from '../admin/components/RequireAdmin';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { AdminHomePage } from '../admin/pages/AdminHomePage';
 import { UserDetailPage } from '../admin/pages/UserDetailPage';
+import { TicketDetailPage } from '../admin/pages/TicketDetailPage';
+import { TicketsPage } from '../admin/pages/TicketsPage';
 import { UsersPage } from '../admin/pages/UsersPage';
 import { Placeholder } from '../shared/components/Placeholder';
 
@@ -42,6 +44,8 @@ export const routes = [
       { path: 'wallet', element: <RequireAuth><WalletPage /></RequireAuth> },
     ],
   },
+  // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
+  { path: 'admin/login', element: <div className="admin-login"><LoginPage admin /></div> },
   {
     path: 'admin',
     element: <AdminLayout />,
@@ -51,7 +55,8 @@ export const routes = [
       section('settlements', <Placeholder title="Résultats & règlement" task="P6-06" />),
       section('users', <UsersPage />),
       section('users/:id', <UserDetailPage />),
-      section('tickets', <Placeholder title="Tickets" task="P6-07" />),
+      section('tickets', <TicketsPage />),
+      section('tickets/:id', <TicketDetailPage />),
       section('finance', <Placeholder title="Finance" task="P6-08" />),
       section('settings', <Placeholder title="Paramètres" task="P6-08" />),
       section('audit', <Placeholder title="Audit & rapports" task="P6-08" />),

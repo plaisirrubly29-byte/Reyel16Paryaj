@@ -7,6 +7,8 @@ import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
 import { ROLE_LABELS, useAdminUser, useChangeUserStatus, type AdminUser } from '../api/users';
+import { initials } from '../roles';
+import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
 
 const dateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
@@ -15,23 +17,41 @@ const dateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr
 export function UserDetailPage() {
   const { id = '' } = useParams();
   const user = useAdminUser(id);
+  const { data: me } = useMe();
+  const u = user.data;
 
   return (
-    <section className="stack">
-      <p><Link to="/admin/users">← Utilisateurs</Link></p>
+    <section className="admin-page">
+      <PageHeader
+        back={{ to: '/admin/users', label: 'Utilisateurs' }}
+        title={u ? (
+          <span className="user-cell">
+            <span className="user-avatar user-avatar-lg" aria-hidden="true">{initials(u.name)}</span>
+            {u.name}
+          </span>
+        ) : 'Compte'}
+        subtitle={u ? `${u.is_admin ? 'Administrateur' : 'Joueur'} · n° ${u.id}` : undefined}
+        actions={u && (
+          <>
+            <StatusBadge status={u.status} />
+            {me?.permissions.includes('tickets.view') && !u.is_admin && (
+              <Link to={`/admin/tickets?user_id=${u.id}`} className="btn btn-secondary btn-sm">Voir ses tickets</Link>
+            )}
+          </>
+        )}
+      />
 
-      {user.isPending && <Spinner />}
+      {user.isPending && <div className="table-state"><Spinner /></div>}
       <ErrorAlert error={user.error} onRetry={() => user.refetch()} />
 
-      {user.data && (
-        <>
-          <div className="toolbar">
-            <h1>{user.data.name}</h1>
-            <StatusBadge status={user.data.status} />
-          </div>
-          <UserDetails user={user.data} />
-          <StatusPanel user={user.data} />
-        </>
+      {u && (
+        <div className="detail-grid">
+          <section className="admin-card">
+            <h2 className="card-title">Informations du compte</h2>
+            <UserDetails user={u} />
+          </section>
+          <StatusPanel user={u} />
+        </div>
       )}
     </section>
   );
@@ -40,8 +60,8 @@ export function UserDetailPage() {
 function UserDetails({ user }: { user: AdminUser }) {
   return (
     <dl className="details">
-      <dt>N°</dt><dd>{user.id}</dd>
-      <dt>Email</dt><dd>{user.email}</dd>
+      <dt>Téléphone</dt><dd className="mono">{user.phone}</dd>
+      <dt>Email</dt><dd>{user.email ?? '—'}</dd>
       <dt>Type</dt><dd>{user.is_admin ? 'Administrateur' : 'Joueur'}</dd>
       <dt>Inscription</dt><dd>{dateTime(user.created_at)}</dd>
       <dt>Dernière connexion</dt><dd>{dateTime(user.last_login_at)}</dd>
@@ -58,7 +78,6 @@ function UserDetails({ user }: { user: AdminUser }) {
         <>
           <dt>Nom complet</dt><dd>{[user.profile.first_name, user.profile.last_name].filter(Boolean).join(' ') || '—'}</dd>
           <dt>Date de naissance</dt><dd>{user.profile.birth_date ? new Date(`${user.profile.birth_date}T00:00:00`).toLocaleDateString('fr-FR') : '—'}</dd>
-          <dt>Téléphone</dt><dd>{user.profile.phone ?? '—'}</dd>
           <dt>Pays</dt><dd>{user.profile.country ?? '—'}</dd>
         </>
       )}
@@ -109,8 +128,8 @@ function StatusPanel({ user }: { user: AdminUser }) {
   }
 
   return (
-    <form className="panel stack" onSubmit={submit} noValidate>
-      <h2>{target === 'suspended' ? 'Suspendre le compte' : 'Réactiver le compte'}</h2>
+    <form className="admin-card stack" onSubmit={submit} noValidate>
+      <h2 className="card-title">{target === 'suspended' ? 'Suspendre le compte' : 'Réactiver le compte'}</h2>
       <p className="muted small">
         {target === 'suspended'
           ? "Le joueur perd immédiatement l'accès, même avec une session ouverte."

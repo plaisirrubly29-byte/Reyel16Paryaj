@@ -20,7 +20,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 
   const user = me.data;
   if (!user) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    return <Navigate to={`/admin/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
 
   if (!user.is_admin) {

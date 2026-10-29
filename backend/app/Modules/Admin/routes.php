@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Admin\Http\Controllers\AdminDashboardController;
 use App\Modules\Admin\Http\Controllers\AdminEventController;
 use App\Modules\Admin\Http\Controllers\AdminLedgerController;
 use App\Modules\Admin\Http\Controllers\AdminMarketController;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(function () {
+    Route::get('/dashboard', [AdminDashboardController::class, 'show'])->middleware('permission:dashboard.view');
+
     Route::get('/users', [AdminUserController::class, 'index'])->middleware('permission:users.view');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->middleware('permission:users.view');
     Route::patch('/users/{user}', [AdminUserController::class, 'update'])->middleware(['permission:users.suspend', 'idempotent']);

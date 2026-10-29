@@ -10,7 +10,9 @@ export type AccountStatus = 'active' | 'suspended' | 'excluded' | 'closed';
 export type AdminUser = {
   id: string;
   name: string;
-  email: string;
+  /** Identifiant de connexion (numéro haïtien, 8 chiffres). */
+  phone: string;
+  email: string | null;
   status: AccountStatus;
   status_changed_at: string | null;
   is_admin: boolean;
@@ -22,7 +24,6 @@ export type AdminUser = {
     first_name: string | null;
     last_name: string | null;
     birth_date: string | null;
-    phone: string | null;
     country: string | null;
   };
 };

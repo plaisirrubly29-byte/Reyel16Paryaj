@@ -632,6 +632,63 @@ paths:
         "204": { description: MFA réinitialisé }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Indicateurs de la vue d'ensemble (permission dashboard.view)
+      description: |
+        Chaque section n'est présente que si le rôle a la permission correspondante :
+        users (users.view), betting (tickets.view), finance (ledger.view), catalogue (events.view).
+        Montants en unités mineures ; séries quotidiennes sur 14 jours, jours vides à 0.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      generated_at: { type: string, format: date-time }
+                      currency: { type: string, example: HTG }
+                      users:
+                        type: object
+                        properties:
+                          total: { type: integer }
+                          active: { type: integer }
+                          suspended: { type: integer }
+                          excluded: { type: integer }
+                          new_7d: { type: integer }
+                          registrations: { $ref: "#/components/schemas/DailySeries" }
+                      betting:
+                        type: object
+                        properties:
+                          tickets_today: { type: integer }
+                          stake_today_minor: { type: integer }
+                          pending_count: { type: integer }
+                          pending_exposure_minor: { type: integer, description: "Gains potentiels des tickets en cours" }
+                          status_breakdown: { type: array, items: { type: object, properties: { status: { type: string }, count: { type: integer } } } }
+                          tickets: { $ref: "#/components/schemas/DailySeries" }
+                          stakes_minor: { $ref: "#/components/schemas/DailySeries" }
+                      finance:
+                        type: object
+                        properties:
+                          period_days: { type: integer, example: 14 }
+                          settled_stakes_minor: { type: integer }
+                          payouts_minor: { type: integer }
+                          gross_gaming_revenue_minor: { type: integer, description: "Mises réglées - gains versés" }
+                          pending_corrections: { type: integer }
+                      catalogue:
+                        type: object
+                        properties:
+                          events_live: { type: integer }
+                          events_next_24h: { type: integer }
+                          markets_open: { type: integer }
+                          markets_suspended: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /admin/users:
     get:
       tags: [Admin]
@@ -1188,6 +1245,10 @@ components:
               data: { type: [object, "null"] }
               actor_id: { type: [string, "null"], description: "null : action du joueur ou du système" }
               created_at: { type: string, format: date-time }
+    DailySeries:
+      type: array
+      description: Une valeur par jour, du plus ancien au plus récent.
+      items: { type: object, properties: { date: { type: string, format: date }, value: { type: integer } } }
     AdminUser:
       type: object
       properties:

@@ -23,6 +23,7 @@ const me = (permissions: string[], id = '99') => ({
 const account = (overrides: Record<string, unknown> = {}) => ({
   id: '7',
   name: 'Ana Joueuse',
+  phone: '34123456',
   email: 'ana@example.com',
   status: 'active',
   status_changed_at: null,
@@ -85,14 +86,16 @@ describe('fiche utilisateur', () => {
       'GET /me': me(['users.view', 'users.view_personal_data']),
       'GET /admin/users/7': {
         status: 200,
-        body: { data: account({ roles: [], mfa_enabled: false, profile: { first_name: 'Ana', last_name: 'Pierre', birth_date: '1990-04-02', phone: '+50900000000', country: 'HT' } }) },
+        body: { data: account({ roles: [], mfa_enabled: false, profile: { first_name: 'Ana', last_name: 'Pierre', birth_date: '1990-04-02', country: 'HT' } }) },
       },
     });
 
     renderApp('/admin/users/7');
 
-    expect(await screen.findByText('+50900000000')).toBeInTheDocument();
-    expect(screen.getByText('Ana Pierre')).toBeInTheDocument();
+    expect(await screen.findByText('Ana Pierre')).toBeInTheDocument();
+    expect(screen.getByText('02/04/1990')).toBeInTheDocument();
+    // Le téléphone est l'identifiant du compte (users.phone), plus une donnée du profil.
+    expect(screen.getByText('34123456')).toBeInTheDocument();
   });
 
   it('suspend un compte avec un motif et une clé d\'idempotence', async () => {
