@@ -16,6 +16,11 @@ enum AuditAction: string
     case MfaRecoveryCodesRegenerated = 'mfa.recovery_codes_regenerated';
     case UserPersonalDataViewed = 'user.personal_data_viewed';
 
+    // Admin — corrections financières à double validation (P6-04)
+    case FinanceCorrectionRequested = 'finance.correction_requested';
+    case FinanceCorrectionApproved = 'finance.correction_approved';
+    case FinanceCorrectionRejected = 'finance.correction_rejected';
+
     // Audit
     case AuditViewed = 'audit.viewed';
     case AuditExported = 'audit.exported';

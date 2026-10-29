@@ -629,6 +629,202 @@ paths:
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/tickets:
+    get:
+      tags: [Admin]
+      summary: Rechercher des tickets (permission tickets.view)
+      description: Tous les rôles administratifs. Joueur réduit à son identifiant et son nom (données minimales).
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string, example: R16-7KQ2M9XAPB } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: placed_from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: placed_to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Tickets, du plus récent au plus ancien
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/tickets/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'un ticket — sélections, règles acceptées et (avec ledger.view) ses écritures
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminTicket" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/ledger:
+    get:
+      tags: [Admin]
+      summary: Écritures du ledger, toutes portefeuilles confondus (permission ledger.view)
+      description: Finance, Conformité et Super Admin.
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: wallet_id, in: query, schema: { type: integer } }
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - { name: reference, in: query, description: Référence exacte de l'écriture, schema: { type: string, example: "bet:42:stake" } }
+        - { name: ticket_id, in: query, description: "Écritures d'un ticket (mise, gain, remboursement)", schema: { type: integer } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Écritures, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/finance/reconciliation:
+    get:
+      tags: [Admin]
+      summary: Rapprochement du ledger — totaux et écarts (permission ledger.view)
+      description: |
+        Lecture seule, calculée à la demande. Trois contrôles :
+        - `balance_chain` : le solde mémorisé par une écriture vaut le solde précédent du portefeuille + son montant ;
+        - `ticket_amount` : le net des écritures d'un ticket vaut (gain versé, ou 0) - mise ;
+        - `orphan_entry` : écriture rattachée à un ticket inexistant.
+        Au plus 100 écarts listés par contrôle (`truncated` = true au-delà) ; `discrepancies_count` reste exact.
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Reconciliation" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/finance/corrections:
+    get:
+      tags: [Admin]
+      summary: Corrections financières et leur circuit de validation (permission ledger.view)
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Corrections, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/FinanceCorrection" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: Demander la compensation d'une écriture (permission finance.correct, motif requis, auditée)
+      description: |
+        Première étape de la double validation : rien n'est écrit dans le ledger avant la validation par un autre
+        administrateur. V1 : seules les écritures sans ticket sont corrigeables ; celles d'un ticket relèvent de la
+        correction de résultat (P5-06).
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ledger_entry_id, reason]
+              properties:
+                ledger_entry_id: { type: integer }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Demande enregistrée (status pending)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`correction_already_pending` (details.correction_id)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "Validation, ou `entry_not_correctable` (details.reason : reversal_entry, linked_to_ticket, already_reversed)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/finance/corrections/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une correction et passer l'écriture compensatoire (permission finance.approve, motif requis)
+      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`).
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Correction validée (status approved, reversal_entry_id renseigné)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "403":
+          description: "Permission refusée, ou `self_approval_forbidden`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending` : déjà validée ou refusée"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "Validation, ou `entry_not_correctable`" }
+        "423": { description: "`wallet_frozen` : portefeuille gelé" }
+  /admin/finance/corrections/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser une correction — aucune écriture (permission finance.approve, motif requis)
+      description: Le demandeur peut retirer sa propre demande par ce refus ; il ne peut jamais la valider.
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Correction refusée (status rejected)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
 
 components:
   parameters:
@@ -885,6 +1081,99 @@ components:
                   name: { type: string, example: Over }
               odds: { type: string, example: "1.90", description: Cote acceptée (pas la cote actuelle du catalogue) }
               status: { type: string, enum: [pending, won, lost, void] }
+    AdminTicket:
+      type: object
+      description: |
+        Ticket vu par l'administration. La liste ne contient ni `selections`, ni `rules_snapshot`, ni `ledger_entries` ;
+        le détail ajoute les sélections et l'instantané des règles, et les écritures avec la permission ledger.view.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: R16-7KQ2M9XAPB }
+        type: { type: string, enum: [single, multiple] }
+        status: { type: string, enum: [pending, won, lost, void] }
+        user:
+          type: object
+          description: Données minimales du joueur
+          properties:
+            id: { type: string }
+            name: { type: string }
+        wallet_id: { type: string }
+        stake: { $ref: "#/components/schemas/Money" }
+        total_odds: { type: string, example: "3.895" }
+        potential_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        rules_version: { type: string }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+        rules_snapshot: { type: object, description: Règles acceptées par le joueur (détail uniquement) }
+        selections: { type: array, items: { $ref: "#/components/schemas/BetTicket/properties/selections/items" } }
+        ledger_entries: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+    AdminLedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        wallet_id: { type: string }
+        user_id: { type: string }
+        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        amount: { $ref: "#/components/schemas/Money" }
+        balance_after: { $ref: "#/components/schemas/Money" }
+        reference: { type: string, example: "bet:42:stake" }
+        related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
+        reversal_of_id: { type: [string, "null"], description: Écriture compensée par celle-ci }
+        reversed_by_id: { type: [string, "null"], description: Écriture qui compense celle-ci }
+        description: { type: [string, "null"] }
+        created_by: { type: [string, "null"], description: "Administrateur à l'origine de l'écriture ; null = système" }
+        created_at: { type: string, format: date-time }
+        correctable: { type: boolean, description: "true : peut faire l'objet d'une correction financière" }
+    Reconciliation:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        checked:
+          type: object
+          properties:
+            wallets: { type: integer }
+            ledger_entries: { type: integer }
+            tickets: { type: integer }
+        totals:
+          type: array
+          items:
+            type: object
+            properties:
+              currency: { type: string, example: HTG }
+              type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+              entries: { type: integer }
+              sum: { $ref: "#/components/schemas/Money" }
+        discrepancies_count: { type: integer }
+        discrepancies:
+          type: array
+          items:
+            type: object
+            required: [kind]
+            properties:
+              kind: { type: string, enum: [balance_chain, ticket_amount, orphan_entry] }
+              wallet_id: { type: string }
+              ledger_entry_id: { type: string }
+              ticket_id: { type: string }
+              reference: { type: string }
+              status: { type: string }
+              related: { type: object, properties: { type: { type: string }, id: { type: string } } }
+              expected: { $ref: "#/components/schemas/Money" }
+              actual: { $ref: "#/components/schemas/Money" }
+        truncated: { type: boolean, description: "true : au moins un contrôle a plus d'écarts que la liste n'en montre" }
+    FinanceCorrection:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reason: { type: string }
+        ledger_entry: { $ref: "#/components/schemas/AdminLedgerEntry" }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        requested_at: { type: string, format: date-time }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        reversal_entry_id: { type: [string, "null"], description: Écriture compensatoire passée à la validation }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
