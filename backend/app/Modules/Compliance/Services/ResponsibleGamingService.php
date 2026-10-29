@@ -14,6 +14,7 @@ use App\Modules\Compliance\Models\ResponsiblePlayEvent;
 use App\Modules\IdentityAccess\Services\AccountStatusService;
 use App\Support\Http\ApiException;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -189,6 +190,60 @@ class ResponsibleGamingService
                     ['period' => $period->value, 'limit_minor' => $limit->amount_minor, 'remaining_minor' => max(0, $limit->amount_minor - $used)]);
             }
         }
+    }
+
+    /**
+     * Vue de la Conformité sur un joueur : état actuel, pauses et exclusions, journal récent.
+     *
+     * @return array{limits: array<string, array<string, mixed>>, pause: ?ResponsibleGamingRestriction, restrictions: Collection<int, ResponsibleGamingRestriction>, events: Collection<int, ResponsiblePlayEvent>}
+     */
+    public function overview(User $player): array
+    {
+        return $this->status($player) + [
+            'restrictions' => ResponsibleGamingRestriction::where('user_id', $player->id)->orderByDesc('starts_at')->orderByDesc('id')->get(),
+            'events' => ResponsiblePlayEvent::where('user_id', $player->id)->orderByDesc('id')->limit(100)->get(),
+        ];
+    }
+
+    /**
+     * Réouverture d'une auto-exclusion arrivée à échéance, à la demande du joueur, par la Conformité.
+     * Avant l'échéance : refusée (l'auto-exclusion est irrévocable pendant sa durée).
+     *
+     * @throws ApiException exclusion_not_ended | invalid_status_transition
+     */
+    public function liftSelfExclusion(User $actor, User $player, string $reason): ResponsibleGamingRestriction
+    {
+        return DB::transaction(function () use ($actor, $player, $reason) {
+            $exclusion = ResponsibleGamingRestriction::where('user_id', $player->id)
+                ->where('type', RestrictionType::SelfExclusion)
+                ->whereNull('lifted_at')
+                ->orderByDesc('ends_at')
+                ->lockForUpdate()
+                ->first();
+
+            if ($exclusion === null) {
+                throw new ApiException('invalid_status_transition', __('Aucune auto-exclusion à lever pour ce compte.'), 409);
+            }
+
+            if ($exclusion->ends_at->isFuture()) {
+                throw new ApiException('exclusion_not_ended', __('L\'auto-exclusion court jusqu\'au :date : elle ne peut pas être levée avant.', [
+                    'date' => $exclusion->ends_at->toIso8601String(),
+                ]), 409, ['ends_at' => $exclusion->ends_at->toIso8601String()]);
+            }
+
+            $this->accounts->endSelfExclusion($actor, $player, $reason);
+            $exclusion->forceFill(['lifted_at' => now(), 'lifted_by' => $actor->id, 'lift_reason' => $reason])->save();
+
+            ResponsiblePlayEvent::create([
+                'user_id' => $player->id,
+                'type' => ResponsiblePlayEventType::SelfExclusionLifted,
+                'data' => ['restriction_id' => $exclusion->id, 'ended_at' => $exclusion->ends_at->toIso8601String()],
+                'actor_id' => $actor->id,
+                'created_at' => now(),
+            ]);
+
+            return $exclusion;
+        });
     }
 
     /** Journalise un pari refusé, hors de la transaction annulée du pari. */

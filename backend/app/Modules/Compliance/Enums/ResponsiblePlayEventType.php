@@ -10,6 +10,7 @@ enum ResponsiblePlayEventType: string
     case LimitChangeApplied = 'limit.change_applied';
     case PauseStarted = 'pause.started';
     case SelfExclusionStarted = 'self_exclusion.started';
+    case SelfExclusionLifted = 'self_exclusion.lifted';
     case BetRefusedPause = 'bet.refused_pause';
     case BetRefusedLimit = 'bet.refused_limit';
 }

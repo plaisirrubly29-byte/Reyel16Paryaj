@@ -27,7 +27,8 @@
 - `GET /api/v1/responsible-gaming` : limites, mises de la période, pause, options
 - `PUT /api/v1/responsible-gaming/limits/{period}`, `POST /api/v1/responsible-gaming/pause`,
   `POST /api/v1/responsible-gaming/self-exclusion` (idempotentes)
-- Conformité (consultation, réouverture après échéance) : seconde PR de P7-02
+- Conformité (module Admin) : `GET /api/v1/admin/users/{id}/responsible-gaming` (responsible_gaming.view, consultation
+  auditée) ; `POST /api/v1/admin/users/{id}/responsible-gaming/reopen` (responsible_gaming.manage, motif, après l'échéance)
 
 ## Règles à respecter
 

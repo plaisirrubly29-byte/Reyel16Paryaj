@@ -37,6 +37,23 @@ class AccountStatusService
         });
     }
 
+    /**
+     * Fin d'une auto-exclusion, à la demande du joueur, par la Conformité (responsible_gaming.manage).
+     * L'échéance de l'exclusion est vérifiée par le module Compliance, seul à la connaître.
+     */
+    public function endSelfExclusion(User $actor, User $target, string $reason): User
+    {
+        if (! $actor->hasPermission('responsible_gaming.manage')) {
+            throw new AuthorizationException;
+        }
+
+        if ($target->status !== AccountStatus::Excluded) {
+            throw new ApiException('invalid_status_transition', __('Ce compte n\'est pas en auto-exclusion.'), 409);
+        }
+
+        return $this->change($actor, $target, AccountStatus::Active, AuditAction::UserSelfExclusionEnded, $reason);
+    }
+
     public function suspend(User $actor, User $target, string $reason): User
     {
         $this->authorize($actor, $target);
