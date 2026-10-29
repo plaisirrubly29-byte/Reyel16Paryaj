@@ -13,8 +13,8 @@ L'analyste conseil n'a aucune tâche : il relit les choix de conception et conse
 
 | Membre | Rôle | GitHub | Domaine | Tâches |
 |---|---|---|---|---|
-| **Rubly PLAISIR** | Chef de projet & développeur full-stack | @plaisirrubly29-byte | Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging | 40 |
-| **Benginio Jean-Baptiste** | Développeur full-stack | @benginio | Infra & opérations — Docker, logs, admin Événements, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring | 12 |
+| **Rubly PLAISIR** | Chef de projet & développeur full-stack | @plaisirrubly29-byte | Pilotage (juridique, hébergement, lancement) + frontend site joueur et admin (authentification, vue d’ensemble, Utilisateurs & Tickets) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI | 36 |
+| **Benginio Jean-Baptiste** | Développeur full-stack | @benginio | Infra & opérations — Docker, logs, déploiement Staging, sauvegardes, monitoring ; admin Événements & Résultats (API et écrans), écrans Finance, Paramètres & Audit, correction de résultat auditée, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité) | 16 |
 | **Widsondelne7376** | Analyste — conception | @widsondelne7376-design | Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données | 5 |
 | **Marckendy Fevrier** | Analyste conseil (neutre) | @MarckendyFevrier | Assiste et conseille l’équipe (revue des choix de conception, avis sur les livrables). Aucune tâche assignée. | — |
 
@@ -33,7 +33,7 @@ ex. 1 à 2 semaines). Les deux développeurs avancent dans la même vague en par
 
 ## Rubly PLAISIR — Chef de projet & développeur full-stack (@plaisirrubly29-byte)
 
-_Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging_
+_Pilotage (juridique, hébergement, lancement) + frontend site joueur et admin (authentification, vue d’ensemble, Utilisateurs & Tickets) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI_
 
 | Vague | ID | Tâche | Attend (autre responsable) |
 |---|---|---|---|
@@ -62,33 +62,33 @@ _Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur e
 | 3 | P5-03 | API portefeuille en lecture | — |
 | 3 | P5-04 | Migrations résultats/règlements et import de résultats de test | — |
 | 3 | P6-01 | Journal d'audit (admin_actions / audit_logs) | — |
-| 4 | P1-06 | Déploiement Staging automatisé | — |
 | 4 | P4-03 | POST /bets : revalidation serveur et transaction atomique | P0-04 (Widsondelne7376) |
 | 4 | P4-05 | Coupon de pari et confirmation de changement de cote | — |
 | 4 | P4-06 | Historique des tickets | — |
 | 4 | P5-07 | Page portefeuille | — |
 | 5 | P5-05 | Service de règlement idempotent | — |
-| 5 | P5-06 | Correction de résultat auditée | — |
 | 5 | P6-03 | API admin utilisateurs | — |
 | 5 | P6-04 | API admin tickets et finance | — |
 | 5 | P6-05 | Admin : authentification, layout et vue d'ensemble | — |
-| 5 | P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | P6-02 (Benginio Jean-Baptiste) |
 | 6 | P6-07 | Admin : écrans Utilisateurs et Tickets | — |
-| 6 | P6-08 | Admin : écrans Finance, Paramètres et Audit | — |
 | 6 | P7-01 | ⛔ Payments Adapter (BLOQUÉ jusqu'à validation juridique) | — |
 | 6 | P9-01 | Checklist de lancement et plan de rollback | P8-01 (Benginio Jean-Baptiste), P8-02 (Benginio Jean-Baptiste), P8-04 (Benginio Jean-Baptiste) |
 
 ## Benginio Jean-Baptiste — Développeur full-stack (@benginio)
 
-_Infra & opérations — Docker, logs, admin Événements, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring_
+_Infra & opérations — Docker, logs, déploiement Staging, sauvegardes, monitoring ; admin Événements & Résultats (API et écrans), écrans Finance, Paramètres & Audit, correction de résultat auditée, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité)_
 
 | Vague | ID | Tâche | Attend (autre responsable) |
 |---|---|---|---|
 | 1 | P1-01 | Valider l'environnement Docker local pour toute l'équipe | — |
 | 1 | P1-04 | Journalisation structurée et identifiant de requête | — |
 | 3 | P2-07 | Tests d'accès et de session | P2-04 (Rubly PLAISIR) |
+| 4 | P1-06 | Déploiement Staging automatisé | P0-07 (Rubly PLAISIR) |
 | 4 | P4-07 | Tests d'acceptation tickets | P4-03 (Rubly PLAISIR) |
+| 5 | P5-06 | Correction de résultat auditée | P5-05 (Rubly PLAISIR), P6-01 (Rubly PLAISIR) |
 | 5 | P6-02 | API admin événements et marchés | P6-01 (Rubly PLAISIR), P3-05 (Rubly PLAISIR) |
+| 5 | P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | P6-05 (Rubly PLAISIR) |
+| 6 | P6-08 | Admin : écrans Finance, Paramètres et Audit | P6-05 (Rubly PLAISIR), P6-04 (Rubly PLAISIR), P6-01 (Rubly PLAISIR) |
 | 6 | P6-09 | Matrice des permissions validée par tests API | P6-03 (Rubly PLAISIR), P6-04 (Rubly PLAISIR) |
 | 6 | P7-02 | Jeu responsable : limites, pause, auto-exclusion | P0-01 (Rubly PLAISIR), P4-03 (Rubly PLAISIR) |
 | 6 | P8-01 | Tests E2E du parcours complet | P5-05 (Rubly PLAISIR), P4-05 (Rubly PLAISIR) |
