@@ -11,6 +11,7 @@ enum AuditAction: string
     case RolesUpdated = 'roles.updated';
     case UserSuspended = 'user.suspended';
     case UserReactivated = 'user.reactivated';
+    case UserSelfExcluded = 'user.self_excluded'; // auto-exclusion du joueur (P7-02)
     case MfaReset = 'mfa.reset';
     case MfaFailed = 'mfa.failed';
     case UserPersonalDataViewed = 'user.personal_data_viewed';
@@ -23,7 +24,7 @@ enum AuditAction: string
     public function requiresReason(): bool
     {
         return match ($this) {
-            self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed => false,
+            self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::UserSelfExcluded => false,
             default => true,
         };
     }

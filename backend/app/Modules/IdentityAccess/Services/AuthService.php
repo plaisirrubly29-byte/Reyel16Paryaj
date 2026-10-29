@@ -41,7 +41,7 @@ class AuthService
      * Vérifie les identifiants. Même erreur et même coût (hachage) que le compte existe ou non,
      * pour ne pas permettre l'énumération des comptes.
      *
-     * @throws ApiException invalid_credentials | account_suspended
+     * @throws ApiException invalid_credentials | account_suspended | account_excluded
      */
     public function verifyCredentials(string $phone, string $password): User
     {
@@ -56,7 +56,7 @@ class AuthService
 
         // Le statut n'est révélé qu'après un mot de passe correct.
         if (! $user->status->canAuthenticate()) {
-            throw new ApiException('account_suspended', __('Ce compte est suspendu ou fermé. Contactez le support.'), 423);
+            throw $user->status->accessDenied();
         }
 
         return $user;

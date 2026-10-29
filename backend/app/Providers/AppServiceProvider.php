@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Modules\Betting\Services\TicketStakeHistory;
+use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
@@ -36,6 +38,9 @@ class AppServiceProvider extends ServiceProvider
             ),
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
         });
+
+        // Mises d'un joueur pour les limites de jeu responsable : fournies par Betting à Compliance (P7-02).
+        $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
 
         // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
         $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(
