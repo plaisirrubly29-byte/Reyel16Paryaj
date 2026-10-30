@@ -6,6 +6,7 @@ use App\Http\Middleware\SecurityHeaders;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
+use App\Modules\Monitoring\Http\Middleware\CountApiResponses;
 use App\Support\Http\ApiErrorRenderer;
 use App\Support\QueryErrorSanitizer;
 use Illuminate\Database\QueryException;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/Modules/SportsData/Console',
         __DIR__.'/../app/Modules/Settlement/Console',
         __DIR__.'/../app/Modules/IdentityAccess/Console',
+        __DIR__.'/../app/Modules/Monitoring/Console',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Identifiant de corrélation X-Request-Id (P1-04) : en tête, pour figurer dans tous les logs de la requête.
@@ -39,6 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
         $middleware->statefulApi();
+
+        // Compteurs des réponses de l'API et des 5xx pour l'alerte « erreurs API » (P9-02, monitoring:check).
+        $middleware->appendToGroup('api', CountApiResponses::class);
 
         // L'API ne redirige jamais : un invité reçoit 401 "unauthenticated".
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/');
