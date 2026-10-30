@@ -837,7 +837,7 @@ paths:
       description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: search, in: query, description: "Email, nom, téléphone ou identifiant", schema: { type: string } }
+        - { name: search, in: query, description: "Nom (fragment), email (fragment ; complet seulement sans users.view_personal_data), téléphone complet ou identifiant", schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
         - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
         - $ref: "#/components/parameters/Page"
@@ -1556,8 +1556,8 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        phone: { type: string, example: "34123456" }
-        email: { type: [string, "null"] }
+        phone: { type: string, example: "34123456", description: "Masqué sans users.view_personal_data : \"•••• 3456\"" }
+        email: { type: [string, "null"], description: "Masqué sans users.view_personal_data : \"an•••@example.com\"" }
         status: { type: string, enum: [active, suspended, excluded, closed] }
         status_changed_at: { type: [string, "null"], format: date-time }
         is_admin: { type: boolean }

@@ -53,9 +53,9 @@ Le Support identifie un joueur qui le contacte, sans accès à ses données pers
 | Téléphone | Masqué : 4 derniers chiffres `•••• 1234` | ✅ Complet |
 | Prénom, nom, date de naissance, pays, rôles, MFA | ❌ | ✅ |
 
-La recherche par email ou téléphone complet reste possible pour le Support (le joueur donne ses coordonnées),
-mais la réponse est masquée. ⚠️ **À coder** : aujourd'hui `AdminUserResource` renvoie l'email et le
-téléphone complets au Support.
+La recherche par email ou téléphone **complet** reste possible pour le Support (le joueur donne ses coordonnées),
+mais la réponse est masquée ; un fragment d'email ne trouve rien (sinon il révélerait les adresses masquées).
+Mise en œuvre : `AdminUserResource` et `UserSearch`.
 
 ## 5. Critères d'acceptation P0-06
 
