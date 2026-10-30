@@ -47,8 +47,8 @@ envoyée par le fournisseur.
 Un match joué à l'heure dont le score n'arrive pas (panne fournisseur) **n'est pas** annulé : il attend le
 résultat ou une saisie manuelle par un administrateur (`results.enter`).
 
-> ⚠️ **Pas encore dans le code** : un match reporté laisse aujourd'hui ses tickets en attente. À livrer avant la
-> production (tâche de suivi, module Settlement).
+Mise en œuvre : `SettlementService` (rattrapage `settlement:run` toutes les 15 min), délai `BETTING_POSTPONED_VOID_HOURS`
+figé sur chaque ticket (`rules_snapshot.postponed_void_hours`).
 
 ## 4. Plus/moins sur une ligne entière
 
@@ -63,13 +63,11 @@ demi-point (2,5) ce cas n'existe pas.
 | Après règlement | Demande de correction **à double contrôle** : un administrateur `results.enter` la demande avec un motif, un **autre** administrateur `results.approve` la valide. Rien ne change avant la validation. |
 | Effet de la validation | Pour chaque ticket dont l'issue change : écriture **compensatoire** du gain ou du remboursement versé (le solde peut devenir négatif), puis nouvelle écriture si besoin. Aucune écriture n'est modifiée ni supprimée. |
 | Correction envoyée par le fournisseur après règlement | Devient une demande à valider, comme ci-dessus. |
-| Délai | Une correction est acceptée **jusqu'à 72 h** après le premier règlement du match ; au-delà, le résultat est définitif (sauf décision écrite de la Conformité). |
+| Délai | Une correction est acceptée **jusqu'à 72 h** après le premier règlement du match ; au-delà, la demande est refusée (`correction_window_closed`) et une correction tardive du fournisseur est ignorée. Une exception décidée par écrit par la Conformité passe par une correction financière (Finance, double validation). |
 
 > Exemple : ticket simple Arsenal gagnant 1,85, mise 100 HTG, payé 185,00 HTG sur un score 2-1.
 > Le score est corrigé en 1-1 et la correction validée : écriture de −185,00 HTG (annulation du gain).
 > Le ticket passe « perdu ». Si le joueur avait déjà dépensé ses gains, son solde devient négatif.
-
-> ⚠️ **Délai de 72 h pas encore dans le code** (la demande de correction est acceptée sans limite de temps).
 
 ## 6. Critères d'acceptation P0-04
 

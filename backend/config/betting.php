@@ -33,4 +33,12 @@ return [
     // avec la nouvelle cote) ; le joueur confirme en renvoyant le pari avec la cote à jour.
     'odds_change_policy' => 'reject',
 
+    // D-05 : match reporté — la sélection est annulée (cote 1) si le match ne commence pas dans ce délai
+    // après l'heure prévue au moment du pari (bet_selections.event_starts_at).
+    'postponed_void_hours' => (int) env('BETTING_POSTPONED_VOID_HOURS', 48),
+
+    // D-05 : un résultat déjà réglé ne peut faire l'objet d'une demande de correction que pendant ce délai
+    // après le premier règlement du match ; au-delà il est définitif (une erreur passe par une correction financière).
+    'result_correction_window_hours' => (int) env('BETTING_RESULT_CORRECTION_HOURS', 72),
+
 ];

@@ -15,6 +15,7 @@ use App\Modules\SportsData\Models\Event;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Money;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -54,6 +55,14 @@ class SettlementService
         $pending = BetSelection::where('event_id', $event->id)->where('status', BetSelectionStatus::Pending)->get();
 
         foreach ($pending as $selection) {
+            // Match joué plus de postponed_void_hours après l'heure du pari : annulé, quel que soit le score (D-05).
+            if ($event->starts_at->gt($this->postponedDeadline($selection))) {
+                $report->selections += $this->voidPostponed($selection);
+                $ticketIds[$selection->bet_ticket_id] = true;
+
+                continue;
+            }
+
             try {
                 $status = $this->outcomes->resolve($selection->market_key, $selection->market_line, $selection->selection_key, $result);
             } catch (InvalidArgumentException $e) {
@@ -83,12 +92,15 @@ class SettlementService
     }
 
     /**
-     * Rattrapage (commande planifiée) : matchs avec un résultat et des sélections encore en attente,
-     * puis tickets dont toutes les sélections sont réglées mais restés "pending" (règlement interrompu).
+     * Rattrapage (commande planifiée) : matchs reportés sans résultat (D-05), matchs avec un résultat et des
+     * sélections encore en attente, puis tickets dont toutes les sélections sont réglées mais restés "pending"
+     * (règlement interrompu).
      */
     public function sweep(): SettlementReport
     {
         $report = new SettlementReport;
+
+        $this->sweepPostponed($report);
 
         Event::whereIn('status', [EventStatus::Finished, EventStatus::Cancelled])
             ->whereIn('id', BetSelection::where('status', BetSelectionStatus::Pending)->select('event_id'))
@@ -189,6 +201,66 @@ class SettlementService
         return [BetTicketStatus::Won, Money::ofMinor(min($payout, $ticket->potential_payout_minor), $ticket->currency)];
     }
 
+    /**
+     * Matchs reportés sans résultat (D-05) : délai dépassé et match déplacé au-delà (ou marqué reporté).
+     * Un match resté à son heure dont le score manque n'est pas annulé : il attend son résultat ou une saisie.
+     */
+    private function sweepPostponed(SettlementReport $report): void
+    {
+        $ticketIds = [];
+
+        BetSelection::where('status', BetSelectionStatus::Pending)
+            ->where('event_starts_at', '<', now())
+            ->whereHas('event', fn ($q) => $q->whereIn('status', [EventStatus::Scheduled, EventStatus::Postponed]))
+            ->with(['event', 'ticket'])
+            ->orderBy('id')
+            ->each(function (BetSelection $selection) use ($report, &$ticketIds) {
+                $deadline = $this->postponedDeadline($selection);
+                $event = $selection->event;
+
+                if (now()->lte($deadline) || Result::currentFor($event) !== null) {
+                    return;
+                }
+
+                if ($event->status === EventStatus::Postponed || $event->starts_at->gt($deadline)) {
+                    $report->selections += $this->voidPostponed($selection);
+                    $ticketIds[$selection->bet_ticket_id] = true;
+                }
+            });
+
+        foreach (array_keys($ticketIds) as $ticketId) {
+            $this->settleTicket(BetTicket::findOrFail($ticketId), $report);
+        }
+    }
+
+    /** Heure limite de début du match : heure figée sur le ticket + délai de ses règles (ou de la config). */
+    private function postponedDeadline(BetSelection $selection): CarbonInterface
+    {
+        $hours = $selection->ticket->rules_snapshot['postponed_void_hours'] ?? config('betting.postponed_void_hours');
+
+        return $selection->event_starts_at->copy()->addHours((int) $hours);
+    }
+
+    /**
+     * Annule une sélection de match reporté. Sans result_id : la réévaluation d'une correction de score (P5-06)
+     * ne la touche jamais, le report ne dépendant pas du score.
+     */
+    private function voidPostponed(BetSelection $selection): int
+    {
+        $updated = BetSelection::whereKey($selection->id)->where('status', BetSelectionStatus::Pending)->update([
+            'status' => BetSelectionStatus::Void,
+            'result_id' => null,
+            'settled_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        if ($updated > 0) {
+            Log::info('settlement.selection_postponed', ['bet_selection_id' => $selection->id, 'event_id' => $selection->event_id]);
+        }
+
+        return $updated;
+    }
+
     /** Référence unique de l'écriture du ledger d'un règlement (révision 1 ; P5-06 ajoute les suivantes). */
     private function reference(BetTicket $ticket, string $kind, int $revision): string
     {
@@ -213,7 +285,9 @@ class SettlementService
     public function reevaluate(Event $event, Result $result, bool $apply, ?User $actor = null, string $reason = ''): array
     {
         $changed = [];
-        foreach (BetSelection::where('event_id', $event->id)->where('status', '!=', BetSelectionStatus::Pending)->get() as $selection) {
+        // Sans result_id : sélection annulée pour report (D-05), indépendante du score.
+        $settled = BetSelection::where('event_id', $event->id)->where('status', '!=', BetSelectionStatus::Pending)->whereNotNull('result_id');
+        foreach ($settled->get() as $selection) {
             try {
                 $status = $this->outcomes->resolve($selection->market_key, $selection->market_line, $selection->selection_key, $result);
             } catch (InvalidArgumentException $e) {

@@ -28,7 +28,8 @@ class AdminUserController extends Controller
 
         $users = User::query()
             ->with(['roles', 'profile'])
-            ->when($filters['search'] ?? null, fn ($query, string $search) => UserSearch::apply($query, $search))
+            ->when($filters['search'] ?? null, fn ($query, string $search) => UserSearch::apply($query, $search,
+                $request->user()->hasPermission('users.view_personal_data')))
             ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($filters['role'] ?? null, fn ($q, $role) => $q->whereHas('roles', fn ($r) => $r->where('slug', $role)))
             ->orderByDesc('id')

@@ -167,6 +167,27 @@ class ResultCorrectionApiTest extends TestCase
         $this->assertSame(1, Result::count());
     }
 
+    public function test_a_role_given_by_an_admin_less_than_24_hours_ago_cannot_approve(): void
+    {
+        $this->bet($this->player(), [['fake-1', 'home']]);
+        $this->finish('2', '1');
+        $id = $this->requestCorrection()->assertCreated()->json('data.id');
+
+        // Un Super Admin donne le rôle Opérations à un second compte, puis s'en servirait pour valider.
+        $newcomer = User::factory()->create();
+        $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin))
+            ->putJson("/api/v1/admin/users/{$newcomer->id}/roles", ['roles' => ['operations'], 'reason' => 'Renfort du week-end'],
+                ['Idempotency-Key' => (string) Str::uuid()])
+            ->assertOk();
+        $newcomer->refresh();
+
+        $this->approve($id, $newcomer)->assertForbidden()->assertJsonPath('error.code', 'approver_role_too_recent');
+        $this->assertSame(1, Result::count());
+
+        $this->travel(25)->hours();
+        $this->approve($id, $newcomer->fresh())->assertOk();
+    }
+
     // Demande et aperçu
 
     public function test_a_request_changes_nothing_and_shows_its_impact(): void
@@ -216,6 +237,26 @@ class ResultCorrectionApiTest extends TestCase
 
         $this->requestCorrection()->assertCreated();
         $this->requestCorrection(home: '0', away: '0')->assertStatus(409)->assertJsonPath('error.code', 'correction_already_pending');
+    }
+
+    public function test_a_settled_result_can_only_be_corrected_within_72_hours(): void
+    {
+        $this->bet($this->player(), [['fake-1', 'home']]);
+        $this->finish('2', '1'); // réglé le 2026-10-21 à 17:30
+
+        $this->travelTo('2026-10-24 17:31:00');
+        $this->requestCorrection()
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'correction_window_closed')
+            ->assertJsonPath('error.details.deadline', '2026-10-24T17:30:00+00:00');
+
+        // Le fournisseur non plus : sa correction tardive est ignorée.
+        $this->fake->setResult('fake-1', '1', '2');
+        $this->assertSame(1, app(ResultImportService::class)->import('soccer_epl')->unchanged);
+        $this->assertSame(0, ResultCorrection::count());
+
+        $this->travelTo('2026-10-24 17:29:00');
+        $this->requestCorrection()->assertCreated();
     }
 
     // Validation : réévaluation et écritures compensatoires
