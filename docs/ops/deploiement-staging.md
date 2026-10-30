@@ -45,7 +45,7 @@ restent sur le serveur.
 
 | Conteneur | Rôle | Exposé |
 |---|---|---|
-| `web` (Caddy) | HTTPS (Let's Encrypt), frontend statique, `/api`, `/sanctum` et `/up` vers php-fpm | 80, 443 |
+| `web` (Caddy) | HTTPS (Let's Encrypt), frontend statique avec en-têtes de sécurité (CSP, anti-iframe, HSTS — P8-02 B3), `/api`, `/sanctum` et `/up` vers php-fpm | 80, 443 |
 | `backend` | API Laravel (php-fpm) | non |
 | `queue` | `php artisan queue:work` | non |
 | `scheduler` | `php artisan schedule:work` (synchronisation, résultats, règlement) | non |
