@@ -2,6 +2,8 @@
 
 namespace App\Modules\Settlement\Services;
 
+use App\Modules\Betting\Enums\BetSelectionStatus;
+use App\Modules\Betting\Models\BetSelection;
 use App\Modules\Settlement\Enums\ResultStatus;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Data\ResultData;
@@ -54,7 +56,8 @@ class ResultImportService
 
     /**
      * Compétitions à interroger : un match commencé depuis au moins results_delay_minutes, il y a moins
-     * de 3 jours, toujours sans résultat. Valeur : nombre de jours à demander au fournisseur.
+     * de 3 jours, toujours sans résultat, dans une compétition active ou attendu par un pari.
+     * Valeur : nombre de jours à demander au fournisseur.
      *
      * @return array<string, int> clé de compétition => daysFrom
      */
@@ -68,6 +71,9 @@ class ResultImportService
             ->whereIn('events.status', [EventStatus::Scheduled, EventStatus::Live])
             ->where('events.starts_at', '<=', $now->copy()->subMinutes((int) config('sports_data.results_delay_minutes')))
             ->where('events.starts_at', '>', $now->copy()->subDays(self::MAX_DAYS_FROM))
+            // Compétition désactivée : seulement si un pari attend ce résultat (sinon 2 crédits par heure pour rien).
+            ->where(fn ($q) => $q->where('competitions.is_active', true)
+                ->orWhereIn('events.id', BetSelection::where('status', BetSelectionStatus::Pending)->select('event_id')))
             ->groupBy('competitions.external_key')
             ->orderBy('competitions.external_key')
             ->selectRaw('competitions.external_key as competition_key, min(events.starts_at) as oldest')
