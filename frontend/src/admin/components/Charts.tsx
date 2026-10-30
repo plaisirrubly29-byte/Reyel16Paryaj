@@ -87,7 +87,8 @@ export function DailyBarChart({ points, label, format, formatAxis = format }: Ba
   const band = points.length ? plotW / points.length : 0;
   const barW = Math.min(Math.max(band - 2, 2), 28); // 2 px d'espace minimum entre deux barres
   const y = (v: number) => pad.top + plotH - (v / max) * plotH;
-  const labelEvery = band < 34 ? 2 : 1;
+  // Une étiquette de date toutes les N barres, pour qu'elles ne se chevauchent pas (7, 30 ou 366 jours).
+  const labelEvery = Math.max(1, Math.ceil(46 / Math.max(band, 1)));
   const point = active !== null ? points[active] : undefined;
 
   return (

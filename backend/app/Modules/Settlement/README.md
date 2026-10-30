@@ -34,7 +34,7 @@
   15 minutes). Idempotent : ticket verrouillé, un règlement par révision, référence ledger
   `settlement:{ticket}:r{révision}:payout|refund|reversal` unique — une relance ne paie jamais deux fois.
 
-## Règles de calcul (à confirmer par D-05 / D-06)
+## Règles de calcul (décisions D-05 / D-06)
 
 - Ticket perdu dès qu'une sélection est perdue ; gagné quand toutes sont gagnées ou annulées ; annulé
   (mise remboursée) si toutes sont annulées.

@@ -5,6 +5,7 @@ namespace App\Modules\Admin\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Admin\Http\Resources\AdminUserResource;
+use App\Modules\Admin\Support\UserSearch;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
@@ -27,20 +28,8 @@ class AdminUserController extends Controller
 
         $users = User::query()
             ->with(['roles', 'profile'])
-            ->when($filters['search'] ?? null, function ($query, string $search) {
-                $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], mb_strtolower($search)).'%';
-                // Téléphone : numéro complet uniquement (même normalisation qu'à la connexion),
-                // pour ne pas mélanger une recherche par identifiant avec des fragments de numéro.
-                $phone = preg_replace('/\D+/', '', $search);
-                if (strlen($phone) === 11 && str_starts_with($phone, '509')) {
-                    $phone = substr($phone, 3);
-                }
-                $query->where(fn ($q) => $q
-                    ->whereRaw("LOWER(email) LIKE ? ESCAPE '\\'", [$like])
-                    ->orWhereRaw("LOWER(name) LIKE ? ESCAPE '\\'", [$like])
-                    ->when(strlen($phone) === 8, fn ($q) => $q->orWhere('phone', $phone))
-                    ->when(ctype_digit($search), fn ($q) => $q->orWhere('id', (int) $search)));
-            })
+            ->when($filters['search'] ?? null, fn ($query, string $search) => UserSearch::apply($query, $search,
+                $request->user()->hasPermission('users.view_personal_data')))
             ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($filters['role'] ?? null, fn ($q, $role) => $q->whereHas('roles', fn ($r) => $r->where('slug', $role)))
             ->orderByDesc('id')

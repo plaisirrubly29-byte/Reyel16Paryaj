@@ -2,6 +2,7 @@
 
 namespace App\Modules\Audit\Services;
 
+use App\Http\Middleware\AssignRequestId;
 use App\Models\User;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
@@ -68,8 +69,8 @@ class AuditLogger
      */
     private function requestId(): ?string
     {
-        $id = Context::get('request_id') ?? $this->request->headers->get('X-Request-Id');
+        $id = Context::get('request_id') ?? $this->request->headers->get(AssignRequestId::HEADER);
 
-        return is_string($id) && preg_match('/^[A-Za-z0-9._-]{8,64}$/', $id) ? $id : null;
+        return AssignRequestId::isSafe($id) ? $id : null;
     }
 }

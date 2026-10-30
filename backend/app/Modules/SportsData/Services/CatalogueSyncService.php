@@ -64,9 +64,10 @@ class CatalogueSyncService
     /**
      * Marchés synchronisés, dans l'ordre. Le 1X2 (h2h) est obligatoire : invalide, il fait rejeter l'événement.
      * Les autres sont facultatifs (invalides, ils sont ignorés) : double chance (1X, 12, X2),
-     * totals (plus/moins de N buts ou points) et btts (les deux équipes marquent : oui / non).
+     * totals (plus/moins de N buts ou points), btts (les deux équipes marquent : oui / non) et correct_score
+     * (score exact). Double chance, btts et score exact ne viennent que de syncEventMarkets() chez The Odds API.
      */
-    private const MARKETS = ['h2h', 'double_chance', 'totals', 'btts'];
+    private const MARKETS = ['h2h', 'double_chance', 'totals', 'btts', 'correct_score'];
 
     /** Clés de sélection du marché 1X2 (h2h). */
     private const DRAW_NAMES = ['draw', 'tie', 'nul', 'match nul'];
@@ -95,6 +96,31 @@ class CatalogueSyncService
     public function syncLive(string $competitionKey): SyncReport
     {
         return $this->run($competitionKey, live: true);
+    }
+
+    /**
+     * Marchés supplémentaires d'un match à venir déjà au catalogue (provider->eventMarkets()), enregistrés comme
+     * ceux de la synchro : les marchés absents de $data ne sont pas touchés.
+     */
+    public function syncEventMarkets(string $competitionKey, EventData $data): SyncReport
+    {
+        $report = new SyncReport($competitionKey);
+
+        if (! $data->startsAt->isFuture()) {
+            $report->skipped++;
+
+            return $report;
+        }
+
+        try {
+            DB::transaction(fn () => $this->syncEvent($data, $report));
+        } catch (Throwable $e) {
+            $report->skipped++;
+            $report->error = $e->getMessage();
+            Log::warning('sports_data.event_rejected', ['competition' => $competitionKey, 'id' => $data->externalId, 'error' => $e->getMessage()]);
+        }
+
+        return $report;
     }
 
     private function run(string $competitionKey, bool $live): SyncReport
@@ -259,6 +285,7 @@ class CatalogueSyncService
             'double_chance' => [$this->doubleChanceSelections($data, $source), null],
             'totals' => $this->totalsSelections($source),
             'btts' => [$this->bttsSelections($source), null],
+            'correct_score' => [$this->correctScoreSelections($data, $source), null],
             default => throw new \InvalidArgumentException("Marché non pris en charge : {$source->key}"),
         };
     }
@@ -352,6 +379,42 @@ class CatalogueSyncService
 
         if (! isset($odds['yes'], $odds['no'])) {
             throw new \InvalidArgumentException('Marché btts incomplet (oui ou non absent).');
+        }
+
+        return $odds;
+    }
+
+    /**
+     * Score exact : sélections « Chelsea:2|Manchester United:1 » (buts de chaque équipe nommée), clé "2-1" dans
+     * l'ordre domicile-extérieur. Au moins deux scores, sans doublon.
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function correctScoreSelections(EventData $data, MarketData $source): array
+    {
+        $odds = [];
+        foreach ($source->selections as $selection) {
+            $goals = [];
+            foreach (explode('|', $selection->name) as $part) {
+                if (! preg_match('/^(.+):(\d{1,2})$/u', trim($part), $m)) {
+                    throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+                }
+                $goals[$this->outcome($data, $m[1])] = (int) $m[2];
+            }
+
+            if (! isset($goals['home'], $goals['away']) || count($goals) !== 2) {
+                throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+            }
+
+            $key = "{$goals['home']}-{$goals['away']}";
+            if (isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection en double : {$selection->name}");
+            }
+            $odds[$key] = ['name' => "{$goals['home']} - {$goals['away']}", 'odds' => $selection->odds];
+        }
+
+        if (count($odds) < 2) {
+            throw new \InvalidArgumentException('Marché score exact incomplet.');
         }
 
         return $odds;

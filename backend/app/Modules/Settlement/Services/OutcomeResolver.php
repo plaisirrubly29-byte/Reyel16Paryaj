@@ -10,7 +10,7 @@ use InvalidArgumentException;
 /**
  * Issue d'une sélection d'après le résultat d'un match, pour les marchés du catalogue (CatalogueSyncService::MARKETS).
  *
- * - Match annulé : sélection annulée (void, cote 1 dans un combiné) — politique D-05 à confirmer (P0-04).
+ * - Match annulé : sélection annulée (void, cote 1 dans un combiné) — politique D-05.
  * - Plus/moins : la ligne est celle figée sur le ticket ; un total égal à une ligne entière ("3") est annulé.
  */
 class OutcomeResolver
@@ -45,6 +45,10 @@ class OutcomeResolver
                 default => $this->unknown($marketKey, $selectionKey),
             },
             'totals' => $this->totals($line, $selectionKey, $home + $away),
+            // Score exact : clé "domicile-extérieur", ex. "2-1".
+            'correct_score' => preg_match('/^\d+-\d+$/', $selectionKey) === 1
+                ? $selectionKey === "{$home}-{$away}"
+                : $this->unknown($marketKey, $selectionKey),
             default => $this->unknown($marketKey, $selectionKey),
         };
 

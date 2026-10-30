@@ -104,6 +104,20 @@ class CatalogueApiTest extends TestCase
         $this->getJson('/api/v1/events')->assertJsonCount(0, 'data');
     }
 
+    public function test_a_live_match_no_longer_followed_is_hidden(): void
+    {
+        config(['sports_data.live_window_minutes' => 180]);
+        $event = $this->event('fake-3');
+        $event->update(['status' => EventStatus::Live, 'starts_at' => now()->subMinutes(170)]);
+
+        $this->getJson('/api/v1/events?sport=basketball')->assertJsonCount(1, 'data')->assertJsonPath('data.0.status', 'live');
+
+        // Plus de mise à jour du direct au-delà de la fenêtre : il ne reste pas « en direct » indéfiniment.
+        $this->travel(11)->minutes();
+        $this->getJson('/api/v1/events?sport=basketball')->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/events/{$event->id}/markets")->assertNotFound();
+    }
+
     public function test_event_detail_returns_its_bettable_markets(): void
     {
         $id = $this->event('fake-2')->id;

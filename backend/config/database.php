@@ -98,8 +98,8 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
-            // Valeurs des requêtes masquées dans les messages d'erreur (logs, réponse en mode debug) :
-            // un INSERT refusé n'y écrit plus nom, téléphone, email ni hash du mot de passe (revue P8-02, M5).
+            // Valeurs des requêtes masquées dans la partie « SQL: » des messages d'erreur (revue P8-02, M5).
+            // La ligne DETAIL de PostgreSQL, qui cite aussi des valeurs, est retirée par App\Support\QueryErrorSanitizer.
             'mask_bindings_in_exception_messages' => true,
         ],
 

@@ -14,14 +14,14 @@ L'essentiel est solide : **aucune injection, aucun XSS, aucun secret commité, a
 
 Avant la production, **3 points bloquants** devaient être réglés : B1 dépendait de P4-03, B2 se corrigeait dans le backend, B3 se règle dans la configuration de l'hébergement. S'y ajoute une **checklist de déploiement** (mode debug, cookies, proxies).
 
-> **État au 28 octobre 2026 :** B1 et B2 sont corrigés, B3 reste à l'hébergement. Un point **élevé** a été trouvé depuis : les paris sur les matchs en direct sont acceptés (E1). Les correctifs de la PR de P8-02 sont listés dans « Suivi des correctifs ».
+> **État au 29 octobre 2026 :** B1 et B2 sont corrigés, B3 reste à l'hébergement. Le point **élevé** E1 (paris en direct) est corrigé (#108). La relecture des correctifs a donné lieu à une PR de suivi. Voir « Suivi des correctifs ».
 
 | Gravité | Nombre | Corrigés |
 |---|---|---|
 | Bloquant | 3 | 2 (B1, B2) |
-| Élevé | 1 | 0 |
+| Élevé | 1 | 1 (E1) |
 | Moyen | 5 | 4 (M1, M2, M4, M5) |
-| Faible | 13 | 4 (F1, F2, F4, F13) |
+| Faible | 13 | 7 (F1, F2, F3, F4, F5, F6, F13) |
 | Info | 8 | — (I3 en partie) |
 
 Échelle : **Bloquant** = à corriger avant toute mise en production · **Élevé** = à corriger avant toute mise en production avec de l'argent réel, et avant le lancement contrôlé · **Moyen** = à corriger avant le lancement contrôlé · **Faible** = à planifier · **Info** = à connaître.
@@ -66,7 +66,7 @@ Statuts : **✅ corrigé** (commit ou PR indiqué) · **⏳ `responsable`** = à
 - **Problème :** `POST /bets` accepte un pari sur un match en cours tant que la cote a moins de 20 minutes. Un joueur qui voit un but (télévision, autre site) peut parier pendant plusieurs minutes sur la cote d'avant le but : exploitation classique des cotes en direct en retard. Vérifié par un test : un match en direct depuis 80 minutes est pariable dès que la cote est assez récente.
 - **Écart de périmètre :** `docs/architecture.md:13` **exclut les paris en direct** de la V1 ; aucune décision de `docs/decisions.md` ne les autorise (D-04 et D-05 sont « à décider »). Afficher les scores en direct (#96) n'est pas en cause, seul le pari l'est.
 - **Correctif :** paramètre `betting.allow_live` à `false` par défaut (un match en direct renvoie `selection_unavailable`) et test associé ; ne l'activer qu'après une décision écrite, avec des cotes de quelques secondes et un délai d'acceptation.
-- **Statut :** ⏳ Rubly (module Betting) + décision d'équipe sur le périmètre.
+- **Statut :** ✅ corrigé par #108 (`betting.allow_live` à `false` par défaut). Les activer reste une décision d'équipe sur le périmètre.
 
 ---
 
@@ -89,7 +89,7 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 |---|---|---|---|---|
 | M1 | **Limite de connexion contournable** : la clé utilise le numéro tel que saisi (`34123456`, `3412-3456`, `+509…` = clés différentes) et combine téléphone + IP ; aucune limite par compte | `AppServiceProvider.php:85-88` | Normaliser le numéro dans le limiteur (helper partagé avec `LoginRequest`) ; ajouter une limite par compte indépendante de l'IP (ex. 30/heure) ou un verrouillage progressif | ✅ #98 (`PhoneNumber::normalize`, 30/heure par compte). Reste une décision : blocage volontaire d'un compte (30 essais/heure suffisent) |
 | M2 | **Force brute TOTP sans plafond long** : 5 essais/min = 7 200/jour, ≈ 50 % de réussite en un mois pour qui a le mot de passe admin ; échecs non audités | `AppServiceProvider.php:96`, `MfaService.php:130-140` | Ajouter 20/heure et 50/jour ; déconnexion + alerte après N échecs ; auditer `mfa.failed` | ✅ #98 (5/min, 20/h, 50/jour ; déconnexion après 5 échecs ; `mfa.failed`). Conseillé : déconnecter **avant** d'écrire l'audit, pour ne pas dépendre de l'écriture en base |
-| M3 | **Contournement de la double validation par un Super Admin** : il crée un second compte, lui donne `finance` ou `super_admin`, et valide seul ses propres corrections | `RoleAssignmentService.php:31-58` | Attribution d'un rôle admin soumise à l'approbation d'un second `roles.manage`, ou au minimum délai + alerte à tous les Super Admins ; interdire de retirer le dernier `super_admin` | ⏳ Rubly + décision P0-06 |
+| M3 | **Contournement de la double validation par un Super Admin** : il crée un second compte, lui donne `finance` ou `super_admin`, et valide seul ses propres corrections | `RoleAssignmentService.php:31-58` | Attribution d'un rôle admin soumise à l'approbation d'un second `roles.manage`, ou au minimum délai + alerte à tous les Super Admins ; interdire de retirer le dernier `super_admin` | ✅ D-07 : validation refusée avec un rôle donné par un admin depuis moins de 24 h, alerte 72 h à tous les Super Admins ; dernier `super_admin` protégé par construction |
 | M4 | **Idempotence non atomique avec l'effet métier** : si une erreur survient après le commit, ou si le processus meurt, la clé est libérée et l'opération rejouée. Sans impact aujourd'hui, **double mise** possible sur le futur `POST /bets` | `RequireIdempotencyKey.php:52-69,101-104` | Enregistrer la réponse dans la même transaction que l'effet, ou dériver la `reference` du ledger de la clé (`bet:{user}:{key}`) | ✅ #97 (clé figée sur le ticket, unique par joueur : un rejeu renvoie le même ticket). Le middleware garde le défaut pour les autres routes |
 | M5 | **Données personnelles dans les logs** : les valeurs liées des requêtes SQL ne sont pas masquées dans les messages d'erreur (`QueryException.php:89`). Deux inscriptions simultanées avec le même numéro passent la règle `unique`, l'INSERT échoue, et nom, téléphone, email et hash du mot de passe sont écrits dans `laravel.log` (et renvoyés au client si `APP_DEBUG=true`) | `config/database.php:87-100` | `'mask_bindings_in_exception_messages' => true` sur la connexion `pgsql` | ✅ `c2a59d6`. Reste la ligne `DETAIL` de PostgreSQL, qui cite la seule valeur en doublon |
 
@@ -116,7 +116,7 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 ## Pour information
 
 - **I1 — Énumération des comptes à l'inscription :** les règles `unique` révèlent qu'un numéro ou un email existe (5 essais/min/IP). Risque à accepter et documenter, ou vérification par SMS.
-- **I2 — Le rôle Support voit téléphone et email** sans `users.view_personal_data` (`AdminUserResource.php:25-26`), alors que la matrice parle de « données minimales ». À trancher dans la matrice des permissions (P0-06).
+- **I2 — Le rôle Support voit téléphone et email** sans `users.view_personal_data` (`AdminUserResource.php:25-26`), alors que la matrice parle de « données minimales ». ✅ Tranché par D-07 : email et téléphone masqués, recherche par email complet seulement.
 - **I3 — CORS/Sanctum configurables en `*` par variable d'environnement :** non exploitable seul, mais à interdire au démarrage en production ; `max_age=0` provoque une requête preflight à chaque appel (~600 conseillé). *Démarrage refusé en production si `*` (`65d61a6`) ; `max_age` inchangé.*
 - **I4 — Dépassement d'entier :** `LedgerService.php:138` peut basculer en float si le solde déborde. Non exploitable aujourd'hui ; le futur pari doit plafonner mise et gain.
 - **I5 — URL d'API par défaut en `http://`** (`client.ts:8`) ; le build de production doit exiger `VITE_API_URL`. La lecture du cookie `XSRF-TOKEN` suppose que l'API et le frontend partagent le même domaine (à prévoir avec l'hébergement).
@@ -175,22 +175,33 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 | B2 | `5dd7810` | `TRUSTED_PROXIES`, cookie `Secure` par défaut en production |
 | Checklist, I3 | `65d61a6` | Démarrage refusé en production si `APP_DEBUG=true`, ou `*` dans `TRUSTED_PROXIES`, CORS ou Sanctum |
 
-**Par d'autres PR :** B1 (#97, #86), M1 et M2 (#98), M4 (#97), `phone[]` de F4 (#98), limite de 64 caractères de `X-Request-Id` (#91).
+**Par d'autres PR :** B1 (#97, #86), M1 et M2 (#98), M4 (#97), `phone[]` de F4 (#98), limite de 64 caractères de `X-Request-Id` (#91), E1 (#108), déconnexion MFA avant l'audit (#109), F3, F5 et F6 (#110).
+
+### Relecture des correctifs (29 octobre 2026)
+
+Une relecture de la PR #101 après sa fusion a montré que plusieurs correctifs n'allaient pas au bout. PR de suivi
+(branche `fix/P8-02-review-followups`), chaque point avec un test qui échoue sans lui :
+
+| Point | Défaut trouvé | Correctif |
+|---|---|---|
+| M5 | La ligne `DETAIL` de PostgreSQL cite les valeurs refusées : le doublon, ou **toute la ligne** pour `NOT NULL` et `CHECK` (nom, téléphone, email, hash). Vérifié sur une vraie base. | `App\Support\QueryErrorSanitizer`, branché par `$exceptions->map()` : la ligne `DETAIL` est retirée avant les logs et la réponse ; le code applicatif voit l'exception d'origine |
+| B2 | `TRUSTED_PROXIES` acceptait `REMOTE_ADDR`, `0.0.0.0/0` et `::/0`, qui font confiance à tout client | Refusés au démarrage en production, seuls ou dans une liste |
+| B2 | Sans `APP_ENV`, l'application est en production mais le cookie n'était pas `Secure` par défaut | `env('APP_ENV', 'production')`, comme `config/app.php` |
+| I3 | `"site.ht, *"` passait le garde-fou, alors que Sanctum retire les espaces | Listes comparées sans espaces |
+| F13 | En-têtes absents des réponses rendues avant la route (préflight CORS, maintenance, 413) | Middleware en tête de pile (`prepend`) |
+| Garde-fou | Il bloquait aussi `artisan config:clear` : une configuration dangereuse mise en cache ne se corrigeait plus | Commandes de réparation permises (`config:clear`, `config:cache`, `optimize:clear`, `down`, `up`) |
+| F2 | `$` acceptait un `\n` final (64 caractères + `\n` = 65 octets pour `varchar(64)`) ; règle dupliquée | Modificateur `D` ; règle unique `AssignRequestId::isSafe()`, utilisée par `AuditLogger` |
 
 **Risques résiduels :**
-- E1 (paris en direct) ouvert, voir plus haut.
 - M1 : n'importe qui connaissant un numéro peut bloquer la connexion de ce compte une heure, de façon renouvelable (30 essais/heure). Décision d'équipe : accepter et surveiller, ne compter que les échecs (`Limit::after`), ou verrouillage progressif.
-- M2 : dans `MfaService::recordFailure`, la déconnexion vient après l'écriture d'audit ; F2 supprime le cas connu d'échec d'écriture, mais déconnecter d'abord reste plus sûr.
-- M5 : la ligne `DETAIL` d'une erreur PostgreSQL cite encore la valeur en doublon.
 - Les limiteurs de débit vérifient puis incrémentent en deux étapes (Laravel) : une rafale de requêtes simultanées peut dépasser un plafond d'environ le nombre de processus PHP.
+- F13 : la CSP `default-src 'none'` s'applique aussi aux rares pages HTML du backend (`/up`, page d'erreur en développement), qui s'affichent sans style.
 
 ## Actions
 
 | Qui | Quoi | Quand |
 |---|---|---|
-| Équipe | Relire la PR de P8-02 et décider pour E1 (périmètre) et le blocage volontaire de compte (M1) | Avant le lancement contrôlé |
-| Rubly | E1 (`betting.allow_live` à `false` par défaut) et déconnexion avant audit (M2) | **Avant tout pari réel** |
-| Rubly | F3, F5, F6 (renforcement MFA) | Avant le lancement contrôlé |
-| Rubly + Widsondelne7376 | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
+| Équipe | Décider pour le blocage volontaire de compte (M1) et, le cas échéant, l'activation des paris en direct (E1) | Avant le lancement contrôlé |
+| Rubly | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
 | Rubly | F7, F8, F9, F10, F11, F12 | À planifier |
 | Hébergement (P0-07 / P1-06) | B3 (en-têtes du frontend), checklist de déploiement (`TRUSTED_PROXIES`, `expose_php`, `.env.production.example`), HTTPS, rôle PostgreSQL restreint (F9) | Avant la mise en ligne du staging |

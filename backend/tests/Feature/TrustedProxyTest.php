@@ -69,24 +69,41 @@ class TrustedProxyTest extends TestCase
     {
         $this->assertTrue($this->configWith('APP_ENV', 'production', 'session.php')['secure']);
         $this->assertNull($this->configWith('APP_ENV', 'local', 'session.php')['secure']);
+        // Sans APP_ENV, l'application se considère en production (config/app.php) : cookie Secure aussi.
+        $this->assertTrue($this->configWith('APP_ENV', null, 'session.php')['secure']);
     }
 
     /**
-     * Évalue un fichier de configuration avec une variable d'environnement donnée.
+     * Évalue un fichier de configuration avec une variable d'environnement donnée (null : variable absente).
      *
      * @return array<string, mixed>
      */
-    private function configWith(string $name, string $value, string $file): array
+    private function configWith(string $name, ?string $value, string $file): array
     {
         $saved = [$_ENV[$name] ?? null, $_SERVER[$name] ?? null, getenv($name)];
-        $_ENV[$name] = $_SERVER[$name] = $value;
-        putenv("{$name}={$value}");
+        $this->setEnv($name, $value, $value, $value === null ? false : $value);
 
         try {
             return require config_path($file);
         } finally {
-            [$_ENV[$name], $_SERVER[$name]] = $saved;
-            putenv($saved[2] === false ? $name : "{$name}={$saved[2]}");
+            $this->setEnv($name, ...$saved);
         }
+    }
+
+    private function setEnv(string $name, ?string $env, ?string $server, string|false $putenv): void
+    {
+        if ($env === null) {
+            unset($_ENV[$name]);
+        } else {
+            $_ENV[$name] = $env;
+        }
+
+        if ($server === null) {
+            unset($_SERVER[$name]);
+        } else {
+            $_SERVER[$name] = $server;
+        }
+
+        putenv($putenv === false ? $name : "{$name}={$putenv}");
     }
 }
