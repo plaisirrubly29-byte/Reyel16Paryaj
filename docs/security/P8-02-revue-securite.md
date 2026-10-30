@@ -202,6 +202,6 @@ Une relecture de la PR #101 après sa fusion a montré que plusieurs correctifs 
 | Qui | Quoi | Quand |
 |---|---|---|
 | Équipe | Décider pour le blocage volontaire de compte (M1) et, le cas échéant, l'activation des paris en direct (E1) | Avant le lancement contrôlé |
-| Rubly + Widsondelne7376 | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
+| Rubly | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
 | Rubly | F7, F8, F9, F10, F11, F12 | À planifier |
 | Hébergement (P0-07 / P1-06) | B3 (en-têtes du frontend), checklist de déploiement (`TRUSTED_PROXIES`, `expose_php`, `.env.production.example`), HTTPS, rôle PostgreSQL restreint (F9) | Avant la mise en ligne du staging |
