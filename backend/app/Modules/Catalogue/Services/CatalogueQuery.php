@@ -21,10 +21,12 @@ class CatalogueQuery
     public function visibleEvents(?string $marketKey = null): Builder
     {
         return Event::query()
-            // À venir, ou en cours (statut "live" posé par la synchro en direct : onglet Live).
+            // À venir, ou en cours (statut "live" posé par la synchro en direct : onglet Live). Au-delà de la fenêtre
+            // du direct, le match n'est plus suivi (fournisseur en panne, crédits épuisés) : il n'est plus montré « en direct ».
             ->where(fn ($q) => $q
                 ->where(fn ($s) => $s->where('status', EventStatus::Scheduled)->where('starts_at', '>', now()))
-                ->orWhere('status', EventStatus::Live))
+                ->orWhere(fn ($s) => $s->where('status', EventStatus::Live)
+                    ->where('starts_at', '>', now()->subMinutes((int) config('sports_data.live_window_minutes')))))
             ->whereHas('markets', fn ($q) => $q->displayable()->when($marketKey, fn ($m) => $m->where('key', $marketKey)))
             ->whereHas('competition', fn ($q) => $q->where('is_active', true)
                 ->whereHas('sport', fn ($s) => $s->where('is_active', true)));
