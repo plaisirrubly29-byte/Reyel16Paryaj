@@ -280,6 +280,7 @@ class BetPlacementService
             'max_selections' => (int) config('betting.max_selections'),
             'allow_live' => (bool) config('betting.allow_live'),
             'odds_change_policy' => (string) config('betting.odds_change_policy'),
+            'postponed_void_hours' => (int) config('betting.postponed_void_hours'),
         ];
     }
 }

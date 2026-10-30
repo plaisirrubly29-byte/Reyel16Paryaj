@@ -47,8 +47,8 @@ envoyée par le fournisseur.
 Un match joué à l'heure dont le score n'arrive pas (panne fournisseur) **n'est pas** annulé : il attend le
 résultat ou une saisie manuelle par un administrateur (`results.enter`).
 
-> ⚠️ **Pas encore dans le code** : un match reporté laisse aujourd'hui ses tickets en attente. À livrer avant la
-> production (tâche de suivi, module Settlement).
+Mise en œuvre : `SettlementService` (rattrapage `settlement:run` toutes les 15 min), délai `BETTING_POSTPONED_VOID_HOURS`
+figé sur chaque ticket (`rules_snapshot.postponed_void_hours`).
 
 ## 4. Plus/moins sur une ligne entière
 
