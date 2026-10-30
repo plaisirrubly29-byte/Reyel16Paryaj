@@ -16,6 +16,7 @@ use App\Support\Http\ApiException;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 /**
@@ -40,12 +41,16 @@ class ResultCorrectionService
     /**
      * Demande de correction d'un administrateur.
      *
-     * @throws ApiException no_result_to_correct | result_unchanged | correction_already_pending | invalid_result
+     * @throws ApiException no_result_to_correct | result_unchanged | correction_window_closed | correction_already_pending | invalid_result
      */
     public function request(User $requester, Event $event, ResultStatus $status, ?string $homeScore, ?string $awayScore, string $reason): ResultCorrection
     {
         return DB::transaction(function () use ($requester, $event, $status, $homeScore, $awayScore, $reason) {
             [$current, $home, $away] = $this->proposal($event, $status, $homeScore, $awayScore);
+
+            if (($deadline = $this->correctionDeadline($event)) !== null && now()->gt($deadline)) {
+                throw new ApiException('correction_window_closed', __('Le délai de correction de ce résultat est dépassé.'), 409, ['deadline' => $deadline->toIso8601String()]);
+            }
 
             if (($pending = $this->pendingFor($event)) !== null) {
                 throw new ApiException('correction_already_pending', __('Une correction est déjà en attente pour ce match.'), 409, ['correction_id' => (string) $pending->id]);
@@ -70,6 +75,12 @@ class ResultCorrectionService
             [$home, $away] = $this->recorder->normalized($status, $homeScore, $awayScore);
 
             if ($current === null || $current->sameOutcomeAs($status, $home, $away)) {
+                return null;
+            }
+
+            if (($deadline = $this->correctionDeadline($event)) !== null && now()->gt($deadline)) {
+                Log::warning('settlement.correction_window_closed', ['event_id' => $event->id, 'source' => $source, 'id' => $externalId]);
+
                 return null;
             }
 
@@ -231,6 +242,14 @@ class ResultCorrectionService
             metadata: ['event_id' => (string) $event->id, 'source' => $source]);
 
         return $correction;
+    }
+
+    /** Fin du délai de correction (D-05) : premier règlement du match + délai ; null si rien n'est réglé. */
+    private function correctionDeadline(Event $event): ?CarbonImmutable
+    {
+        $first = BetSelection::where('event_id', $event->id)->whereNotNull('result_id')->min('settled_at');
+
+        return $first === null ? null : CarbonImmutable::parse($first)->addHours((int) config('betting.result_correction_window_hours'));
     }
 
     private function pendingFor(Event $event): ?ResultCorrection

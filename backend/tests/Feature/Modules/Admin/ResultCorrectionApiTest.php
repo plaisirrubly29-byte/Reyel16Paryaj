@@ -218,6 +218,26 @@ class ResultCorrectionApiTest extends TestCase
         $this->requestCorrection(home: '0', away: '0')->assertStatus(409)->assertJsonPath('error.code', 'correction_already_pending');
     }
 
+    public function test_a_settled_result_can_only_be_corrected_within_72_hours(): void
+    {
+        $this->bet($this->player(), [['fake-1', 'home']]);
+        $this->finish('2', '1'); // réglé le 2026-10-21 à 17:30
+
+        $this->travelTo('2026-10-24 17:31:00');
+        $this->requestCorrection()
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'correction_window_closed')
+            ->assertJsonPath('error.details.deadline', '2026-10-24T17:30:00+00:00');
+
+        // Le fournisseur non plus : sa correction tardive est ignorée.
+        $this->fake->setResult('fake-1', '1', '2');
+        $this->assertSame(1, app(ResultImportService::class)->import('soccer_epl')->unchanged);
+        $this->assertSame(0, ResultCorrection::count());
+
+        $this->travelTo('2026-10-24 17:29:00');
+        $this->requestCorrection()->assertCreated();
+    }
+
     // Validation : réévaluation et écritures compensatoires
 
     public function test_approval_reevaluates_tickets_with_compensating_entries(): void

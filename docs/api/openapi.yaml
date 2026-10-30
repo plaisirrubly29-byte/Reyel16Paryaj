@@ -1093,7 +1093,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: "`no_result_to_correct`, `result_unchanged` ou `correction_already_pending`"
+          description: "`no_result_to_correct`, `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "428": { description: En-tête Idempotency-Key manquant }
