@@ -22,6 +22,12 @@
 		header @assets Cache-Control "public, max-age=31536000, immutable"
 		@pages not path /assets/*
 		header @pages Cache-Control "no-cache"
+		# Pages du site (P8-02 B3) : scripts, styles et appels de l'application seulement ; Google Fonts ; QR code du MFA en data: ;
+		# jamais dans une iframe (clickjacking de l'administration). L'API garde sa propre CSP, plus stricte (SecurityHeaders).
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Frame-Options "DENY"
+		}
 		try_files {path} /index.html
 		file_server
 	}
