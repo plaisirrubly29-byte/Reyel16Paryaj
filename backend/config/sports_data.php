@@ -21,7 +21,7 @@ return [
         'regions' => env('SPORTS_DATA_REGIONS', 'eu'),
         'markets' => env('SPORTS_DATA_MARKETS', 'h2h'),
 
-        // Bookmaker de référence pour les cotes publiées (null = premier disponible). À valider (P0-04).
+        // Bookmaker de référence pour les cotes publiées (null = premier disponible, choix V1 : décision D-02).
         'reference_bookmaker' => env('SPORTS_DATA_REFERENCE_BOOKMAKER'),
     ],
 

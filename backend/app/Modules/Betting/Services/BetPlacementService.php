@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\DB;
  *   détecter un changement, jamais de base de calcul ;
  * - disponibilité (match pas commencé ou en direct, marché ouvert, cote assez récente), limites de mise,
  *   type de pari et une seule sélection par match ;
- * - politique de changement de cote (config betting.odds_change_policy, décision D-05 provisoire) :
+ * - politique de changement de cote (config betting.odds_change_policy, décision D-05) :
  *   409 odds_changed avec les nouvelles cotes, rien n'est créé ;
  * - ticket, sélections figées et réservation de la mise dans UNE transaction : solde insuffisant → rien n'est créé.
  *

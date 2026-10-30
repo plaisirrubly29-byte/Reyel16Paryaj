@@ -10,7 +10,7 @@ use InvalidArgumentException;
 /**
  * Issue d'une sélection d'après le résultat d'un match, pour les marchés du catalogue (CatalogueSyncService::MARKETS).
  *
- * - Match annulé : sélection annulée (void, cote 1 dans un combiné) — politique D-05 à confirmer (P0-04).
+ * - Match annulé : sélection annulée (void, cote 1 dans un combiné) — politique D-05.
  * - Plus/moins : la ligne est celle figée sur le ticket ; un total égal à une ligne entière ("3") est annulé.
  */
 class OutcomeResolver
