@@ -9,8 +9,8 @@
 | les permissions d'un rôle (un rôle ne peut donc pas s'accorder de permissions).
 | Synchronisé en base par PermissionSeeder (idempotent).
 |
-| ⚠️ BROUILLON — transcription de docs/permissions-matrix.md, à confirmer par la
-| décision D-07 (tâche P0-06). Toute modification ici doit aussi mettre à jour la matrice
+| Transcription de docs/permissions-matrix.md, validée par la décision D-07 (tâche P0-06,
+| 2026-10-29). Toute modification ici doit aussi mettre à jour la matrice
 | et les tests de permissions (P6-09).
 |
 | Convention : "<ressource>.<action>". "*.approve" = second validateur d'une double validation

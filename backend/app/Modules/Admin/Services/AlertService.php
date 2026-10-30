@@ -31,6 +31,9 @@ class AlertService
     /** Seuil d'échecs MFA sur 24 h signalé aux auditeurs. */
     public const MFA_FAILURES_THRESHOLD = 5;
 
+    /** Période pendant laquelle un changement de rôle administratif reste signalé (M3, décision D-07). */
+    public const ROLE_CHANGES_HOURS = 72;
+
     /** Le rapprochement parcourt tout le ledger : son résultat est mis en cache quelques minutes. */
     private const RECONCILIATION_TTL_SECONDS = 600;
 
@@ -189,10 +192,24 @@ class AlertService
             ->where('created_at', '>=', now()->subDay())
             ->count();
 
-        return $failures < self::MFA_FAILURES_THRESHOLD ? [] : [$this->alert('mfa_failures', 'warning', 'Sécurité',
+        $alerts = $failures < self::MFA_FAILURES_THRESHOLD ? [] : [$this->alert('mfa_failures', 'warning', 'Sécurité',
             "{$failures} échecs de double authentification sur 24 h",
             'Tentatives de connexion administrative inhabituelles possibles.',
             '/admin/audit')];
+
+        // M3 (D-07) : tout Super Admin voit qu'un rôle a été donné ou retiré, y compris par un autre Super Admin.
+        $roleChanges = AuditLog::query()
+            ->where('action', AuditAction::RolesUpdated)
+            ->where('created_at', '>=', now()->subHours(self::ROLE_CHANGES_HOURS))
+            ->count();
+        if ($roleChanges > 0) {
+            $alerts[] = $this->alert('role_changes', 'warning', 'Sécurité',
+                "{$roleChanges} changement(s) de rôles administratifs sur ".self::ROLE_CHANGES_HOURS.' h',
+                'Vérifiez dans le journal d\'audit que chaque attribution ou retrait de rôle était prévu.',
+                '/admin/audit');
+        }
+
+        return $alerts;
     }
 
     /** @return array{key: string, severity: string, category: string, title: string, detail: string, link: string|null} */

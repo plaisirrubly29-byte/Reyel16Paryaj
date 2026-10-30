@@ -1,6 +1,6 @@
 # Matrice des permissions (rôle × action × ressource)
 
-**Brouillon à valider (tâche P0-06).** Chaque ligne validée doit avoir un test API (tâche P6-09).
+**Validée le 2026-10-29 par Rubly PLAISIR — décision [D-07](decisions/D-07-roles-admin.md) (tâche P0-06).** Chaque ligne validée doit avoir un test API (tâche P6-09).
 
 > Implémentation : [`backend/config/permissions.php`](../backend/config/permissions.php) (P2-04) — synchronisé en base par
 > `PermissionSeeder`. Toute modification de cette matrice se fait **dans la même PR** que la config.
@@ -16,8 +16,8 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Événements & marchés — consulter | ✅ | ✅ | 👁 | 👁 | 👁 |
 | Marché — suspendre / masquer (motif) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Résultats — saisir / valider | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ |
-| Règlement — lancer / relancer | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ |
-| Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (données minimales) | 👁 |
+| Règlement — lancer / relancer | — | — | — | — | — |
+| Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 |
 | Utilisateur — suspendre (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Tickets — consulter | ✅ | 👁 | 👁 | 👁 | 👁 |
 | Ledger / rapprochement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 |
@@ -27,8 +27,10 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Audit & exports | 👁 | ❌ | 👁 | ❌ | 👁 |
 | Gérer les rôles des autres | ✅ (jamais les siens) | ❌ | ❌ | ❌ | ❌ |
 
-Règles : aucun rôle ne peut s'accorder lui-même des permissions ; MFA obligatoire pour tous ces rôles ;
+Règles : aucun rôle ne peut s'accorder lui-même des permissions ; MFA obligatoire pour tous ces rôles ; 2️⃣ = l'initiateur et le validateur sont deux comptes différents (limites d'action : voir D-07 §3) ;
 toute action ✅/2️⃣ sur une donnée sensible est journalisée avec motif.
+Règlement : automatique (jobs), relancé seulement par la commande serveur `settlement:run` ; aucune route
+d'administration en V1 (`settlement.run` / `settlement.approve` réservées).
 
 ## Tests API (P6-09)
 
@@ -38,9 +40,11 @@ un test par ligne du tableau. Chaque route de la ligne est appelée par un admin
 
 - Les permissions de `config/permissions.php` (et celles appliquées en base) sont comparées à ce tableau, rôle par rôle.
 - Toute route `/api/v1/admin/*` doit appartenir à une ligne : une nouvelle route sans ligne fait échouer les tests.
-- 👁 « données minimales » (Support) : ni profil ni rôles dans la fiche utilisateur.
+- 👁 Support (D-07, I2) : email et téléphone masqués, ni profil ni rôles dans la fiche utilisateur ; coordonnées
+  complètes pour les rôles qui ont `users.view_personal_data`.
 - 2️⃣ : le demandeur ne valide jamais sa propre demande (`self_approval_forbidden`) ; « jamais les siens » pour les rôles
-  (`cannot_modify_own_roles`). Détail des circuits : `FinanceCorrectionsApiTest`, `ResultCorrectionApiTest`, `RbacTest`.
-- **Règlement — lancer / relancer** : aucune route API à ce jour (règlement automatique : `SettleEventJob`, commande
-  `settlement:run`). Le test vérifie les permissions `settlement.run` / `settlement.approve` et qu'aucune route ne les expose ;
-  une future route devra être ajoutée à la ligne correspondante du test.
+  (`cannot_modify_own_roles`). Détail des circuits et des limites d'action de D-07 (délai M3 `approver_role_too_recent`) :
+  `FinanceCorrectionsApiTest`, `ResultCorrectionApiTest`, `RbacTest`.
+- **Règlement — lancer / relancer** (« — ») : le test vérifie que `settlement.run` / `settlement.approve` restent
+  réservées au Super Admin et à la Finance et qu'**aucune route** ne les expose ; une route future devra être rattachée
+  à cette ligne du test.

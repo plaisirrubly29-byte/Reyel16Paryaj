@@ -2,7 +2,7 @@
 
 /*
 | Module Wallet & Ledger.
-| Devise, arrondis et limites : décision D-06 (tâche P0-05) — valeurs provisoires.
+| Devise, arrondis et limites : décision D-06 (tâche P0-05), validée le 2026-10-29.
 */
 
 return [

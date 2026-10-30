@@ -343,7 +343,7 @@ paths:
       description: |
         Le serveur recharge les marchés et applique SES cotes : la cote envoyée ne sert qu'à détecter un changement.
         Ticket, sélections figées et réservation de la mise sont créés dans une seule transaction.
-        Règles provisoires (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
+        Règles validées (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
         à 1 000 000,00, combinés de 20 sélections au plus et une seule sélection par match, toute cote changée refusée.
       security: [{ sessionCookie: [] }]
       parameters:
@@ -837,7 +837,7 @@ paths:
       description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: search, in: query, description: "Email, nom, téléphone ou identifiant", schema: { type: string } }
+        - { name: search, in: query, description: "Nom (fragment), email (fragment ; complet seulement sans users.view_personal_data), téléphone complet ou identifiant", schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
         - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
         - $ref: "#/components/parameters/Page"
@@ -1093,7 +1093,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: "`no_result_to_correct`, `result_unchanged` ou `correction_already_pending`"
+          description: "`no_result_to_correct`, `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "428": { description: En-tête Idempotency-Key manquant }
@@ -1138,7 +1138,7 @@ paths:
       tags: [Admin]
       summary: Valider une correction (second administrateur, motif requis, audité)
       description: |
-        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden). Dans une transaction : nouvelle
+        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden), ni un rôle attribué par un administrateur depuis moins de 24 h (403 approver_role_too_recent). Dans une transaction : nouvelle
         version du résultat (source manual, validateur, motif), réévaluation des tickets déjà réglés — gain ou
         remboursement précédent compensé (reversal), nouvelle écriture si besoin, nouvelle révision du règlement. Un
         gain repris peut rendre le solde négatif. Un combiné perdu sur ce match redevient « pending » si d'autres matchs
@@ -1155,7 +1155,7 @@ paths:
         "200":
           description: Correction appliquée
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
-        "403": { description: "`forbidden` ou `self_approval_forbidden`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: "`forbidden`, `self_approval_forbidden` ou `approver_role_too_recent`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: "`correction_not_pending` ou `result_changed`"
@@ -1502,7 +1502,7 @@ paths:
     post:
       tags: [Admin]
       summary: Valider une correction et passer l'écriture compensatoire (permission finance.approve, motif requis)
-      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`).
+      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`) dont le rôle n'a pas été attribué par un administrateur depuis moins de 24 h (`403 approver_role_too_recent`).
       x-task: P6-04
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1516,7 +1516,7 @@ paths:
           description: Correction validée (status approved, reversal_entry_id renseigné)
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
         "403":
-          description: "Permission refusée, ou `self_approval_forbidden`"
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1694,8 +1694,8 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        phone: { type: string, example: "34123456" }
-        email: { type: [string, "null"] }
+        phone: { type: string, example: "34123456", description: "Masqué sans users.view_personal_data : \"•••• 3456\"" }
+        email: { type: [string, "null"], description: "Masqué sans users.view_personal_data : \"an•••@example.com\"" }
         status: { type: string, enum: [active, suspended, excluded, closed] }
         status_changed_at: { type: [string, "null"], format: date-time }
         is_admin: { type: boolean }
