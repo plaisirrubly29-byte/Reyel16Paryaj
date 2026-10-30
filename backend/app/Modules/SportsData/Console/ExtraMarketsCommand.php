@@ -22,7 +22,7 @@ class ExtraMarketsCommand extends Command
         {--hours=72 : Matchs qui commencent dans ce délai}
         {--limit=0 : Nombre maximum de matchs (0 : tous)}
         {--competition=* : Clé(s) de compétition, par défaut toutes les compétitions de football actives}
-        {--event=* : Identifiant(s) du match chez le fournisseur (relance d'un échec)}
+        {--event=* : Identifiant(s) du match chez le fournisseur (pour relancer un échec)}
         {--dry-run : Affiche les matchs et le coût sans appeler le fournisseur}';
 
     protected $description = 'Charge double chance, les deux marquent et score exact match par match (consomme des crédits)';
