@@ -83,6 +83,27 @@ class TheOddsApiProvider implements SportsDataProvider
         return $events;
     }
 
+    /** /events/{id}/odds : seul accès aux marchés hors 1X2, plus/moins et handicap (btts, double chance, score exact…). */
+    public function eventMarkets(string $sportKey, string $eventId, string $markets): EventData
+    {
+        if (! preg_match('/^[a-z0-9]+$/i', $eventId)) {
+            throw new SportsDataException(SportsDataException::NOT_FOUND, "Identifiant d'événement invalide : {$eventId}");
+        }
+
+        $payload = $this->get("/sports/{$this->segment($sportKey)}/events/{$eventId}/odds", [
+            'regions' => $this->config['regions'],
+            'markets' => $markets,
+            'oddsFormat' => 'decimal',
+            'dateFormat' => 'iso',
+        ]);
+
+        try {
+            return $this->event(is_array($payload) ? $payload : []);
+        } catch (Throwable $e) {
+            throw new SportsDataException(SportsDataException::INVALID_RESPONSE, "Événement {$eventId} mal formé : {$e->getMessage()}");
+        }
+    }
+
     /** /events est gratuit (ne compte pas dans le quota) : liste des matchs sans cotes. */
     public function upcomingStarts(string $sportKey): array
     {
@@ -256,6 +277,7 @@ class TheOddsApiProvider implements SportsDataProvider
     {
         try {
             $competition = preg_match('#^/sports/([a-z0-9_]+)/#', $path, $m) ? $m[1] : null;
+            $path = preg_replace('#/events/[^/]+/#', '/events/{event}/', $path) ?? $path;
             $header = fn (string $name) => $response->header($name) === '' ? null : (int) $response->header($name);
 
             ProviderApiCall::create([

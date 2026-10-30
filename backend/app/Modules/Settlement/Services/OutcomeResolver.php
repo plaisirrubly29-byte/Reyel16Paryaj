@@ -45,6 +45,10 @@ class OutcomeResolver
                 default => $this->unknown($marketKey, $selectionKey),
             },
             'totals' => $this->totals($line, $selectionKey, $home + $away),
+            // Score exact : clé "domicile-extérieur", ex. "2-1".
+            'correct_score' => preg_match('/^\d+-\d+$/', $selectionKey) === 1
+                ? $selectionKey === "{$home}-{$away}"
+                : $this->unknown($marketKey, $selectionKey),
             default => $this->unknown($marketKey, $selectionKey),
         };
 

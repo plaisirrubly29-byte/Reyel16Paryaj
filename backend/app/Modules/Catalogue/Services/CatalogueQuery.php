@@ -52,7 +52,7 @@ class CatalogueQuery
                 ->with(['selections' => fn ($s) => $s->orderByRaw(
                     "CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 WHEN 'home_draw' THEN 4 WHEN 'home_away' THEN 5"
                     ." WHEN 'draw_away' THEN 6 WHEN 'over' THEN 7 WHEN 'under' THEN 8 WHEN 'yes' THEN 9 WHEN 'no' THEN 10 ELSE 11 END"
-                )]),
+                )->orderBy('id')]), // score exact : dans l'ordre du fournisseur
         ]);
     }
 }

@@ -257,6 +257,19 @@ class SettlementServiceTest extends TestCase
         );
     }
 
+    public function test_correct_score_is_won_only_on_the_exact_score(): void
+    {
+        $market = $this->market(key: 'correct_score', odds: ['2-1' => '9.00', '1-1' => '6.50']);
+        $exact = $this->bet([[$market, '2-1']]);
+        $other = $this->bet([[$market, '1-1']]);
+
+        $this->finish($market, '2', '1');
+
+        $this->assertSame(BetTicketStatus::Won, $exact->fresh()->status);
+        $this->assertSame(900_00, $exact->fresh()->payout_minor);
+        $this->assertSame(BetTicketStatus::Lost, $other->fresh()->status);
+    }
+
     public function test_an_unknown_market_is_left_pending_and_reported(): void
     {
         $market = $this->market(key: 'exotic', odds: ['a' => '1.50', 'b' => '2.50']);

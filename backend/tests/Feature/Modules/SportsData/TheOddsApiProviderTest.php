@@ -126,6 +126,33 @@ class TheOddsApiProviderTest extends TestCase
             && $r['regions'] === 'eu' && $r['markets'] === 'h2h' && $r['oddsFormat'] === 'decimal');
     }
 
+    public function test_extra_markets_of_one_event_come_from_the_event_endpoint(): void
+    {
+        $event = $this->oddsPayload()[0];
+        $event['bookmakers'] = [[
+            'key' => 'williamhill',
+            'last_update' => '2026-10-15T20:10:00Z',
+            'markets' => [[
+                'key' => 'correct_score',
+                'outcomes' => [['name' => 'Everton:1|Chelsea:0', 'price' => 10.0], ['name' => 'Everton:0|Chelsea:1', 'price' => 7.5]],
+            ]],
+        ]];
+        Http::fake(['*' => Http::response($event, 200, $this->quotaHeaders(last: 2))]);
+
+        $data = $this->provider()->eventMarkets('soccer_epl', 'e912304de2b2ce35b473ce2ecd3d1502', 'btts,correct_score');
+
+        $this->assertSame('Everton', $data->homeTeam);
+        $this->assertSame(['correct_score'], array_map(fn ($m) => $m->key, $data->markets));
+        $this->assertSame(['10', '7.5'], array_map(fn ($s) => $s->odds, $data->markets[0]->selections));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/sports/soccer_epl/events/e912304de2b2ce35b473ce2ecd3d1502/odds')
+            && $r['markets'] === 'btts,correct_score' && $r['regions'] === 'eu');
+        // Journal : chemin générique (sans l'identifiant du match), coût annoncé par le fournisseur.
+        $this->assertSame(['/sports/{sport}/events/{event}/odds', 2], [ProviderApiCall::sole()->endpoint, ProviderApiCall::sole()->cost]);
+
+        $this->expectException(SportsDataException::class);
+        $this->provider()->eventMarkets('soccer_epl', '../odds', 'btts');
+    }
+
     public function test_totals_market_keeps_its_line(): void
     {
         config(['sports_data.theodds.markets' => 'h2h,totals']);
