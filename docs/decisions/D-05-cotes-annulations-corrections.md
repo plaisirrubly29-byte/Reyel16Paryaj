@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P0-04 (débloque P4-03 prise de pari, P5-05 règlement, P5-06 correction) |
-| **Statut** | 🟡 Proposition à valider |
+| **Statut** | ✅ Validé — Rubly PLAISIR, 2026-10-29 |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-29 |
 
@@ -74,4 +74,4 @@ demi-point (2,5) ce cas n'existe pas.
 ## 6. Critères d'acceptation P0-04
 
 - [x] Règles écrites avec exemples chiffrés
-- [ ] Validées par le propriétaire du projet
+- [x] Validées par le propriétaire du projet (Rubly PLAISIR, 2026-10-29)

@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | **Tâche** | P0-02 (débloque P3-02 fournisseur, P3-03 synchro, P5-04 résultats) |
-| **Statut** | 🟡 Proposition à valider |
+| **Statut** | ✅ Validé — Rubly PLAISIR, 2026-10-29 |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-29 |
 
-## 1. Décision proposée
+## 1. Décision
 
 **The Odds API** (`https://api.the-odds-api.com/v4`) est le fournisseur unique de la V1, pour les matchs,
 les cotes et les scores. Le code l'utilise déjà (`SPORTS_DATA_PROVIDER=theodds`,

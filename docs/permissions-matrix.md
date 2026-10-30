@@ -1,6 +1,6 @@
 # Matrice des permissions (rôle × action × ressource)
 
-**Proposition à valider — décision [D-07](decisions/D-07-roles-admin.md) (tâche P0-06).** Chaque ligne validée doit avoir un test API (tâche P6-09).
+**Validée le 2026-10-29 par Rubly PLAISIR — décision [D-07](decisions/D-07-roles-admin.md) (tâche P0-06).** Chaque ligne validée doit avoir un test API (tâche P6-09).
 
 > Implémentation : [`backend/config/permissions.php`](../backend/config/permissions.php) (P2-04) — synchronisé en base par
 > `PermissionSeeder`. Toute modification de cette matrice se fait **dans la même PR** que la config.

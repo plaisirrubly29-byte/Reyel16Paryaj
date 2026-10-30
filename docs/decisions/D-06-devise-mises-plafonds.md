@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P0-05 (débloque P5-01 ledger, P4-03 prise de pari) |
-| **Statut** | 🟡 Proposition à valider |
+| **Statut** | ✅ Validé — Rubly PLAISIR, 2026-10-29 |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-29 |
 
@@ -19,7 +19,7 @@
 | Mise maximum par ticket | **50 000,00 HTG** | `BETTING_MAX_STAKE_MINOR=5000000` |
 | Gain maximum par ticket | **1 000 000,00 HTG** | `BETTING_MAX_PAYOUT_MINOR=100000000` |
 | Sélections par combiné | 20 au plus | `BETTING_MAX_SELECTIONS=20` (D-04) |
-| Version des règles | `provisoire-2026-10` aujourd'hui, **`v1-2026-10`** une fois cette décision validée | `BETTING_RULES_VERSION` |
+| Version des règles | `v1-2026-10` | `BETTING_RULES_VERSION` |
 
 Les limites de jeu responsable choisies par le joueur (jour, semaine, mois) s'ajoutent à ces plafonds (P7-02).
 

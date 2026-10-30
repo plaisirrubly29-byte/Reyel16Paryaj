@@ -343,7 +343,7 @@ paths:
       description: |
         Le serveur recharge les marchés et applique SES cotes : la cote envoyée ne sert qu'à détecter un changement.
         Ticket, sélections figées et réservation de la mise sont créés dans une seule transaction.
-        Règles provisoires (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
+        Règles validées (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
         à 1 000 000,00, combinés de 20 sélections au plus et une seule sélection par match, toute cote changée refusée.
       security: [{ sessionCookie: [] }]
       parameters:

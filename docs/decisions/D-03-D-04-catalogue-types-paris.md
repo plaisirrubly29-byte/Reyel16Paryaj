@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P0-03 |
-| **Statut** | 🟡 Proposition à valider |
+| **Statut** | ✅ Validé — Rubly PLAISIR, 2026-10-29 |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-29 |
 

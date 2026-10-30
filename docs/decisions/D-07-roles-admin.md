@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P0-06 (débloque P2-04 RBAC, P6-09 tests de la matrice) |
-| **Statut** | 🟡 Proposition à valider |
+| **Statut** | ✅ Validé — Rubly PLAISIR, 2026-10-29 |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-29 |
 | **Tranche aussi** | Points M3 et I2 de la revue de sécurité [P8-02](../security/P8-02-revue-securite.md) |
@@ -59,5 +59,5 @@ téléphone complets au Support.
 
 ## 5. Critères d'acceptation P0-06
 
-- [x] Matrice validée — voir [permissions-matrix.md](../permissions-matrix.md) (à confirmer par Rubly)
+- [x] Matrice validée — voir [permissions-matrix.md](../permissions-matrix.md)
 - [x] Actions nécessitant une double validation identifiées (§2)

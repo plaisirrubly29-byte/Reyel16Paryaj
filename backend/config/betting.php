@@ -2,8 +2,8 @@
 
 /*
 | Module Betting — règles d'acceptation d'un pari (P4-03).
-| VALEURS PROVISOIRES en attendant les décisions D-04 (types de paris), D-05 (changement de cote)
-| et D-06 (mises min/max, plafond de gain). Chaque ticket fige la version et les règles appliquées
+| Valeurs validées le 2026-10-29 : décisions D-04 (types de paris), D-05 (changement de cote, report)
+| et D-06 (mises min/max, plafond de gain), voir docs/decisions/. Chaque ticket fige la version et les règles appliquées
 | (rules_version, rules_snapshot) : les modifier ne change jamais un ticket déjà accepté.
 | Montants en unité mineure (centimes de la devise du portefeuille).
 */
@@ -11,7 +11,7 @@
 return [
 
     // À changer à chaque modification d'une règle ci-dessous.
-    'rules_version' => env('BETTING_RULES_VERSION', 'provisoire-2026-10'),
+    'rules_version' => env('BETTING_RULES_VERSION', 'v1-2026-10'),
 
     // Mise par ticket : 10,00 à 50 000,00.
     'min_stake_minor' => (int) env('BETTING_MIN_STAKE_MINOR', 10_00),
