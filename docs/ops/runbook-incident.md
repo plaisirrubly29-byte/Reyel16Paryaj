@@ -117,3 +117,6 @@ Actions (une personne et une date par action) :
 ```
 
 Le runbook se met à jour après chaque incident et chaque test de restauration.
+
+Avant une mise en production et pour revenir en arrière après un déploiement : [lancement.md](lancement.md)
+(checklist, plan de rollback à trois niveaux, procès-verbal de recette — P9-01).
