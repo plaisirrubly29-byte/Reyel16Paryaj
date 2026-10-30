@@ -124,7 +124,7 @@ class PermissionMatrixTest extends TestCase
         foreach (self::ALL as $role) {
             $this->admins[$role] = User::factory()->withRole(RoleSlug::from($role))->create();
         }
-        $this->player = User::factory()->create();
+        $this->player = User::factory()->create(['phone' => '37123456', 'email' => 'jean.dupont@example.com']);
     }
 
     /**
@@ -216,7 +216,8 @@ class PermissionMatrixTest extends TestCase
     }
 
     /**
-     * Le règlement est automatique (SettleEventJob, commande planifiée settlement:run) : aucune route ne le lance.
+     * Ligne « — » de la matrice (D-07) : le règlement est automatique (SettleEventJob, commande settlement:run), sans
+     * route d'administration en V1 ; settlement.run / settlement.approve restent réservées au Super Admin et à la Finance.
      * La ligne est vérifiée sur les permissions, et sur l'absence de route qui les exposerait à un autre rôle.
      */
     public function test_row_settlement_permissions_belong_to_super_admin_and_finance_and_no_route_exposes_them(): void
@@ -232,17 +233,24 @@ class PermissionMatrixTest extends TestCase
         $this->assertCount(0, $exposing, 'Une route de règlement doit être ajoutée à la ligne « Règlement » de ce test.');
     }
 
-    public function test_row_users_are_searchable_by_all_but_operations_and_support_sees_minimal_data(): void
+    public function test_row_users_are_searchable_by_all_but_operations_and_support_sees_masked_contact_data(): void
     {
         $allowed = [self::SUPER_ADMIN, self::FINANCE, self::SUPPORT, self::COMPLIANCE];
 
         $this->assertAccess('GET', 'users', $allowed);
         $this->assertAccess('GET', "users/{$this->player->id}", $allowed);
 
-        // 👁 « données minimales » pour le Support : ni profil ni rôles.
-        $this->requestAs(self::SUPPORT, 'GET', "users/{$this->player->id}")->assertOk()->assertJsonMissingPath('data.profile')->assertJsonMissingPath('data.roles');
+        // 👁 Support (D-07, I2) : email et téléphone masqués, ni profil ni rôles — dans la fiche comme dans la liste.
+        $this->requestAs(self::SUPPORT, 'GET', "users/{$this->player->id}")->assertOk()
+            ->assertJsonPath('data.phone', '•••• 3456')->assertJsonPath('data.email', 'je•••@example.com')
+            ->assertJsonMissingPath('data.profile')->assertJsonMissingPath('data.roles');
+        $listed = collect($this->requestAs(self::SUPPORT, 'GET', 'users')->assertOk()->json('data'))->firstWhere('id', (string) $this->player->id);
+        $this->assertSame(['•••• 3456', 'je•••@example.com'], [$listed['phone'], $listed['email']]);
+
         foreach ([self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE] as $role) {
-            $this->requestAs($role, 'GET', "users/{$this->player->id}")->assertOk()->assertJsonStructure(['data' => ['profile', 'roles']]);
+            $this->requestAs($role, 'GET', "users/{$this->player->id}")->assertOk()
+                ->assertJsonPath('data.phone', '37123456')->assertJsonPath('data.email', 'jean.dupont@example.com')
+                ->assertJsonStructure(['data' => ['profile', 'roles']]);
         }
     }
 
