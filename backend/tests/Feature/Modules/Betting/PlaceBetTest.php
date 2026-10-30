@@ -93,7 +93,7 @@ class PlaceBetTest extends TestCase
         $stake = LedgerEntry::where('type', LedgerEntryType::Stake)->sole();
         $this->assertSame("bet:{$ticket->id}:stake", $stake->reference);
         $this->assertSame(-100_00, $stake->amount_minor);
-        $this->assertSame('provisoire-2026-10', $ticket->rules_version);
+        $this->assertSame('v1-2026-10', $ticket->rules_version);
         $this->assertSame('reject', $ticket->rules_snapshot['odds_change_policy']);
         $this->assertSame(1, $ticket->selections()->value('odds_version'));
     }

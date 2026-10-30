@@ -10,6 +10,7 @@ use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Exceptions\SportsDataException;
+use App\Modules\SportsData\Models\Competition;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
@@ -17,10 +18,12 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Tests\Feature\Modules\Betting\BuildsBetTickets;
 use Tests\TestCase;
 
 class ResultImportTest extends TestCase
 {
+    use BuildsBetTickets;
     use RefreshDatabase;
 
     private const SYNCED_AT = '2026-10-20 10:00:00';
@@ -171,6 +174,20 @@ class ResultImportTest extends TestCase
         // Match commencé il y a moins de results_delay_minutes : pas encore demandé.
         $this->travelTo($this->event('fake-1')->starts_at->addMinutes(60));
         $this->assertSame([], $import->pendingCompetitions());
+    }
+
+    public function test_a_deactivated_competition_is_queried_only_for_a_pending_bet(): void
+    {
+        $import = app(ResultImportService::class);
+        Competition::where('external_key', 'basketball_nba')->update(['is_active' => false]);
+
+        $this->assertSame(['soccer_epl' => 2], $import->pendingCompetitions());
+
+        // Un pari attend le résultat de fake-3 : la NBA est de nouveau interrogée.
+        $market = $this->event('fake-3')->markets()->firstOrFail();
+        $this->select($this->ticket(), $market->load('event'));
+
+        $this->assertSame(['basketball_nba' => 2, 'soccer_epl' => 2], $import->pendingCompetitions());
     }
 
     public function test_cancelled_match_has_no_score(): void

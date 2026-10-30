@@ -60,7 +60,7 @@ class SettlementServiceTest extends TestCase
      *
      * @param  array<int, array{0: Market, 1: string}>  $picks  [marché, clé de sélection]
      */
-    private function bet(array $picks, int $stake = 100_00): BetTicket
+    private function bet(array $picks, int $stake = 100_00, array $attributes = []): BetTicket
     {
         $odds = array_reduce($picks, fn (string $c, $p) => bcmul($c, (string) $p[0]->selections()->where('key', $p[1])->value('odds'), 3), '1');
         $ticket = $this->ticket($this->player, [
@@ -68,6 +68,7 @@ class SettlementServiceTest extends TestCase
             'stake_minor' => $stake,
             'total_odds' => $odds,
             'potential_payout_minor' => (int) bcmul((string) $stake, $odds, 0),
+            ...$attributes,
         ]);
         foreach ($picks as [$market, $key]) {
             $this->select($ticket, $market, $key);
@@ -256,6 +257,19 @@ class SettlementServiceTest extends TestCase
         );
     }
 
+    public function test_correct_score_is_won_only_on_the_exact_score(): void
+    {
+        $market = $this->market(key: 'correct_score', odds: ['2-1' => '9.00', '1-1' => '6.50']);
+        $exact = $this->bet([[$market, '2-1']]);
+        $other = $this->bet([[$market, '1-1']]);
+
+        $this->finish($market, '2', '1');
+
+        $this->assertSame(BetTicketStatus::Won, $exact->fresh()->status);
+        $this->assertSame(900_00, $exact->fresh()->payout_minor);
+        $this->assertSame(BetTicketStatus::Lost, $other->fresh()->status);
+    }
+
     public function test_an_unknown_market_is_left_pending_and_reported(): void
     {
         $market = $this->market(key: 'exotic', odds: ['a' => '1.50', 'b' => '2.50']);
@@ -283,6 +297,80 @@ class SettlementServiceTest extends TestCase
 
         $this->assertSame(BetTicketStatus::Won, $ticket->fresh()->status);
         $this->assertSame(1, $this->payouts());
+    }
+
+    public function test_a_match_postponed_beyond_48_hours_is_void_once_the_deadline_passes(): void
+    {
+        $market = $this->market();
+        $ticket = $this->bet([[$market, 'home']]);
+        $planned = $market->event->starts_at;
+        Event::whereKey($market->event_id)->update(['starts_at' => $planned->copy()->addDays(4)]); // décalé de 4 jours
+
+        $this->travelTo($planned->copy()->addHours(47));
+        $this->artisan('settlement:run')->assertSuccessful();
+        $this->assertSame(BetTicketStatus::Pending, $ticket->fresh()->status);
+
+        $this->travelTo($planned->copy()->addHours(49));
+        $this->artisan('settlement:run')->assertSuccessful();
+
+        $this->assertSame(BetTicketStatus::Void, $ticket->fresh()->status);
+        $this->assertSame(1000_00, $this->balance());
+        $selection = $ticket->selections()->sole();
+        $this->assertSame(BetSelectionStatus::Void, $selection->status);
+        $this->assertNull($selection->result_id);
+
+        // Le match est finalement joué : le ticket ne bouge plus.
+        $this->finish($market->fresh(), '2', '1');
+        $this->assertSame(BetTicketStatus::Void, $ticket->fresh()->status);
+        $this->assertSame(1, $this->payouts());
+    }
+
+    public function test_a_match_moved_within_48_hours_is_settled_on_its_score(): void
+    {
+        $market = $this->market();
+        $ticket = $this->bet([[$market, 'home']]);
+        Event::whereKey($market->event_id)->update(['starts_at' => $market->event->starts_at->copy()->addHours(19)]);
+
+        $this->finish($market->fresh(), '2', '1');
+
+        $this->assertSame(BetTicketStatus::Won, $ticket->fresh()->status);
+    }
+
+    public function test_a_match_played_late_beyond_48_hours_is_void_whatever_the_score(): void
+    {
+        $first = $this->market('m1');
+        $second = $this->market('m2');
+        $ticket = $this->bet([[$first, 'home'], [$second, 'home']]); // 2,05 × 2,05
+        Event::whereKey($second->event_id)->update(['starts_at' => $second->event->starts_at->copy()->addDays(3)]);
+
+        $this->finish($first, '1', '0');
+        $this->finish($second->fresh(), '0', '1'); // résultat arrivé avant le rattrapage : annulé quand même
+
+        $this->assertSame(BetTicketStatus::Won, $ticket->fresh()->status);
+        $this->assertSame(205_00, $ticket->fresh()->payout_minor); // 100 × 2,05 × 1
+    }
+
+    public function test_a_match_played_on_time_without_score_waits_for_its_result(): void
+    {
+        $market = $this->market();
+        $ticket = $this->bet([[$market, 'home']]);
+
+        $this->travelTo($market->event->starts_at->copy()->addDays(3));
+        $this->artisan('settlement:run')->assertSuccessful();
+
+        $this->assertSame(BetTicketStatus::Pending, $ticket->fresh()->status);
+    }
+
+    public function test_the_postponement_delay_frozen_on_the_ticket_applies(): void
+    {
+        $market = $this->market();
+        $ticket = $this->bet([[$market, 'home']], attributes: ['rules_snapshot' => ['postponed_void_hours' => 24]]);
+        Event::whereKey($market->event_id)->update(['starts_at' => $market->event->starts_at->copy()->addDays(2)]);
+
+        $this->travelTo($market->event->starts_at->copy()->addHours(25));
+        $this->artisan('settlement:run')->assertSuccessful();
+
+        $this->assertSame(BetTicketStatus::Void, $ticket->fresh()->status);
     }
 
     public function test_settlement_catch_up_is_scheduled(): void

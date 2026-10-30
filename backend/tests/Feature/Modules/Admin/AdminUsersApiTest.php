@@ -42,11 +42,12 @@ class AdminUsersApiTest extends TestCase
 
     public function test_support_sees_minimal_data_only(): void
     {
+        // I2 (D-07) : email et téléphone masqués pour le Support.
         $this->actingAsVerifiedAdmin($this->admin(RoleSlug::Support))
             ->getJson("/api/v1/admin/users/{$this->player->id}")
             ->assertOk()
-            ->assertJsonPath('data.email', 'ana.joueuse@example.com')
-            ->assertJsonPath('data.phone', '34123456')
+            ->assertJsonPath('data.email', 'an•••@example.com')
+            ->assertJsonPath('data.phone', '•••• 3456')
             ->assertJsonMissingPath('data.profile')
             ->assertJsonMissingPath('data.roles');
 
@@ -81,10 +82,16 @@ class AdminUsersApiTest extends TestCase
         User::factory()->withStatus(AccountStatus::Suspended)->create(['email' => 'suspendu@example.com']);
         $support = $this->admin(RoleSlug::Support);
 
+        // Support : email complet seulement (un fragment révélerait les adresses masquées) ; Finance : fragment.
         $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?search=ANA.JOUEUSE@')
             ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?search='.urlencode('ANA.JOUEUSE@EXAMPLE.COM'))
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', (string) $this->player->id);
+        $this->actingAsVerifiedAdmin($this->admin(RoleSlug::Finance))->getJson('/api/v1/admin/users?search=ANA.JOUEUSE@')
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.email', 'ana.joueuse@example.com');
 
         $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?search='.urlencode('+509 3412-3456'))
             ->assertJsonCount(1, 'data')
@@ -96,7 +103,7 @@ class AdminUsersApiTest extends TestCase
 
         $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?status=suspended')
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.email', 'suspendu@example.com');
+            ->assertJsonPath('data.0.email', 'su•••@example.com');
 
         $this->actingAsVerifiedAdmin($support)->getJson('/api/v1/admin/users?role=support')
             ->assertJsonCount(1, 'data');

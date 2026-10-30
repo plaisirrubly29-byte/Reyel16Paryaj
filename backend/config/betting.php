@@ -2,8 +2,8 @@
 
 /*
 | Module Betting — règles d'acceptation d'un pari (P4-03).
-| VALEURS PROVISOIRES en attendant les décisions D-04 (types de paris), D-05 (changement de cote)
-| et D-06 (mises min/max, plafond de gain). Chaque ticket fige la version et les règles appliquées
+| Valeurs validées le 2026-10-29 : décisions D-04 (types de paris), D-05 (changement de cote, report)
+| et D-06 (mises min/max, plafond de gain), voir docs/decisions/. Chaque ticket fige la version et les règles appliquées
 | (rules_version, rules_snapshot) : les modifier ne change jamais un ticket déjà accepté.
 | Montants en unité mineure (centimes de la devise du portefeuille).
 */
@@ -11,7 +11,7 @@
 return [
 
     // À changer à chaque modification d'une règle ci-dessous.
-    'rules_version' => env('BETTING_RULES_VERSION', 'provisoire-2026-10'),
+    'rules_version' => env('BETTING_RULES_VERSION', 'v1-2026-10'),
 
     // Mise par ticket : 10,00 à 50 000,00.
     'min_stake_minor' => (int) env('BETTING_MIN_STAKE_MINOR', 10_00),
@@ -32,5 +32,13 @@ return [
     // D-05 : "reject" — toute cote différente de celle vue par le joueur est refusée (409 odds_changed,
     // avec la nouvelle cote) ; le joueur confirme en renvoyant le pari avec la cote à jour.
     'odds_change_policy' => 'reject',
+
+    // D-05 : match reporté — la sélection est annulée (cote 1) si le match ne commence pas dans ce délai
+    // après l'heure prévue au moment du pari (bet_selections.event_starts_at).
+    'postponed_void_hours' => (int) env('BETTING_POSTPONED_VOID_HOURS', 48),
+
+    // D-05 : un résultat déjà réglé ne peut faire l'objet d'une demande de correction que pendant ce délai
+    // après le premier règlement du match ; au-delà il est définitif (une erreur passe par une correction financière).
+    'result_correction_window_hours' => (int) env('BETTING_RESULT_CORRECTION_HOURS', 72),
 
 ];

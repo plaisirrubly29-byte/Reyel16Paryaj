@@ -38,6 +38,14 @@ interface SportsDataProvider
     public function events(string $sportKey): array;
 
     /**
+     * Marchés supplémentaires d'un seul événement ($markets : "btts,double_chance,correct_score"…), absents de la
+     * liste events(). Chez The Odds API : 1 crédit par marché et par région, pour ce seul match.
+     *
+     * @throws SportsDataException
+     */
+    public function eventMarkets(string $sportKey, string $eventId, string $markets): EventData;
+
+    /**
      * Heures de début des événements à venir d'un sport, sans cotes (gratuit chez The Odds API) :
      * permet de ne pas payer un appel de cotes pour une compétition sans match.
      *

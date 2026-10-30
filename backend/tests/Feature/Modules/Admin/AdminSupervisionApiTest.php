@@ -61,6 +61,24 @@ class AdminSupervisionApiTest extends TestCase
         $this->assertSame(['settlement_overdue'], $keys(RoleSlug::Support));
     }
 
+    public function test_every_super_admin_is_alerted_when_a_role_changes(): void
+    {
+        $target = User::factory()->create();
+        $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin))
+            ->putJson("/api/v1/admin/users/{$target->id}/roles", ['roles' => ['finance'], 'reason' => 'Nouvelle comptable'],
+                ['Idempotency-Key' => (string) Str::uuid()])
+            ->assertOk();
+
+        $alerts = fn (RoleSlug $role) => collect($this->actingAsVerifiedAdmin($this->admin($role))
+            ->getJson('/api/v1/admin/alerts')->assertOk()->json('data'));
+
+        $this->assertSame('1 changement(s) de rôles administratifs sur 72 h', $alerts(RoleSlug::SuperAdmin)->firstWhere('key', 'role_changes')['title']);
+        $this->assertNull($alerts(RoleSlug::Support)->firstWhere('key', 'role_changes'));
+
+        $this->travel(73)->hours();
+        $this->assertNull($alerts(RoleSlug::SuperAdmin)->firstWhere('key', 'role_changes'));
+    }
+
     public function test_no_alert_when_everything_is_fine(): void
     {
         $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin))
