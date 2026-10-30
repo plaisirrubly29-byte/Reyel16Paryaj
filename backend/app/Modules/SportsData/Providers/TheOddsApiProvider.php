@@ -17,6 +17,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -167,16 +168,22 @@ class TheOddsApiProvider implements SportsDataProvider
 
         foreach ($bookmakers as $bookmaker) {
             foreach ($bookmaker['markets'] ?? [] as $market) {
-                $markets[] = new MarketData(
-                    key: (string) $market['key'],
-                    bookmaker: (string) $bookmaker['key'],
-                    updatedAt: CarbonImmutable::parse($market['last_update'] ?? $bookmaker['last_update']),
-                    selections: array_map(fn (array $o) => new SelectionData(
-                        name: (string) $o['name'],
-                        odds: SelectionData::oddsFromProvider($o['price']),
-                        point: isset($o['point']) ? (string) $o['point'] : null,
-                    ), $market['outcomes'] ?? []),
-                );
+                try {
+                    $markets[] = new MarketData(
+                        key: (string) $market['key'],
+                        bookmaker: (string) $bookmaker['key'],
+                        updatedAt: CarbonImmutable::parse($market['last_update'] ?? $bookmaker['last_update']),
+                        selections: array_map(fn (array $o) => new SelectionData(
+                            name: (string) $o['name'],
+                            odds: SelectionData::oddsFromProvider($o['price']),
+                            point: isset($o['point']) ? (string) $o['point'] : null,
+                        ), $market['outcomes'] ?? []),
+                    );
+                } catch (InvalidArgumentException $e) {
+                    // Une cote invalide d'un bookmaker (ex. 1.00) écarte ce seul marché, pas tout le match.
+                    Log::warning('sports_data.invalid_market', ['provider' => $this->name(), 'id' => $event['id'] ?? null,
+                        'bookmaker' => $bookmaker['key'] ?? null, 'market' => $market['key'] ?? null, 'error' => $e->getMessage()]);
+                }
             }
         }
 

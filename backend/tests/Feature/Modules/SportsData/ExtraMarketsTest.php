@@ -35,6 +35,9 @@ class ExtraMarketsTest extends TestCase
         $this->artisan('sports-data:extra-markets', ['--dry-run' => true])
             ->expectsOutputToContain('2 match(s), 3 crédit(s) par match, coût estimé : 6 crédit(s)')
             ->assertSuccessful();
+        $this->artisan('sports-data:extra-markets', ['--dry-run' => true, '--event' => ['fake-2']])
+            ->expectsOutputToContain('1 match(s), 3 crédit(s) par match, coût estimé : 3 crédit(s)')
+            ->assertSuccessful();
 
         $this->assertSame(0, Market::where('key', 'correct_score')->count());
     }

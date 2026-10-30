@@ -201,6 +201,17 @@ class TheOddsApiProviderTest extends TestCase
         $this->assertCount(1, $this->provider()->events('soccer_epl'));
     }
 
+    public function test_an_invalid_odd_drops_only_its_market(): void
+    {
+        $payload = $this->oddsPayload();
+        $payload[0]['bookmakers'][0]['markets'][0]['outcomes'][0]['price'] = 1.0; // Winamax : cote 1.00
+        Http::fake(['*' => Http::response($payload, 200, $this->quotaHeaders())]);
+
+        $event = $this->provider()->events('soccer_epl')[0];
+
+        $this->assertSame(['unibet_fr'], array_map(fn ($m) => $m->bookmaker, $event->markets));
+    }
+
     public function test_results_are_mapped_with_scores(): void
     {
         Http::fake(['*' => Http::response([[

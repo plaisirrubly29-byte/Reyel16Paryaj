@@ -22,6 +22,7 @@ class ExtraMarketsCommand extends Command
         {--hours=72 : Matchs qui commencent dans ce délai}
         {--limit=0 : Nombre maximum de matchs (0 : tous)}
         {--competition=* : Clé(s) de compétition, par défaut toutes les compétitions de football actives}
+        {--event=* : Identifiant(s) du match chez le fournisseur (relance d'un échec)}
         {--dry-run : Affiche les matchs et le coût sans appeler le fournisseur}';
 
     protected $description = 'Charge double chance, les deux marquent et score exact match par match (consomme des crédits)';
@@ -37,6 +38,7 @@ class ExtraMarketsCommand extends Command
             ->where('provider', $provider->name())
             ->where('status', EventStatus::Scheduled)
             ->whereBetween('starts_at', [now(), now()->addHours((int) $this->option('hours'))])
+            ->when($this->option('event'), fn ($q, array $ids) => $q->whereIn('external_id', $ids))
             ->whereHas('competition', fn ($q) => $q->where('is_active', true)
                 ->when($this->option('competition'),
                     fn ($c, array $keys) => $c->whereIn('external_key', $keys),
