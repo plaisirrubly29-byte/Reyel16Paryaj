@@ -167,6 +167,27 @@ class ResultCorrectionApiTest extends TestCase
         $this->assertSame(1, Result::count());
     }
 
+    public function test_a_role_given_by_an_admin_less_than_24_hours_ago_cannot_approve(): void
+    {
+        $this->bet($this->player(), [['fake-1', 'home']]);
+        $this->finish('2', '1');
+        $id = $this->requestCorrection()->assertCreated()->json('data.id');
+
+        // Un Super Admin donne le rôle Opérations à un second compte, puis s'en servirait pour valider.
+        $newcomer = User::factory()->create();
+        $this->actingAsVerifiedAdmin($this->admin(RoleSlug::SuperAdmin))
+            ->putJson("/api/v1/admin/users/{$newcomer->id}/roles", ['roles' => ['operations'], 'reason' => 'Renfort du week-end'],
+                ['Idempotency-Key' => (string) Str::uuid()])
+            ->assertOk();
+        $newcomer->refresh();
+
+        $this->approve($id, $newcomer)->assertForbidden()->assertJsonPath('error.code', 'approver_role_too_recent');
+        $this->assertSame(1, Result::count());
+
+        $this->travel(25)->hours();
+        $this->approve($id, $newcomer->fresh())->assertOk();
+    }
+
     // Demande et aperçu
 
     public function test_a_request_changes_nothing_and_shows_its_impact(): void

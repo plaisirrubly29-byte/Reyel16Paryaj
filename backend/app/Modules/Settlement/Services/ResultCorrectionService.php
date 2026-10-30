@@ -117,7 +117,7 @@ class ResultCorrectionService
     }
 
     /**
-     * @throws ApiException self_approval_forbidden | correction_not_pending | result_changed
+     * @throws ApiException self_approval_forbidden | approver_role_too_recent | correction_not_pending | result_changed
      */
     public function approve(User $approver, ResultCorrection $correction, string $reason): ResultCorrection
     {
@@ -126,6 +126,11 @@ class ResultCorrectionService
 
             if ($correction->requested_by === $approver->id) {
                 throw new ApiException('self_approval_forbidden', __('Une correction doit être validée par un autre administrateur.'), 403);
+            }
+
+            // M3 (D-07) : un compte qui vient de recevoir son rôle ne sert pas de second validateur.
+            if ($approver->holdsPermissionOnlyRecently('results.approve', (int) config('identity.approval_role_min_age_hours'))) {
+                throw new ApiException('approver_role_too_recent', __('Votre rôle est trop récent pour valider une demande.'), 403);
             }
 
             $event = Event::whereKey($correction->event_id)->lockForUpdate()->firstOrFail();

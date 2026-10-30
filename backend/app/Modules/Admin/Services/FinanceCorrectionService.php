@@ -71,7 +71,7 @@ class FinanceCorrectionService
     }
 
     /**
-     * @throws ApiException self_approval_forbidden, correction_not_pending, entry_not_correctable, wallet_frozen
+     * @throws ApiException self_approval_forbidden, approver_role_too_recent, correction_not_pending, entry_not_correctable, wallet_frozen
      */
     public function approve(User $approver, FinanceCorrection $correction, string $reason): FinanceCorrection
     {
@@ -80,6 +80,11 @@ class FinanceCorrectionService
 
             if ($correction->requested_by === $approver->id) {
                 throw new ApiException('self_approval_forbidden', __('Une correction doit être validée par un autre administrateur.'), 403);
+            }
+
+            // M3 (D-07) : un compte qui vient de recevoir son rôle ne sert pas de second validateur.
+            if ($approver->holdsPermissionOnlyRecently('finance.approve', (int) config('identity.approval_role_min_age_hours'))) {
+                throw new ApiException('approver_role_too_recent', __('Votre rôle est trop récent pour valider une demande.'), 403);
             }
 
             $entry = LedgerEntry::whereKey($correction->ledger_entry_id)->lockForUpdate()->firstOrFail();

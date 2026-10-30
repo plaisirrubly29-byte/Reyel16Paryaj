@@ -38,9 +38,9 @@ Le **règlement** des tickets est automatique (jobs) ; il n'est relancé que par
 | Motif obligatoire pour toute action sensible (suspension, masquage de marché, correction, attribution de rôle) ; journalisé dans l'audit | ✅ Dans le code |
 | Personne ne modifie ses propres rôles ; les permissions d'un rôle ne changent que dans le code, par PR | ✅ Dans le code |
 | Seul un Super Admin suspend un autre administrateur | ✅ Dans le code |
-| **M3** — On ne peut ni retirer son rôle ni suspendre le **dernier** Super Admin | ⚠️ À coder |
-| **M3** — Un rôle reçu depuis **moins de 24 h** ne permet pas de valider (`*.approve`) : un Super Admin ne peut pas créer un second compte et s'en servir aussitôt pour valider ses propres demandes | ⚠️ À coder |
-| **M3** — Chaque attribution ou retrait de rôle crée une alerte visible par tous les Super Admins (centre d'alertes) | ⚠️ À coder |
+| **M3** — On ne peut ni retirer son rôle ni suspendre le **dernier** Super Admin | ✅ Garanti par construction : seul un Super Admin gère les rôles et suspend un administrateur, jamais sur lui-même, et `identity:grant-role` ne fait qu'ajouter — il en reste donc toujours un |
+| **M3** — Un rôle attribué par un administrateur depuis **moins de 24 h** ne permet pas de valider (`*.approve`, erreur `approver_role_too_recent`) : un Super Admin ne peut pas créer un second compte et s'en servir aussitôt pour valider ses propres demandes. Un rôle donné depuis le serveur (`identity:grant-role`) n'a pas ce délai | ✅ Dans le code (`IDENTITY_APPROVAL_ROLE_MIN_AGE_HOURS`) |
+| **M3** — Chaque attribution ou retrait de rôle crée une alerte visible par tous les Super Admins (centre d'alertes, 72 h) | ✅ Dans le code |
 
 ## 4. Données visibles par le Support (I2)
 

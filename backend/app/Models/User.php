@@ -117,4 +117,17 @@ class User extends Authenticatable
     {
         return $this->permissionSlugs()->contains($permission);
     }
+
+    /**
+     * $permission n'est tenue que par des rôles attribués par un administrateur depuis moins de $hours heures
+     * (M3, décision D-07). Un rôle donné depuis le serveur (identity:grant-role, assigned_by null) compte comme ancien.
+     */
+    public function holdsPermissionOnlyRecently(string $permission, int $hours): bool
+    {
+        $this->loadMissing('roles.permissions');
+        $granting = $this->roles->filter(fn (Role $role) => $role->permissions->contains('slug', $permission));
+
+        return $granting->isNotEmpty() && $granting->every(fn (Role $role) => $role->pivot->assigned_by !== null
+            && $role->pivot->created_at?->gt(now()->subHours($hours)));
+    }
 }

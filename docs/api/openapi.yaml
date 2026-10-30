@@ -1138,7 +1138,7 @@ paths:
       tags: [Admin]
       summary: Valider une correction (second administrateur, motif requis, audité)
       description: |
-        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden). Dans une transaction : nouvelle
+        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden), ni un rôle attribué par un administrateur depuis moins de 24 h (403 approver_role_too_recent). Dans une transaction : nouvelle
         version du résultat (source manual, validateur, motif), réévaluation des tickets déjà réglés — gain ou
         remboursement précédent compensé (reversal), nouvelle écriture si besoin, nouvelle révision du règlement. Un
         gain repris peut rendre le solde négatif. Un combiné perdu sur ce match redevient « pending » si d'autres matchs
@@ -1155,7 +1155,7 @@ paths:
         "200":
           description: Correction appliquée
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
-        "403": { description: "`forbidden` ou `self_approval_forbidden`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: "`forbidden`, `self_approval_forbidden` ou `approver_role_too_recent`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: "`correction_not_pending` ou `result_changed`"
@@ -1364,7 +1364,7 @@ paths:
     post:
       tags: [Admin]
       summary: Valider une correction et passer l'écriture compensatoire (permission finance.approve, motif requis)
-      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`).
+      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`) dont le rôle n'a pas été attribué par un administrateur depuis moins de 24 h (`403 approver_role_too_recent`).
       x-task: P6-04
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1378,7 +1378,7 @@ paths:
           description: Correction validée (status approved, reversal_entry_id renseigné)
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
         "403":
-          description: "Permission refusée, ou `self_approval_forbidden`"
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
