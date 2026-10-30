@@ -33,7 +33,11 @@ class LedgerEntry extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'wallet_id', 'type', 'amount_minor', 'currency', 'balance_after_minor', 'reference', 'reversal_of_id',
+        'related_type', 'related_id', 'description', 'metadata', 'created_by', 'created_at',
+    ];
 
     protected function casts(): array
     {

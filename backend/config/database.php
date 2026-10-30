@@ -101,6 +101,10 @@ return [
             // Valeurs des requêtes masquées dans la partie « SQL: » des messages d'erreur (revue P8-02, M5).
             // La ligne DETAIL de PostgreSQL, qui cite aussi des valeurs, est retirée par App\Support\QueryErrorSanitizer.
             'mask_bindings_in_exception_messages' => true,
+            // Connexion persistante (php-fpm, Staging/Production) : chaque processus garde sa connexion au lieu d'en
+            // ouvrir une par requête (nouveau processus PostgreSQL + authentification SCRAM). Test de charge P8-03 : c'était
+            // le premier coût du catalogue. Désactivée par défaut (développement, tests, commandes).
+            'options' => extension_loaded('pdo_pgsql') ? [PDO::ATTR_PERSISTENT => (bool) env('DB_PERSISTENT', false)] : [],
         ],
 
         'sqlsrv' => [

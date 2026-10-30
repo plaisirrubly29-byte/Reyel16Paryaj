@@ -18,7 +18,11 @@ use Illuminate\Support\Carbon;
  */
 class BettingLimit extends Model
 {
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'user_id', 'period', 'amount_minor', 'pending_amount_minor', 'pending_effective_at', 'created_at',
+        'updated_at',
+    ];
 
     protected function casts(): array
     {

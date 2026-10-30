@@ -28,7 +28,11 @@ class IdempotencyKey extends Model
     /** Durée de conservation d'une clé (heures). */
     public const RETENTION_HOURS = 24;
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'scope', 'key', 'method', 'path', 'fingerprint', 'status', 'response_status', 'response_body',
+        'response_content_type', 'created_at', 'updated_at',
+    ];
 
     /** Purge quotidienne : `php artisan model:prune` (planifié dans routes/console.php). */
     public function prunable(): Builder

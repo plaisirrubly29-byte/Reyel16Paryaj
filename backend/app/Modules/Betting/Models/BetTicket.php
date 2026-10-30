@@ -47,7 +47,12 @@ class BetTicket extends Model
         'potential_payout_minor', 'rules_version', 'rules_snapshot', 'placed_at',
     ];
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'reference', 'user_id', 'wallet_id', 'type', 'status', 'stake_minor', 'currency', 'total_odds',
+        'potential_payout_minor', 'payout_minor', 'rules_version', 'rules_snapshot', 'placed_at', 'settled_at',
+        'created_at', 'updated_at', 'placement_key',
+    ];
 
     /** @var array<string, mixed> */
     protected $attributes = [
