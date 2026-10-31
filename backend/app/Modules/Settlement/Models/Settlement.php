@@ -29,7 +29,11 @@ class Settlement extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'bet_ticket_id', 'revision', 'status', 'payout_minor', 'currency', 'ledger_entry_id', 'results',
+        'created_at',
+    ];
 
     protected function casts(): array
     {

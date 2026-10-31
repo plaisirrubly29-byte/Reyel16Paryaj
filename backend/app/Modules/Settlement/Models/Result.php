@@ -37,7 +37,11 @@ class Result extends Model
 
     public const SOURCE_MANUAL = 'manual';
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'event_id', 'version', 'status', 'home_score', 'away_score', 'source', 'external_id',
+        'provider_updated_at', 'supersedes_id', 'correction_reason', 'entered_by', 'created_at',
+    ];
 
     protected function casts(): array
     {

@@ -21,6 +21,8 @@ RUN apt-get update \
 
 COPY docker/production/php.ini "$PHP_INI_DIR/conf.d/zz-reyel16.ini"
 COPY docker/production/php-fpm.conf /usr/local/etc/php-fpm.d/zz-reyel16.conf
+# Processus php-fpm au plus (docker/production/php-fpm.conf) ; à fixer selon les vCPU du serveur dans le .env.
+ENV PHP_FPM_MAX_CHILDREN=10
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/backend

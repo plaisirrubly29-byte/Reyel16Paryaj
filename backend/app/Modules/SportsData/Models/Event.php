@@ -23,7 +23,11 @@ use Illuminate\Support\Carbon;
  */
 class Event extends Model
 {
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'competition_id', 'provider', 'external_id', 'home_team_id', 'away_team_id', 'starts_at', 'status',
+        'home_score', 'away_score', 'result_received_at', 'last_synced_at', 'created_at', 'updated_at',
+    ];
 
     protected function casts(): array
     {

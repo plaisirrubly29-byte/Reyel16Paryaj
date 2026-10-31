@@ -23,7 +23,11 @@ use Illuminate\Support\Carbon;
  */
 class Market extends Model
 {
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'event_id', 'key', 'status', 'suspension_reason', 'odds_version', 'source_bookmaker', 'odds_updated_at',
+        'created_at', 'updated_at', 'line',
+    ];
 
     protected function casts(): array
     {
