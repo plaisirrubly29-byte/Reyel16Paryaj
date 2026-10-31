@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P0-07 (débloque P1-06 Staging, P8-04 sauvegardes, P9-02 monitoring) |
-| **Statut** | 🟡 Proposition à valider |
+| **Statut** | ⏸ Reportée (2026-10-30) — la proposition s'applique au Staging et à la démo ; à valider avant la production |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-15 |
 | **Dépend de** | D-01/D-09 question J-9 (les données doivent-elles rester dans le pays ?) |
