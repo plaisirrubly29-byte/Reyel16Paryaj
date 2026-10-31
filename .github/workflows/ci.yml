@@ -4,9 +4,12 @@ on:
   pull_request:
   push:
     branches: [main, develop]
+  # Appelé par deploy-staging.yml : tests du commit exact avant tout déploiement (P1-06).
+  workflow_call:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # github.workflow : l'appel depuis Deploy Staging n'annule pas la CI du même push (et inversement).
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -50,13 +53,39 @@ jobs:
       - name: Migrations on PostgreSQL
         env:
           DB_HOST: 127.0.0.1
-        run: php artisan migrate --force
+        run: php artisan migrate --force --seed
+
+      - name: Migrations reversible (rollback complet puis re-migration)
+        env:
+          DB_HOST: 127.0.0.1
+        run: |
+          php artisan migrate:reset --force
+          php artisan migrate --force
+
+      # migrate:fresh supprime les tables sans appeler down() : les fonctions SQL doivent pouvoir être recréées.
+      - name: Migrations rejouables (migrate:fresh sur une base existante)
+        env:
+          DB_HOST: 127.0.0.1
+        run: php artisan migrate:fresh --force --seed
 
       - name: Tests
         run: php artisan test
 
       - name: Dependency audit
         run: composer audit
+
+  api-contract:
+    name: Contrat API (OpenAPI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Lint docs/api/openapi.yaml
+        run: npx --yes @redocly/cli@1.34.21 lint docs/api/openapi.yaml
 
   frontend:
     name: Frontend (React + TypeScript)
@@ -75,5 +104,90 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
+
+  e2e:
+    name: E2E (parcours complet, Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: reyel16
+          POSTGRES_USER: reyel16
+          POSTGRES_PASSWORD: secret
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reyel16"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      # Cache partagé entre le serveur et les commandes artisan du test (matchs de scénario du faux fournisseur).
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DB_HOST: 127.0.0.1
+      REDIS_HOST: 127.0.0.1
+      # Frontend construit, servi par vite preview : /api et /sanctum relayés vers le backend (même origine).
+      APP_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:4173
+      SANCTUM_STATEFUL_DOMAINS: localhost:4173
+      SPORTS_DATA_PROVIDER: fake
+      PHP_CLI_SERVER_WORKERS: 4
+      E2E_BASE_URL: http://localhost:4173
+      E2E_ARTISAN: php backend/artisan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql, bcmath
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Backend
+        working-directory: backend
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force --seed
+          php artisan serve --host=127.0.0.1 --port=8000 > ../backend-serve.log 2>&1 &
+
+      - name: Frontend (build de production)
+        working-directory: frontend
+        env:
+          VITE_API_URL: /api/v1
+        run: |
+          npm ci
+          npm run build
+          npx vite preview --port 4173 --strictPort > ../frontend-preview.log 2>&1 &
+
+      - name: Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          curl -fsS --retry 20 --retry-delay 2 --retry-all-errors http://localhost:4173/api/v1/health
+          npx playwright test
+
+      - name: Rapport et traces en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-rapport
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            backend-serve.log
+            frontend-preview.log
+          retention-days: 7

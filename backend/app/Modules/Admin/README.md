@@ -2,7 +2,7 @@
 
 **Namespace :** `App\Modules\Admin`
 **Livraison :** Phase 6
-**Responsable :** _à assigner_
+**Responsable :** Rubly PLAISIR (utilisateurs, tickets, finance) · Benginio Jean-Baptiste (événements, marchés, résultats)
 
 ## Responsabilités
 
@@ -17,13 +17,48 @@
 
 ## Tables (modèle de données initial)
 
-- (utilise les tables des autres modules)
+- `finance_corrections` (P6-04) : corrections financières à double validation.
+- Sinon, lecture des tables des autres modules (tickets, ledger) — jamais d'écriture directe dans le ledger.
 
 ## Routes prévues
 
-- `GET/PATCH /api/v1/admin/events/{id}`
-- `GET/PATCH /api/v1/admin/markets/{id}`
-- `GET/PATCH /api/v1/admin/users/{id}`
+- `GET /api/v1/admin/events`, `GET /api/v1/admin/events/{id}` (P6-02, livrées) : origine, synchronisation, marchés de tous statuts
+- `GET/PATCH /api/v1/admin/markets/{id}` (P6-02, livrées) : fraîcheur ; suspendre / rouvrir avec motif
+  (écriture par `SportsData\Services\MarketAvailabilityService`, auditée `market.suspended` / `market.reopened`)
+- `GET /api/v1/admin/users`, `GET/PATCH /api/v1/admin/users/{id}` (P6-03, livrées)
+- Tickets et finance (P6-04, livrées) :
+  - `GET /api/v1/admin/tickets`, `GET /api/v1/admin/tickets/{id}` — `tickets.view` (tous les rôles) ;
+  - `GET /api/v1/admin/ledger`, `GET /api/v1/admin/finance/reconciliation`, `GET /api/v1/admin/finance/corrections` — `ledger.view` ;
+  - `POST /api/v1/admin/finance/corrections` — `finance.correct` ;
+  - `POST /api/v1/admin/finance/corrections/{id}/approve|reject` — `finance.approve`.
+
+## Corrections financières (double validation)
+
+1. Un administrateur **demande** la compensation d'une écriture, avec un motif : rien n'est encore écrit.
+2. Un **autre** administrateur la **valide** (`LedgerService::reverse` passe l'écriture compensatoire) ou la **refuse**.
+   Le demandeur ne peut jamais valider sa propre demande (`403 self_approval_forbidden`) ; il peut la retirer (refus).
+3. Chaque étape est auditée avec son motif (`finance.correction_requested|approved|rejected`).
+
+V1 : seules les écritures **sans ticket** (crédits simulés) sont corrigeables. Compenser la mise ou le gain d'un ticket
+le rendrait incohérent avec son statut : ces erreurs passent par la correction de résultat (P5-06).
+
+## Rapprochement
+
+`ReconciliationService` (lecture seule) : totaux par devise et par type, et trois contrôles d'écarts —
+chaîne des soldes de chaque portefeuille, net des écritures de chaque ticket (`gain versé ?? 0 - mise`),
+écritures rattachées à un ticket inexistant.
+
+## Paramètres versionnés (P6-08)
+
+`PlatformSettings` : mises min/max, plafond de gain, combinés, direct, crédit de bienvenue et fournisseur
+(`PlatformSettings::DEFINITIONS`). Les valeurs par défaut viennent de `config/` (.env) ; chaque modification
+(`PUT /admin/settings`, permission `settings.update`, motif) crée une version complète dans `setting_versions`
+(append-only, déclencheur PostgreSQL), auditée (`settings.updated`). La dernière version s'applique par-dessus
+`config()` au démarrage de chaque requête ou commande : les services lisent toujours `config('betting.…')`.
+
+- `base_version` : version affichée à l'administrateur ; une version enregistrée entre-temps donne `409 settings_changed`.
+- Les tickets déjà placés gardent leurs règles (`rules_snapshot`).
+- Un processus long (`queue:work`) garde les valeurs de son démarrage : le redémarrer après une modification.
 
 ## Règles à respecter
 

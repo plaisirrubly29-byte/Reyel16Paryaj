@@ -12,22 +12,22 @@
       "name": "Rubly PLAISIR",
       "title": "Chef de projet & développeur full-stack",
       "github": "plaisirrubly29-byte",
-      "focus": "Pilotage (juridique, hébergement, lancement) + tout le frontend (site joueur et admin) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI & Staging"
+      "focus": "Conception fonctionnelle (fournisseur de données, catalogue V1, règles de cotes, paramètres financiers, rôles admin) + frontend site joueur et admin (authentification, vue d’ensemble, Utilisateurs & Tickets) + données sportives The Odds API (tables, synchro, catalogue), paris et résultats + Compte, argent & administration — Identité/RBAC/MFA, Wallet & Ledger, Règlement, Audit, CI"
     },
     "dev-b": {
       "name": "Benginio Jean-Baptiste",
       "title": "Développeur full-stack",
       "github": "benginio",
-      "focus": "Infra & opérations — Docker, logs, admin Événements, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité), sauvegardes, monitoring"
-    },
-    "analyst": {
-      "name": "Widsondelne7376",
-      "title": "Analyste — conception",
-      "github": "widsondelne7376-design",
-      "focus": "Conception fonctionnelle — règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin), étude du fournisseur de données"
+      "focus": "Pilotage (juridique, hébergement, lancement) et Payments Adapter + Infra & opérations — Docker, logs, déploiement Staging, sauvegardes, monitoring ; admin Événements & Résultats (API et écrans), écrans Finance, Paramètres & Audit, correction de résultat auditée, jeu responsable ; QA et relecture croisée (tests d’accès, tickets, permissions, E2E, charge, sécurité)"
     }
   },
   "advisors": [
+    {
+      "name": "Widsondelne7376",
+      "title": "Analyste — conception",
+      "github": "widsondelne7376-design",
+      "focus": "Relit les règles métier V1 (catalogue, cotes, paramètres financiers, rôles admin). Aucune tâche assignée."
+    },
     {
       "name": "Marckendy Fevrier",
       "title": "Analyste conseil (neutre)",
@@ -108,7 +108,7 @@
         "Décision écrite dans docs/decisions.md",
         "Liste des obligations (âge, KYC, jeu responsable) consignée"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 0
     },
     {
@@ -123,7 +123,7 @@
         "Accès sandbox obtenu (clé stockée hors du dépôt)",
         "Documentation de l'API fournisseur liée dans docs/decisions.md"
       ],
-      "owner": "analyst",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -137,7 +137,7 @@
         "Liste fermée des sports et marchés V1",
         "Décision simple/combiné consignée"
       ],
-      "owner": "analyst",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -151,7 +151,7 @@
         "Règles écrites avec exemples chiffrés",
         "Validées par le propriétaire du projet"
       ],
-      "owner": "analyst",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -164,7 +164,7 @@
       "acceptance": [
         "Devise(s), règle d'arrondi, min/max et plafonds consignés"
       ],
-      "owner": "analyst",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -178,7 +178,7 @@
         "Matrice validée",
         "Actions nécessitant une double validation identifiées"
       ],
-      "owner": "analyst",
+      "owner": "dev-a",
       "wave": 0
     },
     {
@@ -191,7 +191,7 @@
       "acceptance": [
         "Choix documenté avec coût estimé"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 0
     },
     {
@@ -280,7 +280,7 @@
       "depends": [
         "P0-07"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 4
     },
     {
@@ -721,7 +721,7 @@
         "P5-05",
         "P6-01"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 5
     },
     {
@@ -842,7 +842,7 @@
         "P6-05",
         "P6-02"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 5
     },
     {
@@ -880,7 +880,7 @@
         "P6-04",
         "P6-01"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 6
     },
     {
@@ -917,7 +917,7 @@
         "P5-02"
       ],
       "blocked": true,
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 6
     },
     {
@@ -1010,7 +1010,7 @@
         "P8-02",
         "P8-04"
       ],
-      "owner": "dev-a",
+      "owner": "dev-b",
       "wave": 6
     },
     {

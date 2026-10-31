@@ -54,6 +54,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Frontend (liens envoyés par email, CORS).
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
@@ -66,6 +69,10 @@ return [
     */
 
     'timezone' => 'UTC',
+
+    // Fuseau d'affichage et de découpage des journées (rapports, filtres « aujourd'hui », « mois en cours »).
+    // Les dates restent stockées en UTC ; seules les bornes de période et l'affichage utilisent ce fuseau.
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'America/Port-au-Prince'),
 
     /*
     |--------------------------------------------------------------------------

@@ -1,9 +1,20 @@
 <?php
 
+use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\RequireIdempotencyKey;
+use App\Http\Middleware\SecurityHeaders;
+use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
+use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
+use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
+use App\Modules\Monitoring\Http\Middleware\CountApiResponses;
+use App\Support\Http\ApiErrorRenderer;
+use App\Support\QueryErrorSanitizer;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,11 +24,55 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // Commandes artisan des modules (ex. sports-data:check, settlement:import-results, identity:grant-role).
+    ->withCommands([
+        __DIR__.'/../app/Modules/SportsData/Console',
+        __DIR__.'/../app/Modules/Settlement/Console',
+        __DIR__.'/../app/Modules/IdentityAccess/Console',
+        __DIR__.'/../app/Modules/Monitoring/Console',
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Identifiant de corrélation X-Request-Id (P1-04) : en tête, pour figurer dans tous les logs de la requête.
+        $middleware->prepend(AssignRequestId::class);
+
+        // En-têtes de sécurité (nosniff, DENY, CSP, Referrer-Policy, HSTS en HTTPS) sur toutes les réponses (P8-02, F13) :
+        // en tête de pile, pour couvrir aussi les réponses rendues avant la route (préflight CORS, maintenance, 413).
+        $middleware->prepend(SecurityHeaders::class);
+
+        // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
+        $middleware->statefulApi();
+
+        // Compteurs des réponses de l'API et des 5xx pour l'alerte « erreurs API » (P9-02, monitoring:check).
+        $middleware->appendToGroup('api', CountApiResponses::class);
+
+        // L'API ne redirige jamais : un invité reçoit 401 "unauthenticated".
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/');
+
+        $middleware->alias([
+            'idempotent' => RequireIdempotencyKey::class,
+            'permission' => RequirePermission::class,
+            'active' => EnsureAccountIsActive::class,
+            'mfa' => EnsureMfaVerified::class,
+        ]);
+
+        // Permissions vérifiées AVANT la résolution des {modèles} de l'URL : sans permission, 403 que
+        // l'identifiant existe ou non (pas de sondage des identifiants).
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureAccountIsActive::class);
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureMfaVerified::class);
+        $middleware->prependToPriorityList(SubstituteBindings::class, RequirePermission::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Erreurs SQL : sans la ligne DETAIL de PostgreSQL, qui cite les valeurs refusées (revue P8-02, M5).
+        $exceptions->map(fn (QueryException $e) => QueryErrorSanitizer::sanitize($e));
+
+        // Format d'erreur unique de l'API (docs/api/README.md).
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return (new ApiErrorRenderer)($e);
+            }
+        });
     })->create();

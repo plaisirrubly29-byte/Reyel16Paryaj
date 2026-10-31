@@ -7,11 +7,11 @@
 
 | Rôle | Périmètre | Membre(s) |
 |---|---|---|
-| `product` | Chef de projet / propriétaire — décisions, conformité, validation | Rubly PLAISIR, Widsondelne7376 |
-| `backend-core` | Backend 1 — Identité, Wallet & Ledger, Règlement, Audit | Rubly PLAISIR |
+| `product` | Chef de projet / propriétaire — décisions, conformité, validation | Benginio Jean-Baptiste, Rubly PLAISIR |
+| `backend-core` | Backend 1 — Identité, Wallet & Ledger, Règlement, Audit | Rubly PLAISIR, Benginio Jean-Baptiste |
 | `backend-data` | Backend 2 — Données sportives, Catalogue, Tickets | Rubly PLAISIR, Benginio Jean-Baptiste |
 | `frontend-public` | Frontend 1 — Site public et espace joueur | Rubly PLAISIR |
-| `frontend-admin` | Frontend 2 — Panneau d'administration | Rubly PLAISIR |
+| `frontend-admin` | Frontend 2 — Panneau d'administration | Rubly PLAISIR, Benginio Jean-Baptiste |
 | `devops-qa` | DevOps / QA — CI, environnements, tests E2E, sécurité | Benginio Jean-Baptiste, Rubly PLAISIR |
 
 Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
@@ -22,13 +22,13 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P0-01 | Valider le territoire, le cadre juridique et les licences | Rubly PLAISIR | 0 | compliance | — |
-| P0-02 | Choisir le fournisseur de données sportives et de cotes | Widsondelne7376 | 0 | sports-data | — |
-| P0-03 | Définir sports, compétitions, marchés et types de paris de la V1 | Widsondelne7376 | 0 | catalogue | — |
-| P0-04 | Politique de changement de cote, annulation, report et correction de résultat | Widsondelne7376 | 0 | betting | — |
-| P0-05 | Devise, arrondi, mises min/max et plafonds de gain | Widsondelne7376 | 0 | wallet | — |
-| P0-06 | Rôles administratifs, double validation et limites d'action | Widsondelne7376 | 0 | admin | — |
-| P0-07 | Hébergement, disponibilité, sauvegardes et rétention | Rubly PLAISIR | 0 | infra | — |
+| P0-01 | Valider le territoire, le cadre juridique et les licences | Benginio Jean-Baptiste | 0 | compliance | — |
+| P0-02 | Choisir le fournisseur de données sportives et de cotes | Rubly PLAISIR | 0 | sports-data | — |
+| P0-03 | Définir sports, compétitions, marchés et types de paris de la V1 | Rubly PLAISIR | 0 | catalogue | — |
+| P0-04 | Politique de changement de cote, annulation, report et correction de résultat | Rubly PLAISIR | 0 | betting | — |
+| P0-05 | Devise, arrondi, mises min/max et plafonds de gain | Rubly PLAISIR | 0 | wallet | — |
+| P0-06 | Rôles administratifs, double validation et limites d'action | Rubly PLAISIR | 0 | admin | — |
+| P0-07 | Hébergement, disponibilité, sauvegardes et rétention | Benginio Jean-Baptiste | 0 | infra | — |
 
 ## Phase 1 — Architecture & socle
 
@@ -41,7 +41,7 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | P1-03 | Conventions API : format JSON, erreurs, pagination, OpenAPI | Rubly PLAISIR | 1 | core | — |
 | P1-04 | Journalisation structurée et identifiant de requête | Benginio Jean-Baptiste | 1 | core | — |
 | P1-05 | Socle frontend : design de base, gestion d'état serveur, gestion des erreurs API | Rubly PLAISIR | 1 | core | — |
-| P1-06 | Déploiement Staging automatisé | Rubly PLAISIR | 4 | infra | P0-07 |
+| P1-06 | Déploiement Staging automatisé | Benginio Jean-Baptiste | 4 | infra | P0-07 |
 
 ## Phase 2 — Identité & rôles
 
@@ -95,7 +95,7 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | P5-03 | API portefeuille en lecture | Rubly PLAISIR | 3 | wallet | P5-02 |
 | P5-04 | Migrations résultats/règlements et import de résultats de test | Rubly PLAISIR | 3 | settlement | P3-02 |
 | P5-05 | Service de règlement idempotent | Rubly PLAISIR | 5 | settlement | P5-02, P5-04, P4-03 |
-| P5-06 | Correction de résultat auditée | Rubly PLAISIR | 5 | settlement | P5-05, P6-01 |
+| P5-06 | Correction de résultat auditée | Benginio Jean-Baptiste | 5 | settlement | P5-05, P6-01 |
 | P5-07 | Page portefeuille | Rubly PLAISIR | 4 | wallet | P5-03 |
 
 ## Phase 6 — Administration
@@ -109,9 +109,9 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 | P6-03 | API admin utilisateurs | Rubly PLAISIR | 5 | admin | P6-01 |
 | P6-04 | API admin tickets et finance | Rubly PLAISIR | 5 | admin | P6-01, P5-02 |
 | P6-05 | Admin : authentification, layout et vue d'ensemble | Rubly PLAISIR | 5 | admin | P2-05, P1-05 |
-| P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | Rubly PLAISIR | 5 | admin | P6-05, P6-02 |
+| P6-06 | Admin : écrans Événements & marchés et Résultats & règlement | Benginio Jean-Baptiste | 5 | admin | P6-05, P6-02 |
 | P6-07 | Admin : écrans Utilisateurs et Tickets | Rubly PLAISIR | 6 | admin | P6-05, P6-03, P6-04 |
-| P6-08 | Admin : écrans Finance, Paramètres et Audit | Rubly PLAISIR | 6 | admin | P6-05, P6-04, P6-01 |
+| P6-08 | Admin : écrans Finance, Paramètres et Audit | Benginio Jean-Baptiste | 6 | admin | P6-05, P6-04, P6-01 |
 | P6-09 | Matrice des permissions validée par tests API | Benginio Jean-Baptiste | 6 | admin | P6-02, P6-03, P6-04 |
 
 ## Phase 7 — Intégrations autorisées
@@ -120,7 +120,7 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P7-01 | ⛔ Payments Adapter (BLOQUÉ jusqu'à validation juridique) | Rubly PLAISIR | 6 | payments | P0-01, P5-02 |
+| P7-01 | ⛔ Payments Adapter (BLOQUÉ jusqu'à validation juridique) | Benginio Jean-Baptiste | 6 | payments | P0-01, P5-02 |
 | P7-02 | Jeu responsable : limites, pause, auto-exclusion | Benginio Jean-Baptiste | 6 | compliance | P0-01, P4-03 |
 
 ## Phase 8 — QA & préparation production
@@ -140,7 +140,7 @@ Répartition par développeur : voir [`REPARTITION.md`](REPARTITION.md).
 
 | ID | Tâche | Responsable | Vague | Module | Dépend de |
 |---|---|---|---|---|---|
-| P9-01 | Checklist de lancement et plan de rollback | Rubly PLAISIR | 6 | infra | P8-01, P8-02, P8-04 |
+| P9-01 | Checklist de lancement et plan de rollback | Benginio Jean-Baptiste | 6 | infra | P8-01, P8-02, P8-04 |
 | P9-02 | Monitoring et alertes de production | Benginio Jean-Baptiste | 6 | infra | — |
 
 ## Détail des critères d'acceptation

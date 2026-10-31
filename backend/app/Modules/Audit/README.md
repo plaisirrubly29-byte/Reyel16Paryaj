@@ -2,7 +2,7 @@
 
 **Namespace :** `App\Modules\Audit`
 **Livraison :** Phase 6
-**Responsable :** _à assigner_
+**Responsable :** Rubly PLAISIR (@plaisirrubly29-byte)
 
 ## Responsabilités
 
@@ -20,7 +20,22 @@
 
 ## Routes prévues
 
-- `GET /api/v1/admin/audit-logs`
+- `GET /api/v1/admin/audit-logs` (audit.view) : consultation, elle-même journalisée (`audit.viewed`).
+- `POST /api/v1/admin/audit-logs/export` (audit.export, P6-08) : CSV des lignes filtrées (10 000 au plus), avec
+  motif ; l'export est journalisé (`audit.exported` : filtres, nombre de lignes) avant l'envoi. Les cellules
+  commençant par `= + - @` sont préfixées d'une apostrophe (injection de formules dans un tableur).
+
+## Utilisation (P6-01)
+
+```php
+// Dans la même transaction que l'action auditée :
+$audit->record(AuditAction::UserSuspended, $user, before: ['status' => 'active'], after: ['status' => 'suspended'], reason: $reason);
+```
+
+- Ajouter chaque nouvelle action dans `Enums/AuditAction` ; `requiresReason()` impose un motif aux actions sensibles.
+- `audit_logs` n'a pas de clé étrangère vers `users` (l'email de l'acteur est figé) : supprimer un compte ne modifie pas l'historique.
+- Append-only : exception côté modèle + trigger PostgreSQL qui refuse UPDATE/DELETE.
+- `admin_actions` (demandes en attente de double validation) arrivera avec P6-04 / P5-06.
 
 ## Règles à respecter
 

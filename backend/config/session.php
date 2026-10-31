@@ -169,7 +169,10 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    // Toujours Secure en production, même si le proxy est mal déclaré (revue P8-02, B2) ;
+    // ailleurs, Secure seulement si la requête arrive en HTTPS.
+    // Même défaut qu'app.env : sans APP_ENV, l'application se considère en production.
+    'secure' => env('SESSION_SECURE_COOKIE', env('APP_ENV', 'production') === 'production' ? true : null),
 
     /*
     |--------------------------------------------------------------------------

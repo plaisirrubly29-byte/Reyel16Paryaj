@@ -1,0 +1,209 @@
+# Déploiement automatique du Staging (P1-06) — procédure : docs/ops/deploiement-staging.md
+#
+# - À chaque push sur develop : CI complète sur ce commit (ci.yml, appelé ici), puis seulement si elle réussit :
+#   images de production publiées sur GHCR (tag immuable sha-<commit>), déploiement par SSH, contrôle HTTPS.
+# - Manuellement (Actions → Deploy Staging → Run workflow, une fois ce fichier sur la branche par défaut) : sans tag,
+#   même chaîne sur develop ; avec un tag déjà publié (ex. sha-1a2b3c4d5e6f), redéploiement de cette version
+#   (retour arrière), sans reconstruire.
+#
+# Inactif tant que la variable de dépôt STAGING_ENABLED ne vaut pas « true » (serveur non configuré).
+# Secrets de l'environnement GitHub « staging » : STAGING_SSH_HOST, STAGING_SSH_USER, STAGING_SSH_KEY,
+# STAGING_SSH_KNOWN_HOSTS. Variables : STAGING_URL, STAGING_DEPLOY_DIR (défaut /opt/reyel16-staging).
+# Les secrets de l'application (.env) restent sur le serveur : ils ne passent jamais par GitHub.
+
+name: Deploy Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag déjà publié à redéployer (ex. sha-1a2b3c4d5e6f) ; vide = construire et déployer develop"
+        required: false
+        default: ""
+
+# Un seul déploiement à la fois, jamais interrompu en cours de route.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Préparer
+    runs-on: ubuntu-latest
+    if: vars.STAGING_ENABLED == 'true'
+    outputs:
+      tag: ${{ steps.target.outputs.tag }}
+      build: ${{ steps.target.outputs.build }}
+      image: ${{ steps.target.outputs.image }}
+    steps:
+      - name: Version à déployer
+        id: target
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_TAG" ]; then
+            [[ "$INPUT_TAG" =~ ^sha-[0-9a-f]{12}$ ]] || { echo "::error::Tag invalide : $INPUT_TAG (attendu : sha-<12 caractères>)"; exit 1; }
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ "$GITHUB_REF" = refs/heads/develop ] || { echo "::error::Le Staging se déploie depuis develop (ou un tag déjà publié)."; exit 1; }
+          echo "tag=sha-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+  # Tests préalables : la CI complète (backend, contrat API, frontend) sur le commit exact qui sera déployé.
+  tests:
+    name: Tests
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Images (${{ matrix.target }})
+    needs: [prepare, tests]
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        target: [backend, web]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          target: ${{ matrix.target }}
+          load: true
+          tags: ${{ needs.prepare.outputs.image }}-${{ matrix.target }}:${{ needs.prepare.outputs.tag }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+      - name: Vérifier l'image backend
+        if: matrix.target == 'backend'
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}-backend:${{ needs.prepare.outputs.tag }}
+        run: |
+          docker run --rm --entrypoint php "$IMAGE" -m | grep -qx pdo_pgsql
+          docker run --rm --entrypoint php "$IMAGE" artisan --version
+          docker run --rm --entrypoint php-fpm "$IMAGE" -t
+
+      - name: Vérifier l'image web
+        if: matrix.target == 'web'
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}-web:${{ needs.prepare.outputs.tag }}
+        run: |
+          docker run --rm -e SITE_ADDRESS=localhost -e ACME_EMAIL=ci@example.com "$IMAGE" caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm "$IMAGE" test -f /srv/frontend/index.html
+
+      - name: Publier
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}-${{ matrix.target }}:${{ needs.prepare.outputs.tag }}
+        run: docker push "$IMAGE"
+
+  deploy:
+    name: Déployer
+    needs: [prepare, build]
+    # Redéploiement d'un tag : pas de build. Sinon, seulement si tests et images ont réussi.
+    if: >-
+      always() && needs.prepare.result == 'success' && (
+        (needs.prepare.outputs.build == 'true' && needs.build.result == 'success') ||
+        needs.prepare.outputs.build == 'false'
+      )
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      DEPLOY_DIR: ${{ vars.STAGING_DEPLOY_DIR || '/opt/reyel16-staging' }}
+      SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+      SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Vérifier la configuration
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+          STAGING_URL: ${{ vars.STAGING_URL }}
+        run: |
+          missing=""
+          for name in SSH_HOST SSH_USER SSH_KEY KNOWN_HOSTS STAGING_URL; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          [ -z "$missing" ] || { echo "::error::Configuration staging incomplète :$missing (docs/ops/deploiement-staging.md)"; exit 1; }
+
+      - name: Clé SSH (empreinte du serveur vérifiée)
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host staging\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/staging_key\n  StrictHostKeyChecking yes\n  BatchMode yes\n' \
+            "$SSH_HOST" "$SSH_USER" > ~/.ssh/config
+
+      # Dans les commandes ssh, $DEPLOY_DIR et $TAG sont développés ici, côté runner (SC2029 voulu).
+      - name: Copier les fichiers de déploiement
+        run: |
+          # shellcheck disable=SC2029
+          ssh staging "mkdir -p '$DEPLOY_DIR/scripts/db' '$DEPLOY_DIR/backups'"
+          scp docker/staging/docker-compose.yml scripts/deploy/staging-deploy.sh "staging:$DEPLOY_DIR/"
+          scp scripts/db/backup.sh scripts/db/restore.sh scripts/db/verify.sh scripts/db/lib.sh "staging:$DEPLOY_DIR/scripts/db/"
+          # shellcheck disable=SC2029
+          ssh staging "chmod +x '$DEPLOY_DIR/staging-deploy.sh' '$DEPLOY_DIR'/scripts/db/*.sh"
+
+      - name: Déployer ${{ needs.prepare.outputs.tag }}
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          # Jeton de lecture de GHCR valable le temps de ce job seulement, retiré du serveur ensuite.
+          # shellcheck disable=SC2029
+          printf '%s' "$REGISTRY_TOKEN" | ssh staging "docker login ghcr.io -u '$REGISTRY_USER' --password-stdin"
+          status=0
+          # shellcheck disable=SC2029
+          ssh staging "'$DEPLOY_DIR/staging-deploy.sh' deploy '$TAG'" || status=$?
+          ssh staging "docker logout ghcr.io" || true
+          exit "$status"
+
+      - name: Contrôle HTTPS depuis Internet
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "$STAGING_URL/api/v1/health" | grep -q '"status":"ok"'
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors "$STAGING_URL/" | grep -q '<div id="root">'
+          echo "Staging $TAG en service : $STAGING_URL"
+
+      - name: Nettoyer la clé SSH
+        if: always()
+        run: rm -f ~/.ssh/staging_key

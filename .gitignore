@@ -4,6 +4,8 @@
 .env
 .env.*
 !.env.example
+# Mode de build XAMPP du frontend : chemin et URL locale, aucun secret (surcharges perso : .env.xampp.local).
+!frontend/.env.xampp
 auth.json
 
 # Dépendances / builds
@@ -13,6 +15,10 @@ dist/
 
 # Logs
 *.log
+
+# Sauvegardes de base (données personnelles) : jamais dans Git — scripts/db/backup.sh
+backups/
+*.dump
 
 # IDE / OS
 .idea/

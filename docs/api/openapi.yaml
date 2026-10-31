@@ -5,6 +5,9 @@ info:
   description: |
     Contrat de l'API v1. Toute route doit être documentée ici AVANT l'intégration frontend.
     Les routes marquées `x-task` ne sont pas encore implémentées.
+
+    Conventions (format des réponses, codes d'erreur, pagination, idempotence) : docs/api/README.md.
+    Toute erreur suit le schéma `Error`.
 servers:
   - url: http://localhost:8000/api/v1
     description: Développement local
@@ -15,6 +18,7 @@ tags:
   - name: Catalogue
   - name: Bets
   - name: Wallet
+  - name: ResponsibleGaming
   - name: Admin
 
 paths:
@@ -35,74 +39,1514 @@ paths:
                   time: { type: string, format: date-time }
 
   /auth/register:
-    post: { tags: [Auth], summary: Inscription, x-task: P2-02, responses: { "201": { description: Créé } } }
+    post:
+      tags: [Auth]
+      summary: Inscription (compte joueur) — ouvre la session
+      description: |
+        Limité à 5 requêtes/minute par IP. Âge minimum configurable (IDENTITY_MINIMUM_AGE, 18 par défaut).
+        V1 (fonds fictifs) : le portefeuille reçoit un crédit de bienvenue (WALLET_WELCOME_CREDIT_MINOR,
+        5 000,00 HTG par défaut ; 0 le désactive), visible dans GET /wallet et ses transactions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone, password, password_confirmation, birth_date]
+              properties:
+                name: { type: string, maxLength: 100 }
+                phone: { type: string, description: "Numéro haïtien local, 8 chiffres (espaces/tirets et préfixe +509/509 acceptés)", example: "+509 3412-3456" }
+                email: { type: [string, "null"], format: email, description: "Optionnel." }
+                password: { type: string, minLength: 10, description: "Au moins une lettre et un chiffre" }
+                password_confirmation: { type: string }
+                birth_date: { type: string, format: date, example: "1998-05-21" }
+                country: { type: string, minLength: 2, maxLength: 2, example: HT }
+      responses:
+        "201":
+          description: Compte créé, session ouverte
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/login:
-    post: { tags: [Auth], summary: Connexion, x-task: P2-02, responses: { "200": { description: OK } } }
+    post:
+      tags: [Auth]
+      summary: Connexion par téléphone ou par email
+      description: |
+        Fournir `phone` OU `email` (si les deux sont fournis, le téléphone est utilisé).
+        Même réponse `422 invalid_credentials` que le compte existe ou non (pas d'énumération).
+        Limité à 5 tentatives/minute par identifiant+IP, 20/minute par IP et 30/heure par compte, quelle que soit l'IP
+        (compteur commun au téléphone et à l'email d'un même compte).
+        Le numéro est normalisé avant d'être compté : `34123456`, `3412-3456` et `+509 3412 3456` partagent les mêmes compteurs ;
+        l'email est comparé en minuscules.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                phone: { type: string, example: "34123456" }
+                email: { type: string, format: email, example: "chef@example.com" }
+                password: { type: string }
+      responses:
+        "200":
+          description: Session ouverte
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "422":
+          description: "`invalid_credentials` ou `validation_failed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423":
+          description: "`account_suspended` — compte suspendu ou fermé ; `account_excluded` — auto-exclusion du joueur (jeu responsable)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Demander un lien de réinitialisation
+      description: |
+        Réponse 202 identique que le compte existe ou non (pas d'énumération). Le lien envoyé par email
+        pointe vers `FRONTEND_URL/reset-password?token=…&email=…`, expire en 30 minutes et sert une seule fois.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        "202": { description: Demande prise en compte }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Choisir un nouveau mot de passe
+      description: Ferme toutes les sessions ouvertes du compte.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, email, password, password_confirmation]
+              properties:
+                token: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                password_confirmation: { type: string }
+      responses:
+        "200": { description: Mot de passe modifié }
+        "422":
+          description: "`invalid_reset_token` (jeton invalide, expiré, déjà utilisé ou compte inconnu) ou `validation_failed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/setup:
+    post:
+      tags: [Auth]
+      summary: Générer un secret TOTP (MFA admin) — à afficher en QR code
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Secret en attente de confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret: { type: string, example: JBSWY3DPEHPK3PXP }
+                      otpauth_uri: { type: string, example: "otpauth://totp/REYEL%2016%20PAYAJ:admin%40example.com?secret=…" }
+        "409":
+          description: "`mfa_already_enabled`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /auth/mfa/confirm:
+    post:
+      tags: [Auth]
+      summary: Activer le MFA avec un premier code — renvoie 8 codes de secours (affichés une seule fois)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string, example: "123456" } } } } }
+      responses:
+        "200":
+          description: MFA activé ; session validée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object, properties: { recovery_codes: { type: array, items: { type: string } } } }
+        "409":
+          description: "`mfa_already_enabled` ou `mfa_setup_required`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "`invalid_mfa_code`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /auth/mfa/verify:
+    post:
+      tags: [Auth]
+      summary: Valider la session avec un code TOTP ou un code de secours (requis après chaque connexion admin)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, example: "123456" }
+                recovery_code: { type: string, example: "a1b2c-d3e4f" }
+      responses:
+        "204": { description: Session validée }
+        "401":
+          description: "`mfa_too_many_failures` : trop d'échecs consécutifs (5), la session est fermée et il faut se reconnecter"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé) ; chaque échec est audité (`mfa.failed`)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429":
+          description: "`too_many_requests` : par compte, 5 essais par minute, 20 par heure et 50 par jour (avec `/auth/mfa/confirm`)"
+          headers: { Retry-After: { schema: { type: integer } } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [Auth]
+      summary: Régénérer les codes de secours (session MFA validée + code TOTP courant)
+      description: |
+        Exige un code TOTP courant (pas un code de secours) : une session volée ne suffit pas.
+        Régénération auditée (`mfa.recovery_codes_regenerated`).
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "123456" }
+      responses:
+        "200": { description: Nouveaux codes (les anciens sont invalidés) }
+        "401":
+          description: "`mfa_too_many_failures` : trop d'échecs consécutifs (5), la session est fermée et il faut se reconnecter"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: "`invalid_mfa_code` (code invalide ou déjà utilisé) ; chaque échec est audité (`mfa.failed`)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/logout:
-    post: { tags: [Auth], summary: Déconnexion, x-task: P2-02, responses: { "204": { description: OK } } }
+    post:
+      tags: [Auth]
+      summary: Déconnexion (invalide la session)
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Session fermée }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /me:
-    get: { tags: [Auth], summary: Utilisateur connecté, x-task: P2-02, responses: { "200": { description: OK } } }
+    get:
+      tags: [Auth]
+      summary: Utilisateur connecté
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /sports:
-    get: { tags: [Catalogue], summary: Liste des sports, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Sports ayant des matchs ouverts, avec leurs compétitions
+      description: Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        slug: { type: string, example: soccer }
+                        name: { type: string, example: Football }
+                        events_count: { type: integer }
+                        competitions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string }
+                              name: { type: string, example: EPL }
+                              country: { type: [string, "null"] }
+                              events_count: { type: integer }
   /competitions:
-    get: { tags: [Catalogue], summary: Liste des compétitions, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Compétitions ayant des matchs ouverts
+      parameters:
+        - { name: sport, in: query, schema: { type: string, example: soccer } }
+      responses:
+        "200": { description: OK }
   /events:
-    get: { tags: [Catalogue], summary: Événements ouverts, x-task: P3-05, responses: { "200": { description: OK } } }
+    get:
+      tags: [Catalogue]
+      summary: Matchs en cours et à venir avec un marché affiché (1X2 par défaut), triés par heure de début
+      description: |
+        Public. Un match apparaît s'il est programmé et pas encore commencé, ou en cours (status "live", avec son
+        score), et qu'un marché est ouvert et coté. Une cote trop ancienne (SPORTS_DATA_MAX_ODDS_AGE, ou
+        SPORTS_DATA_MAX_LIVE_ODDS_AGE pendant le match) est affichée mais non pariable. Cotes en chaînes décimales.
+      parameters:
+        - { name: sport, in: query, schema: { type: string, example: soccer } }
+        - { name: competition, in: query, schema: { type: integer } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - name: market
+          in: query
+          description: Marché affiché dans la liste. Un match qui ne le propose pas est listé avec `markets` vide.
+          schema: { type: string, enum: [h2h, double_chance, totals, btts], default: h2h }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/CatalogueEvent" } }
+                  links: { type: object }
+                  meta: { type: object }
+        "422": { description: Paramètres invalides }
   /events/{id}/markets:
     get:
       tags: [Catalogue]
-      summary: Marchés et cotes disponibles d'un événement
-      x-task: P3-05
+      summary: Détail d'un match et de tous ses marchés pariables
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
+        "404": { description: Match inconnu ou plus proposé }
 
   /bets:
     post:
       tags: [Bets]
       summary: Placer un pari (simulé en V1)
       x-task: P4-03
+      description: |
+        Le serveur recharge les marchés et applique SES cotes : la cote envoyée ne sert qu'à détecter un changement.
+        Ticket, sélections figées et réservation de la mise sont créés dans une seule transaction.
+        Règles validées (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
+        à 1 000 000,00, combinés de 20 sélections au plus et une seule sélection par match, toute cote changée refusée.
+      security: [{ sessionCookie: [] }]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stake, selections]
+              properties:
+                stake:
+                  type: object
+                  required: [minor]
+                  properties:
+                    minor: { type: integer, minimum: 1, example: 10000, description: Mise en unité mineure (centimes) }
+                    currency: { type: string, example: HTG, description: "Facultatif ; doit être la devise du portefeuille" }
+                selections:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [selection_id, odds]
+                    properties:
+                      selection_id: { type: integer, example: 462 }
+                      odds: { type: string, example: "2.10", description: Cote vue par le joueur (détection de changement) }
       responses:
-        "201": { description: Ticket créé (reçu immuable) }
-        "409": { description: Cote changée — confirmation requise }
-        "422": { description: Marché fermé, limites, solde insuffisant }
-    get: { tags: [Bets], summary: Mes tickets, x-task: P4-04, responses: { "200": { description: OK } } }
+        "201":
+          description: Ticket créé (reçu immuable)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: |
+            odds_changed — cote changée, rien n'est créé. details.selections : [{ selection_id, odds, odds_version }]
+            avec la cote actuelle ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
+            idempotency_key_reused — clé déjà utilisée pour un autre pari. La clé est figée sur le ticket : rejouer
+            le même pari avec la même clé (même après une panne du serveur) renvoie le ticket existant, sans seconde mise.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: |
+            validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
+            direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ;
+            multiple_not_allowed ; stake_out_of_range (details.min / max) ; currency_mismatch ; insufficient_funds ;
+            jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
+            limit_minor, remaining_minor).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
+        "428": { description: En-tête Idempotency-Key manquant }
+    get:
+      tags: [Bets]
+      summary: Mes tickets (plus récents d'abord)
+      description: Tickets du joueur connecté uniquement, avec leurs sélections.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/BetTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "423": { description: Compte suspendu ou fermé }
   /bets/{id}:
     get:
       tags: [Bets]
-      summary: Détail d'un ticket
-      x-task: P4-04
+      summary: Reçu d'un ticket
+      description: Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+      security: [{ sessionCookie: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "404": { description: Introuvable ou non autorisé } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "423": { description: Compte suspendu ou fermé }
+
+  /responsible-gaming:
+    get:
+      tags: [ResponsibleGaming]
+      summary: Limites de mise, pause et options de jeu responsable du joueur connecté
+      description: |
+        Limites sur des périodes glissantes (day = 24 dernières heures, week = 7 jours, month = 30 jours), mises de la
+        période et reste. Valeurs par défaut les plus protectrices en attendant l'avis juridique (D-09, J-8).
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /responsible-gaming/limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de mise (journalisé)
+      description: |
+        Une baisse (ou une première limite) s'applique tout de suite et annule une hausse en attente. Une hausse ou une
+        suppression (amount_minor null) ne s'applique qu'après le délai de réflexion (7 jours par défaut), qui repart à
+        chaque nouvelle demande. Même valeur : rien ne change.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 50000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/pause:
+    post:
+      tags: [ResponsibleGaming]
+      summary: Faire une pause dans les paris (irrévocable, journalisé)
+      description: |
+        Pendant la pause, POST /bets renvoie 422 betting_paused ; le joueur reste connecté (solde, tickets). Une pause en
+        cours n'est jamais raccourcie : une durée plus courte ne change rien, une durée plus longue la prolonge.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [duration], properties: { duration: { type: string, enum: ["24h", "7d", "30d"] } } } } }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/self-exclusion:
+    post:
+      tags: [ResponsibleGaming]
+      summary: S'exclure du jeu (irrévocable, mot de passe requis, journalisé et audité)
+      description: |
+        Le compte passe en « excluded » et la session est fermée : toute connexion renvoie 423 account_excluded.
+        À l'échéance, le compte reste exclu jusqu'à une demande de réouverture traitée par la Conformité.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [duration, password]
+              properties:
+                duration: { type: string, enum: ["6m", "1y", "5y"] }
+                password: { type: string, description: Mot de passe du compte (confirmation) }
+      responses:
+        "200":
+          description: Compte exclu, session fermée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      excluded_until: { type: string, format: date-time }
+                      reopening: { type: string, enum: [on_request] }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { description: "`invalid_password` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 
   /wallet:
-    get: { tags: [Wallet], summary: Solde, x-task: P5-03, responses: { "200": { description: OK } } }
+    get:
+      tags: [Wallet]
+      summary: Solde du portefeuille de l'utilisateur connecté (calculé par le serveur)
+      description: Le frontend affiche ce solde tel quel ; il ne le recalcule jamais.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency: { type: string, example: HTG }
+                      balance: { $ref: "#/components/schemas/Money" }
+                      status: { type: string, enum: [active, frozen] }
+                      simulated: { type: boolean, description: "true en V1 : fonds fictifs" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /wallet/transactions:
-    get: { tags: [Wallet], summary: Historique des écritures, x-task: P5-03, responses: { "200": { description: OK } } }
+    get:
+      tags: [Wallet]
+      summary: Historique des écritures (plus récentes d'abord)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LedgerEntry" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
-  /admin/events/{id}:
-    patch:
+  /admin/users/{id}/roles:
+    put:
       tags: [Admin]
-      summary: Modifier l'état d'un événement (motif requis)
-      x-task: P6-02
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
-  /admin/markets/{id}:
-    patch:
+      summary: Remplacer les rôles administratifs d'un utilisateur
+      description: |
+        Permission `roles.manage` (Super Admin). Interdit sur son propre compte (`403 cannot_modify_own_roles`).
+        Sans permission : 403, que l'identifiant existe ou non.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles, reason]
+              properties:
+                roles:
+                  type: array
+                  items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Rôles mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      roles: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/mfa:
+    delete:
       tags: [Admin]
-      summary: Suspendre / masquer un marché (motif requis)
-      x-task: P6-02
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+      summary: Réinitialiser le MFA d'un autre administrateur (appareil perdu) — audité
+      description: Permission `roles.manage`. Interdit sur son propre compte (`403 cannot_reset_own_mfa`).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5 } } } } }
+      responses:
+        "204": { description: MFA réinitialisé }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Indicateurs de la vue d'ensemble sur une période (permission dashboard.view)
+      description: |
+        Chaque section n'est présente que si le rôle a la permission correspondante :
+        users (users.view), betting (tickets.view), finance (ledger.view), catalogue (events.view).
+        Journées découpées dans le fuseau d'affichage (APP_DISPLAY_TIMEZONE), dates stockées en UTC.
+        Définitions : mises = tickets PLACÉS dans la période ; gains payés et remboursements = tickets RÉGLÉS
+        dans la période ; produit brut = mises réglées (hors annulés) - gains payés ; exposition = gains
+        potentiels des tickets en cours (pas une perte certaine). Montants en unités mineures.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [today, yesterday, 7d, 30d, month, last_month, custom], default: 7d } }
+        - { name: from, in: query, description: "Obligatoire si period=custom", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Obligatoire si period=custom ; 366 jours au plus", schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      generated_at: { type: string, format: date-time }
+                      currency: { type: string, example: HTG }
+                      period:
+                        type: object
+                        properties:
+                          preset: { type: string }
+                          from: { type: string, format: date }
+                          to: { type: string, format: date }
+                          days: { type: integer }
+                          timezone: { type: string, example: America/Port-au-Prince }
+                      users:
+                        type: object
+                        properties:
+                          total: { type: integer }
+                          active: { type: integer }
+                          suspended: { type: integer }
+                          excluded: { type: integer }
+                          new_today: { type: integer }
+                          new_in_period: { type: integer }
+                          registrations: { $ref: "#/components/schemas/DailySeries" }
+                      betting:
+                        type: object
+                        properties:
+                          tickets_placed: { type: integer }
+                          stakes_minor: { type: integer }
+                          tickets_settled: { type: integer }
+                          payouts_minor: { type: integer }
+                          refunds_minor: { type: integer }
+                          pending_count: { type: integer }
+                          pending_exposure_minor: { type: integer, description: "Gains potentiels des tickets en cours" }
+                          status_breakdown: { type: array, items: { type: object, properties: { status: { type: string }, count: { type: integer } } } }
+                          stakes_by_sport:
+                            type: array
+                            description: Un combiné mêlant plusieurs sports est compté dans « multisport ».
+                            items: { type: object, properties: { sport: { type: string }, name: { type: string }, tickets: { type: integer }, stakes_minor: { type: integer } } }
+                          tickets: { $ref: "#/components/schemas/DailySeries" }
+                          stakes_daily_minor: { $ref: "#/components/schemas/DailySeries" }
+                      finance:
+                        type: object
+                        properties:
+                          settled_stakes_minor: { type: integer }
+                          payouts_minor: { type: integer }
+                          gross_gaming_revenue_minor: { type: integer, description: "Mises réglées - gains versés" }
+                          pending_corrections: { type: integer }
+                          payments_available: { type: boolean, description: "false tant qu'aucun prestataire de paiement n'est intégré (P7-01)" }
+                      catalogue:
+                        type: object
+                        properties:
+                          events_live: { type: integer }
+                          events_scheduled: { type: integer }
+                          events_next_24h: { type: integer }
+                          markets_open: { type: integer }
+                          markets_suspended: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/alerts:
+    get:
+      tags: [Admin]
+      summary: Points d'attention du moment (permission dashboard.view)
+      description: |
+        Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
+        Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
+        settlement_overdue, finance_corrections, reconciliation, failed_jobs, mfa_failures.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        severity: { type: string, enum: [critical, warning, info] }
+                        category: { type: string }
+                        title: { type: string }
+                        detail: { type: string }
+                        link: { type: [string, "null"], example: /admin/tickets?status=pending }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/search:
+    get:
+      tags: [Admin]
+      summary: Recherche globale (permission dashboard.view)
+      description: Comptes (users.view), tickets par début de référence (tickets.view) et matchs par équipe (events.view) ; 5 résultats par type au plus.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      users: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, status: { type: string } } } }
+                      tickets: { type: array, items: { type: object, properties: { id: { type: string }, reference: { type: string }, status: { type: string } } } }
+                      events: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, starts_at: { type: string, format: date-time }, status: { type: string } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/system:
+    get:
+      tags: [Admin]
+      summary: Supervision technique en lecture seule (permission settings.view)
+      description: Planificateur, fournisseur de données sportives (crédits, synchronisations, échecs), file d'attente. Ne renvoie jamais de secret ni de trace d'exception.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      generated_at: { type: string, format: date-time }
+                      scheduler: { type: object, properties: { running: { type: boolean }, last_heartbeat: { type: [string, "null"], format: date-time } } }
+                      sports_provider: { type: object, description: "provider, credits, sync_cron, last_call_at, last_event_sync_at, competitions, recent_failures" }
+                      queue: { type: object, properties: { connection: { type: string }, failed_24h: { type: integer }, recent_failures: { type: array, items: { type: object } } } }
+                      payments: { type: object, properties: { integrated: { type: boolean }, providers: { type: array, items: { type: object } } } }
+                      backups: { type: object, properties: { tracked: { type: boolean } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/risk/exposure:
+    get:
+      tags: [Admin]
+      summary: Exposition par match sur les tickets en cours (permission tickets.view)
+      description: |
+        Paris simples : pire cas d'un marché = gains de l'issue la plus chère - mises du marché (une seule issue gagne).
+        Pire cas d'un match = somme de ses marchés (majorant). Combinés listés à part, hors pire cas. 50 matchs au plus.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      currency: { type: string }
+                      total_events: { type: integer }
+                      events:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event_id: { type: string }
+                            name: { type: string }
+                            starts_at: { type: string, format: date-time }
+                            single_tickets: { type: integer }
+                            single_stakes_minor: { type: integer }
+                            worst_case_minor: { type: integer }
+                            markets: { type: array, items: { type: object } }
+                            multiple_tickets: { type: integer }
+                            multiple_potential_payout_minor: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Rechercher des comptes (permission users.view)
+      description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: search, in: query, description: "Nom (fragment), email (fragment ; complet seulement sans users.view_personal_data), téléphone complet ou identifiant", schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
+        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Consulter un compte (consultation des données personnelles journalisée)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [Admin]
-      summary: Suspendre un compte (motif requis)
-      x-task: P6-03
+      summary: Suspendre ou réactiver un compte (motif requis, audité)
+      description: |
+        Permission users.suspend. Interdit sur son propre compte. Le compte d'un administrateur ne peut être
+        suspendu que par un Super Admin. Une auto-exclusion ne peut pas être levée ici (409 invalid_status_transition).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Statut appliqué
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`invalid_status_transition`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/events:
+    get:
+      tags: [Admin]
+      summary: Événements de tous statuts, avec origine et synchronisation (permission events.view)
+      description: Triés par heure de début. Nombre de marchés par statut ; marchés complets dans le détail.
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: search, in: query, description: "Équipe, identifiant fournisseur ou identifiant", schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, live, finished, postponed, cancelled] } }
+        - { name: competition, in: query, schema: { type: integer } }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: market_status, in: query, description: "Événements ayant au moins un marché dans ce statut", schema: { type: string, enum: [open, suspended, closed, settled] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminEvent" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/events/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'un événement et de tous ses marchés, origine et fraîcheur (permission events.view)
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "403": { description: Permission refusée } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/markets/{id}:
+    get:
+      tags: [Admin]
+      summary: Consulter un marché, origine et fraîcheur de la cote (permission events.view)
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminMarket" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin]
+      summary: Suspendre ou rouvrir un marché (motif requis, audité)
+      description: |
+        Permission markets.suspend (Super Admin, Opérations). Un marché suspendu n'est plus affiché au catalogue
+        ni pariable ; la synchronisation du fournisseur ne lève jamais une suspension posée ici. Rouvrir ne rend
+        pariable que si la cote est assez récente. Même statut demandé : rien ne change, rien n'est audité.
+        Marché fermé ou réglé : 409 invalid_status_transition. Audit : market.suspended / market.reopened.
+      x-task: P6-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [suspended, open] }
+                reason: { type: string, minLength: 5, maxLength: 255, description: "Ne peut pas commencer par « auto: » (réservé aux suspensions automatiques)" }
+      responses:
+        "200":
+          description: Statut appliqué
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminMarket" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`invalid_status_transition` (marché fermé ou réglé)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/users/{id}/responsible-gaming:
+    get:
+      tags: [Admin]
+      summary: Jeu responsable d'un joueur — limites, pause, pauses et exclusions, journal (permission responsible_gaming.view)
+      description: Consultation journalisée (responsible_gaming.viewed). Journal limité aux 100 derniers événements.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminResponsibleGaming" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/users/{id}/responsible-gaming/reopen:
+    post:
+      tags: [Admin]
+      summary: Rouvrir une auto-exclusion arrivée à échéance, à la demande du joueur (motif requis, audité)
+      description: |
+        Permission responsible_gaming.manage (Conformité). Avant l'échéance : 409 exclusion_not_ended (details.ends_at) ;
+        compte non exclu ou exclusion déjà levée : 409 invalid_status_transition. Le compte redevient actif ;
+        audit user.self_exclusion_ended, journal self_exclusion.lifted.
+      x-task: P7-02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 255 } } } } }
+      responses:
+        "200":
+          description: Compte rouvert
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminResponsibleGaming" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`exclusion_not_ended` ou `invalid_status_transition`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/events/{id}/results:
+    get:
+      tags: [Admin]
+      summary: Historique complet du résultat d'un match — versions et demandes de correction (permission events.view)
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      event_id: { type: string }
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            version: { type: integer }
+                            status: { type: string, enum: [final, cancelled] }
+                            score: { type: [string, "null"], example: "2-1" }
+                            source: { type: string, example: manual, description: "Fournisseur, ou « manual » (correction validée)" }
+                            external_id: { type: [string, "null"] }
+                            entered_by: { type: [object, "null"], description: "Validateur d'une correction ; null : fournisseur" }
+                            correction_reason: { type: [string, "null"] }
+                            created_at: { type: string, format: date-time }
+                      corrections: { type: array, items: { $ref: "#/components/schemas/ResultCorrection" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/events/{id}/result-corrections:
+    post:
+      tags: [Admin]
+      summary: Demander la correction du résultat d'un match (motif requis, audité) — rien ne change avant validation
+      description: |
+        Permission results.enter. Une seule demande en attente par match. La réponse contient l'aperçu de l'impact
+        (tickets dont l'issue change, montants). Une correction envoyée par le fournisseur après règlement crée aussi
+        une demande (requested_by null), à valider de la même façon.
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [final, cancelled] }
+                home_score: { type: [string, "null"], example: "1", description: "Obligatoire si final" }
+                away_score: { type: [string, "null"], example: "2", description: "Obligatoire si final" }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Demande créée, en attente
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`no_result_to_correct`, `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/result-corrections:
+    get:
+      tags: [Admin]
+      summary: Demandes de correction de résultat (permission results.enter)
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: event, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ResultCorrection" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/result-corrections/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une demande ; en attente, avec l'aperçu de l'impact si elle était validée maintenant
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/result-corrections/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une correction (second administrateur, motif requis, audité)
+      description: |
+        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden), ni un rôle attribué par un administrateur depuis moins de 24 h (403 approver_role_too_recent). Dans une transaction : nouvelle
+        version du résultat (source manual, validateur, motif), réévaluation des tickets déjà réglés — gain ou
+        remboursement précédent compensé (reversal), nouvelle écriture si besoin, nouvelle révision du règlement. Un
+        gain repris peut rendre le solde négatif. Un combiné perdu sur ce match redevient « pending » si d'autres matchs
+        ne sont pas joués. 409 result_changed si le résultat a changé depuis la demande.
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Correction appliquée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { description: "`forbidden`, `self_approval_forbidden` ou `approver_role_too_recent`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending` ou `result_changed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "423": { description: "`wallet_frozen` : un portefeuille concerné est gelé, rien n'est appliqué" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/result-corrections/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser (results.approve) ou retirer (demandeur) une demande en attente (motif requis, audité)
+      x-task: P5-06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Demande refusée ou retirée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Journal d'audit (permission audit.view) — la consultation est elle-même journalisée
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: action, in: query, schema: { type: string, example: roles.updated } }
+        - { name: actor_id, in: query, schema: { type: integer } }
+        - { name: subject_type, in: query, schema: { type: string } }
+        - { name: subject_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Entrées, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AuditLog" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/audit-logs/export:
+    post:
+      tags: [Admin]
+      summary: Exporter le journal d'audit en CSV (permission audit.export, motif requis, export journalisé)
+      description: |
+        Mêmes filtres que la liste. L'export est enregistré (`audit.exported` : filtres, nombre de lignes, motif)
+        avant l'envoi du fichier. CSV UTF-8 avec BOM, séparateur « ; » ; les cellules commençant par = + - @ sont
+        préfixées d'une apostrophe (injection de formules). Au-delà de 10 000 lignes : `422 export_too_large`.
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                action: { type: string, example: roles.updated }
+                actor_id: { type: integer }
+                subject_type: { type: string }
+                subject_id: { type: string }
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Fichier journal-audit-AAAAMMJJ-HHMMSS.csv (lignes de la plus ancienne à la plus récente)
+          content: { text/csv: { schema: { type: string } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: "Validation (motif), ou `export_too_large` (details.count, details.max)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/settings:
+    get:
+      tags: [Admin]
+      summary: Paramètres de la plateforme en vigueur, avec leur valeur par défaut (permission settings.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Version en vigueur (0 = valeurs de la configuration du serveur) et paramètres modifiables
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PlatformSettings" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Admin]
+      summary: Enregistrer une nouvelle version des paramètres (permission settings.update, motif requis, auditée)
+      description: |
+        Seules les valeurs envoyées changent ; la nouvelle version est un instantané complet, en ajout seul, et
+        s'applique immédiatement. `base_version` est la version affichée : si une autre version a été enregistrée
+        entre-temps, `409 settings_changed` (rien n'est écrasé). Les paramètres déjà figés sur un ticket ne changent pas.
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, base_version, reason]
+              properties:
+                values:
+                  type: object
+                  description: Valeurs groupées par préfixe ; toute autre clé est refusée.
+                  properties:
+                    betting:
+                      type: object
+                      properties:
+                        min_stake_minor: { type: integer, minimum: 1 }
+                        max_stake_minor: { type: integer, minimum: 1, description: ">= min_stake_minor" }
+                        max_payout_minor: { type: integer, minimum: 1, description: ">= max_stake_minor" }
+                        allow_multiple: { type: boolean }
+                        max_selections: { type: integer, minimum: 1, maximum: 30 }
+                        allow_live: { type: boolean }
+                    wallet:
+                      type: object
+                      properties:
+                        welcome_credit_minor: { type: integer, minimum: 0 }
+                    sports_data:
+                      type: object
+                      properties:
+                        provider: { type: string, enum: [fake, theodds], description: "theodds exige SPORTS_DATA_API_KEY" }
+                  example: { betting: { min_stake_minor: 2500, allow_live: true } }
+                base_version: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Nouvelle version en vigueur
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PlatformSettings" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`settings_changed` (details.version : version en vigueur)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "Validation (valeurs incohérentes ou clé inconnue), ou `no_change`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/settings/versions:
+    get:
+      tags: [Admin]
+      summary: Historique des versions des paramètres (permission settings.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Versions, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SettingVersion" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/tickets:
+    get:
+      tags: [Admin]
+      summary: Rechercher des tickets (permission tickets.view)
+      description: Tous les rôles administratifs. Joueur réduit à son identifiant et son nom (données minimales).
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string, example: R16-7KQ2M9XAPB } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: placed_from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: placed_to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Tickets, du plus récent au plus ancien
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/tickets/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'un ticket — sélections, règles acceptées et (avec ledger.view) ses écritures
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminTicket" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/ledger:
+    get:
+      tags: [Admin]
+      summary: Écritures du ledger, toutes portefeuilles confondus (permission ledger.view)
+      description: Finance, Conformité et Super Admin.
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: wallet_id, in: query, schema: { type: integer } }
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - { name: reference, in: query, description: Référence exacte de l'écriture, schema: { type: string, example: "bet:42:stake" } }
+        - { name: ticket_id, in: query, description: "Écritures d'un ticket (mise, gain, remboursement)", schema: { type: integer } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Écritures, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/finance/reconciliation:
+    get:
+      tags: [Admin]
+      summary: Rapprochement du ledger — totaux et écarts (permission ledger.view)
+      description: |
+        Lecture seule, calculée à la demande. Trois contrôles :
+        - `balance_chain` : le solde mémorisé par une écriture vaut le solde précédent du portefeuille + son montant ;
+        - `ticket_amount` : le net des écritures d'un ticket vaut (gain versé, ou 0) - mise ;
+        - `orphan_entry` : écriture rattachée à un ticket inexistant.
+        Au plus 100 écarts listés par contrôle (`truncated` = true au-delà) ; `discrepancies_count` reste exact.
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Reconciliation" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/finance/corrections:
+    get:
+      tags: [Admin]
+      summary: Corrections financières et leur circuit de validation (permission ledger.view)
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Corrections, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/FinanceCorrection" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: Demander la compensation d'une écriture (permission finance.correct, motif requis, auditée)
+      description: |
+        Première étape de la double validation : rien n'est écrit dans le ledger avant la validation par un autre
+        administrateur. V1 : seules les écritures sans ticket sont corrigeables ; celles d'un ticket relèvent de la
+        correction de résultat (P5-06).
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ledger_entry_id, reason]
+              properties:
+                ledger_entry_id: { type: integer }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Demande enregistrée (status pending)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`correction_already_pending` (details.correction_id)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "Validation, ou `entry_not_correctable` (details.reason : reversal_entry, linked_to_ticket, already_reversed)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/finance/corrections/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une correction financière et de son écriture (permission ledger.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Correction
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/finance/corrections/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une correction et passer l'écriture compensatoire (permission finance.approve, motif requis)
+      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`) dont le rôle n'a pas été attribué par un administrateur depuis moins de 24 h (`403 approver_role_too_recent`).
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Correction validée (status approved, reversal_entry_id renseigné)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "403":
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending` : déjà validée ou refusée"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "Validation, ou `entry_not_correctable`" }
+        "423": { description: "`wallet_frozen` : portefeuille gelé" }
+  /admin/finance/corrections/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser une correction — aucune écriture (permission finance.approve, motif requis)
+      description: Le demandeur peut retirer sa propre demande par ce refus ; il ne peut jamais la valider.
+      x-task: P6-04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Correction refusée (status rejected)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`correction_not_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
 
 components:
   parameters:
@@ -112,7 +1556,531 @@ components:
       required: true
       description: UUID unique par intention utilisateur. Une requête rejouée renvoie la même réponse.
       schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      description: Taille de page, bornée à 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    ValidationError:
+      description: Données invalides
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              code: validation_failed
+              message: Les données envoyées sont invalides.
+              details: { phone: ["Le champ phone est obligatoire."] }
+    Unauthenticated:
+      description: Authentification requise
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: unauthenticated, message: Authentification requise. } }
+    Forbidden:
+      description: Permission refusée
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: forbidden, message: Action non autorisée. } }
+    NotFound:
+      description: Introuvable (ou non autorisé, sans révéler l'existence)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: not_found, message: Ressource introuvable. } }
+    TooManyRequests:
+      description: Trop de tentatives
+      headers:
+        Retry-After: { schema: { type: integer }, description: Secondes avant de réessayer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: { code: too_many_requests, message: Trop de tentatives. Réessayez plus tard. } }
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: reyel-16-paryaj-session
+      description: |
+        Mode SPA de Sanctum : appeler `GET /sanctum/csrf-cookie` (hors /api/v1), puis envoyer le cookie
+        de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
+
   schemas:
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        amount: { $ref: "#/components/schemas/Money" }
+        balance_after: { $ref: "#/components/schemas/Money" }
+        related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
+        description: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    ResponsibleGamingLimit:
+      type: object
+      properties:
+        amount: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: "null : aucune limite" }
+        used: { $ref: "#/components/schemas/Money" }
+        remaining: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        pending:
+          type: [object, "null"]
+          description: Hausse ou suppression en attente du délai de réflexion
+          properties:
+            amount: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: "null : suppression" }
+            effective_at: { type: string, format: date-time }
+    ResponsibleGaming:
+      type: object
+      properties:
+        limits:
+          type: object
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        pause:
+          type: object
+          properties:
+            active: { type: boolean }
+            ends_at: { type: [string, "null"], format: date-time }
+        options:
+          type: object
+          properties:
+            pause_durations: { type: array, items: { type: string }, example: ["24h", "7d", "30d"] }
+            exclusion_durations: { type: array, items: { type: string }, example: ["6m", "1y", "5y"] }
+            limit_increase_delay_days: { type: integer, example: 7 }
+    AdminResponsibleGaming:
+      type: object
+      properties:
+        user: { type: object, properties: { id: { type: string }, status: { type: string, enum: [active, suspended, excluded, closed] } } }
+        limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/limits" }
+        pause: { $ref: "#/components/schemas/ResponsibleGaming/properties/pause" }
+        restrictions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              type: { type: string, enum: [pause, self_exclusion] }
+              duration: { type: string, example: 6m }
+              starts_at: { type: string, format: date-time }
+              ends_at: { type: string, format: date-time }
+              ended: { type: boolean }
+              lifted:
+                type: [object, "null"]
+                properties: { at: { type: string, format: date-time }, by: { type: string }, reason: { type: string } }
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string, example: limit.lowered }
+              data: { type: [object, "null"] }
+              actor_id: { type: [string, "null"], description: "null : action du joueur ou du système" }
+              created_at: { type: string, format: date-time }
+    DailySeries:
+      type: array
+      description: Une valeur par jour, du plus ancien au plus récent.
+      items: { type: object, properties: { date: { type: string, format: date }, value: { type: integer } } }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        phone: { type: string, example: "34123456", description: "Masqué sans users.view_personal_data : \"•••• 3456\"" }
+        email: { type: [string, "null"], description: "Masqué sans users.view_personal_data : \"an•••@example.com\"" }
+        status: { type: string, enum: [active, suspended, excluded, closed] }
+        status_changed_at: { type: [string, "null"], format: date-time }
+        is_admin: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_login_at: { type: [string, "null"], format: date-time }
+        roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
+        mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
+        profile: { type: object, description: "Avec users.view_personal_data uniquement" }
+    AdminEvent:
+      type: object
+      properties:
+        id: { type: string }
+        sport: { type: object, properties: { slug: { type: string }, name: { type: string } } }
+        competition: { type: object, properties: { id: { type: string }, name: { type: string }, country: { type: [string, "null"] } } }
+        home_team: { type: string }
+        away_team: { type: string }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled, live, finished, postponed, cancelled] }
+        score: { type: [object, "null"], properties: { home: { type: string }, away: { type: string } } }
+        origin: { type: object, properties: { provider: { type: string, example: the_odds_api }, external_id: { type: string } } }
+        last_synced_at: { type: [string, "null"], format: date-time }
+        result_received_at: { type: [string, "null"], format: date-time }
+        markets_count:
+          type: object
+          description: Nombre de marchés par statut
+          properties: { open: { type: integer }, suspended: { type: integer }, closed: { type: integer }, settled: { type: integer } }
+        markets: { type: array, items: { $ref: "#/components/schemas/AdminMarket" }, description: "Détail uniquement" }
+    AdminMarket:
+      type: object
+      properties:
+        id: { type: string }
+        event_id: { type: string }
+        key: { type: string, example: h2h }
+        name: { type: string, example: Résultat du match (1X2) }
+        line: { type: [string, "null"], example: "2.5" }
+        status: { type: string, enum: [open, suspended, closed, settled] }
+        suspension:
+          type: [object, "null"]
+          properties:
+            automatic: { type: boolean, description: "true : posée par la synchronisation (cotes périmées), levée par des cotes fraîches" }
+            reason: { type: string }
+        odds_version: { type: integer }
+        origin: { type: object, properties: { provider: { type: string }, external_id: { type: string }, bookmaker: { type: [string, "null"] } } }
+        freshness:
+          type: object
+          properties:
+            odds_updated_at: { type: [string, "null"], format: date-time }
+            age_seconds: { type: [integer, "null"] }
+            max_age_minutes: { type: integer, description: "Règle de fraîcheur (plus courte pendant le match)" }
+            stale: { type: boolean }
+        bettable: { type: boolean }
+        selections:
+          type: array
+          items: { type: object, properties: { id: { type: string }, key: { type: string }, label: { type: string }, name: { type: string }, odds: { type: string, example: "2.10" } } }
+        updated_at: { type: [string, "null"], format: date-time }
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, example: roles.updated }
+        actor: { type: [object, "null"], properties: { id: { type: string }, email: { type: string } } }
+        subject: { type: [object, "null"], properties: { type: { type: string }, id: { type: string } } }
+        before: { type: [object, "null"] }
+        after: { type: [object, "null"] }
+        reason: { type: [string, "null"] }
+        metadata: { type: [object, "null"] }
+        ip_address: { type: [string, "null"] }
+        request_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    User:
+      type: object
+      properties:
+        id: { type: string, example: "42" }
+        name: { type: string }
+        phone: { type: string, example: "34123456", description: "Identifiant de connexion, 8 chiffres." }
+        email: { type: [string, "null"], format: email }
+        status: { type: string, enum: [active, suspended, excluded, closed] }
+        roles:
+          type: array
+          items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+          description: Vide pour un joueur.
+        permissions:
+          type: array
+          items: { type: string, example: users.view }
+          description: Permissions effectives (config/permissions.php). Sert à afficher le menu admin ; l'API vérifie chaque route.
+        is_admin: { type: boolean }
+        mfa:
+          type: object
+          description: Le frontend redirige un admin vers l'activation (enabled=false) ou la saisie du code (verified=false).
+          properties:
+            enabled: { type: boolean }
+            verified: { type: boolean }
+            required: { type: boolean }
+        profile:
+          type: [object, "null"]
+          properties:
+            first_name: { type: [string, "null"] }
+            last_name: { type: [string, "null"] }
+            birth_date: { type: [string, "null"], format: date }
+            country: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    UserEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/User" }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Identifiant stable (snake_case) sur lequel le client se base.
+              example: validation_failed
+            message:
+              type: string
+              description: Message lisible, affichable tel quel.
+            details:
+              type: object
+              additionalProperties: true
+              description: Informations complémentaires (ex. erreurs par champ).
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: [string, "null"] }
+        last: { type: [string, "null"] }
+        prev: { type: [string, "null"] }
+        next: { type: [string, "null"] }
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
+        from: { type: [integer, "null"] }
+        to: { type: [integer, "null"] }
+        path: { type: string }
+    CatalogueEvent:
+      type: object
+      properties:
+        id: { type: string }
+        sport: { type: object, properties: { slug: { type: string }, name: { type: string } } }
+        competition: { type: object, properties: { id: { type: string }, name: { type: string }, country: { type: [string, "null"] } } }
+        home_team: { type: string }
+        away_team: { type: string }
+        starts_at: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled, live] }
+        score:
+          type: [object, "null"]
+          description: Score du moment d'un match en cours ; null avant le coup d'envoi ou s'il n'est pas encore connu
+          properties:
+            home: { type: string, example: "1" }
+            away: { type: string, example: "0" }
+        markets:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              key: { type: string, enum: [h2h, double_chance, totals, btts] }
+              name: { type: string, example: Résultat du match (1X2) }
+              line: { type: [string, "null"], example: "2.5", description: Ligne du plus/moins ; null pour les autres marchés }
+              odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
+              odds_updated_at: { type: string, format: date-time }
+              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou match en direct (paris en direct désactivés, betting.allow_live), affichée mais non pariable" }
+              selections:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    key: { type: string, enum: [home, draw, away, home_draw, home_away, draw_away, over, under, yes, no] }
+                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
+                    name: { type: string, example: Arsenal }
+                    odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
+    BetTicket:
+      type: object
+      description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: R16-7KQ2M9XAPB, description: Référence à communiquer au support }
+        type: { type: string, enum: [single, multiple] }
+        status: { type: string, enum: [pending, won, lost, void], description: "void : annulé et remboursé" }
+        stake: { $ref: "#/components/schemas/Money" }
+        total_odds: { type: string, example: "3.895", description: "Produit des cotes acceptées (chaîne, jamais de float)" }
+        potential_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Gain versé ; null tant que le ticket n'est pas réglé }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+        selections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              event:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string, example: Everton – Chelsea }
+                  starts_at: { type: string, format: date-time }
+              market:
+                type: object
+                properties:
+                  key: { type: string, enum: [h2h, double_chance, totals, btts] }
+                  name: { type: string, example: Nombre de buts }
+                  line: { type: [string, "null"], example: "2.5" }
+              selection:
+                type: object
+                properties:
+                  key: { type: string, example: over }
+                  label: { type: string, example: "+2.5" }
+                  name: { type: string, example: Over }
+              odds: { type: string, example: "1.90", description: Cote acceptée (pas la cote actuelle du catalogue) }
+              status: { type: string, enum: [pending, won, lost, void] }
+    AdminTicket:
+      type: object
+      description: |
+        Ticket vu par l'administration. La liste ne contient ni `selections`, ni `rules_snapshot`, ni `ledger_entries` ;
+        le détail ajoute les sélections et l'instantané des règles, et les écritures avec la permission ledger.view.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: R16-7KQ2M9XAPB }
+        type: { type: string, enum: [single, multiple] }
+        status: { type: string, enum: [pending, won, lost, void] }
+        user:
+          type: object
+          description: Données minimales du joueur
+          properties:
+            id: { type: string }
+            name: { type: string }
+        wallet_id: { type: string }
+        stake: { $ref: "#/components/schemas/Money" }
+        total_odds: { type: string, example: "3.895" }
+        potential_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        rules_version: { type: string }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+        rules_snapshot: { type: object, description: Règles acceptées par le joueur (détail uniquement) }
+        selections: { type: array, items: { $ref: "#/components/schemas/BetTicket/properties/selections/items" } }
+        ledger_entries: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+    AdminLedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        wallet_id: { type: string }
+        user_id: { type: string }
+        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        amount: { $ref: "#/components/schemas/Money" }
+        balance_after: { $ref: "#/components/schemas/Money" }
+        reference: { type: string, example: "bet:42:stake" }
+        related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
+        reversal_of_id: { type: [string, "null"], description: Écriture compensée par celle-ci }
+        reversed_by_id: { type: [string, "null"], description: Écriture qui compense celle-ci }
+        description: { type: [string, "null"] }
+        created_by: { type: [string, "null"], description: "Administrateur à l'origine de l'écriture ; null = système" }
+        created_at: { type: string, format: date-time }
+        correctable: { type: boolean, description: "true : peut faire l'objet d'une correction financière" }
+    Reconciliation:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        checked:
+          type: object
+          properties:
+            wallets: { type: integer }
+            ledger_entries: { type: integer }
+            tickets: { type: integer }
+        totals:
+          type: array
+          items:
+            type: object
+            properties:
+              currency: { type: string, example: HTG }
+              type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+              entries: { type: integer }
+              sum: { $ref: "#/components/schemas/Money" }
+        discrepancies_count: { type: integer }
+        discrepancies:
+          type: array
+          items:
+            type: object
+            required: [kind]
+            properties:
+              kind: { type: string, enum: [balance_chain, ticket_amount, orphan_entry] }
+              wallet_id: { type: string }
+              ledger_entry_id: { type: string }
+              ticket_id: { type: string }
+              reference: { type: string }
+              status: { type: string }
+              related: { type: object, properties: { type: { type: string }, id: { type: string } } }
+              expected: { $ref: "#/components/schemas/Money" }
+              actual: { $ref: "#/components/schemas/Money" }
+        truncated: { type: boolean, description: "true : au moins un contrôle a plus d'écarts que la liste n'en montre" }
+    ResultCorrectionImpact:
+      type: object
+      description: Tickets dont l'issue change (aperçu ou réévaluation appliquée)
+      properties:
+        tickets_count: { type: integer }
+        ledger_delta_minor: { type: integer, description: "Somme des variations de gain (négatif : argent repris)" }
+        tickets:
+          type: array
+          items:
+            type: object
+            properties:
+              ticket_id: { type: string }
+              reference: { type: string }
+              user_id: { type: string }
+              from: { type: object, properties: { status: { type: string }, payout_minor: { type: integer } } }
+              to: { type: object, properties: { status: { type: string, enum: [pending, won, lost, void] }, payout_minor: { type: integer } } }
+              ledger_delta_minor: { type: integer }
+    ResultCorrection:
+      type: object
+      properties:
+        id: { type: string }
+        event: { type: object, properties: { id: { type: string }, name: { type: string, example: "Arsenal – Chelsea" } } }
+        status: { type: string, enum: [pending, approved, rejected] }
+        current: { type: object, description: "Version en vigueur lors de la demande", properties: { version: { type: integer }, status: { type: string }, score: { type: [string, "null"] } } }
+        proposed: { type: object, properties: { status: { type: string, enum: [final, cancelled] }, score: { type: [string, "null"] } } }
+        source: { type: string, description: "manual (administrateur) ou nom du fournisseur" }
+        reason: { type: string }
+        requested_by: { type: [object, "null"], description: "null : correction envoyée par le fournisseur" }
+        decided_by: { type: [object, "null"] }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        applied_result_id: { type: [string, "null"] }
+        impact: { oneOf: [{ $ref: "#/components/schemas/ResultCorrectionImpact" }, { type: "null" }], description: "Réévaluation appliquée (validée)" }
+        preview: { $ref: "#/components/schemas/ResultCorrectionImpact" }
+        created_at: { type: string, format: date-time }
+    FinanceCorrection:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reason: { type: string }
+        ledger_entry: { $ref: "#/components/schemas/AdminLedgerEntry" }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        requested_at: { type: string, format: date-time }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        reversal_entry_id: { type: [string, "null"], description: Écriture compensatoire passée à la validation }
+    PlatformSettings:
+      type: object
+      properties:
+        version: { type: integer, description: "0 : aucune version enregistrée (configuration du serveur)" }
+        updated_at: { type: [string, "null"], format: date-time }
+        updated_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, example: betting.min_stake_minor }
+              group: { type: string, example: Paris }
+              label: { type: string, example: Mise minimale }
+              type: { type: string, enum: [money, integer, boolean, choice] }
+              help: { type: [string, "null"] }
+              options: { type: [array, "null"], items: { type: string } }
+              currency: { type: [string, "null"], description: "Type money : montants en unité mineure" }
+              value: { description: Valeur en vigueur }
+              default: { description: "Valeur de la configuration du serveur (.env)" }
+    SettingVersion:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              label: { type: string }
+              type: { type: string, enum: [money, integer, boolean, choice] }
+              from: {}
+              to: {}
+        reason: { type: string }
+        created_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        created_at: { type: string, format: date-time }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.
