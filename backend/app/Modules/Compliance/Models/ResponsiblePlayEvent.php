@@ -19,7 +19,10 @@ class ResponsiblePlayEvent extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'user_id', 'type', 'data', 'actor_id', 'created_at',
+    ];
 
     protected function casts(): array
     {

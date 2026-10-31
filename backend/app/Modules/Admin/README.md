@@ -48,6 +48,18 @@ le rendrait incohérent avec son statut : ces erreurs passent par la correction 
 chaîne des soldes de chaque portefeuille, net des écritures de chaque ticket (`gain versé ?? 0 - mise`),
 écritures rattachées à un ticket inexistant.
 
+## Paramètres versionnés (P6-08)
+
+`PlatformSettings` : mises min/max, plafond de gain, combinés, direct, crédit de bienvenue et fournisseur
+(`PlatformSettings::DEFINITIONS`). Les valeurs par défaut viennent de `config/` (.env) ; chaque modification
+(`PUT /admin/settings`, permission `settings.update`, motif) crée une version complète dans `setting_versions`
+(append-only, déclencheur PostgreSQL), auditée (`settings.updated`). La dernière version s'applique par-dessus
+`config()` au démarrage de chaque requête ou commande : les services lisent toujours `config('betting.…')`.
+
+- `base_version` : version affichée à l'administrateur ; une version enregistrée entre-temps donne `409 settings_changed`.
+- Les tickets déjà placés gardent leurs règles (`rules_snapshot`).
+- Un processus long (`queue:work`) garde les valeurs de son démarrage : le redémarrer après une modification.
+
 ## Règles à respecter
 
 - RBAC strict ; motif obligatoire pour les actions sensibles ; tout est journalisé.

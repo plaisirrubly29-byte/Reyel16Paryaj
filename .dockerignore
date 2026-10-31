@@ -1,0 +1,23 @@
+# Contexte de build des images de Staging / Production (docker/production/Dockerfile, racine du dépôt).
+# Ne jamais envoyer au build : secrets, sauvegardes, dépendances locales.
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+backups
+**/*.dump
+**/node_modules
+backend/vendor
+backend/tests
+backend/.phpunit.result.cache
+backend/Dockerfile
+backend/docker
+backend/storage/logs/*
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/bootstrap/cache/*.php
+frontend/dist
+frontend/dist-xampp
+docs

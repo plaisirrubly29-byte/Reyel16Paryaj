@@ -621,14 +621,49 @@ p { margin: 0; }
 .rules-snapshot .details { margin-top: 0.6rem; font-size: 0.82rem; }
 .details-row { display: contents; }
 
+/* Admin — événements, marchés, résultats (P6-06) */
+.text-warning { color: var(--warning); }
+.market-list, .result-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.market-item { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.9rem 0; border-bottom: 1px solid #f0f2f6; }
+.market-item:first-child { padding-top: 0; }
+.market-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.market-item p { margin: 0; }
+.market-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.selection-odds { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.market-action summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 0.88rem; }
+.market-action[open] summary { margin-bottom: 0.6rem; }
+.result-history li { padding: 0.5rem 0; border-bottom: 1px solid #f0f2f6; }
+.result-history li:last-child { border-bottom: 0; }
+.score-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 8rem)); gap: 0.75rem; }
+
+/* Admin — finance, paramètres, audit (P6-08) */
+.text-danger { color: var(--danger); }
+.subnav { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--border); }
+.subnav a { padding: 0.55rem 0.9rem; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; font-size: 0.92rem; }
+.subnav a:hover { color: var(--text); }
+.subnav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+.filters-ledger { grid-template-columns: repeat(5, minmax(0, 1fr)) auto; }
+.settings-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--gap); margin: 0; padding: 0 0 1rem; border: 0; border-bottom: 1px solid #f0f2f6; }
+.settings-group legend { padding: 0; margin-bottom: 0.75rem; font-weight: 700; }
+.setting-toggle { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 0.6rem; row-gap: 0.25rem; align-self: end; padding-bottom: 0.7rem; }
+.setting-toggle input { width: 1.15rem; height: 1.15rem; margin: 0; accent-color: var(--accent); }
+.setting-toggle label { font-weight: 600; font-size: 0.9rem; }
+.setting-toggle small { grid-column: 2; }
+.setting-toggle.field-changed label { color: var(--accent); }
+.field-changed > label { color: var(--accent); }
+.field-changed input:not([type='checkbox']), .field-changed select { border-color: var(--accent); }
+.change-list { margin: 0; padding-left: 1rem; font-size: 0.88rem; }
+.audit-detail summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; font-weight: 600; }
+.audit-detail pre { margin: 0.25rem 0 0.5rem; padding: 0.5rem; max-width: 36rem; overflow-x: auto; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 0.78rem; }
+
 @container admin-content (max-width: 900px) {
   .detail-grid { grid-template-columns: minmax(0, 1fr); }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filters-tickets { grid-template-columns: 1fr 1fr; }
+  .filters-tickets, .filters-ledger { grid-template-columns: 1fr 1fr; }
   .filters-tickets .field:first-child { grid-column: 1 / -1; }
 }
 @container admin-content (max-width: 480px) {
-  .filters-tickets { grid-template-columns: 1fr; }
+  .filters-tickets, .filters-ledger { grid-template-columns: 1fr; }
   .selections li { flex-direction: column; }
   .selection-side { flex-direction: row; align-items: center; }
 }

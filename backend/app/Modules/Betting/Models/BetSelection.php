@@ -39,7 +39,12 @@ class BetSelection extends Model
         'market_line', 'selection_key', 'selection_name', 'odds', 'odds_version',
     ];
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'bet_ticket_id', 'event_id', 'market_id', 'selection_id', 'event_name', 'event_starts_at', 'market_key',
+        'market_line', 'selection_key', 'selection_name', 'odds', 'odds_version', 'status', 'settled_at',
+        'created_at', 'updated_at', 'result_id',
+    ];
 
     /** @var array<string, mixed> */
     protected $attributes = [

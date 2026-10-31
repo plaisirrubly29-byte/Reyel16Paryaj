@@ -11,3 +11,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'active', 'mfa', 'permission:audit.view'])->group(function () {
     Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
 });
+
+// Export CSV avec motif, journalisé (P6-08). Lecture seule : pas de clé d'idempotence.
+Route::middleware(['auth:sanctum', 'active', 'mfa', 'permission:audit.export'])->group(function () {
+    Route::post('/admin/audit-logs/export', [AuditLogController::class, 'export']);
+});

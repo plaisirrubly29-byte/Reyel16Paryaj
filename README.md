@@ -90,6 +90,12 @@ npm run dev                 # http://localhost:5173
 | racine | `node scripts/github/bootstrap.mjs --markdown` | Régénérer `docs/TASKS.md` |
 | racine | `node scripts/github/bootstrap.mjs --github` | Créer labels, milestones et issues |
 
+## Déploiement
+
+Le **Staging** est déployé automatiquement à chaque push sur `develop`, après la CI complète du commit (images de
+production, HTTPS, migrations, contrôle de santé, retour arrière automatique) : voir
+[`docs/ops/deploiement-staging.md`](docs/ops/deploiement-staging.md). Sauvegardes : [`docs/ops/sauvegarde-restauration.md`](docs/ops/sauvegarde-restauration.md).
+
 ## Organisation de l'équipe
 
 1. Lire [`docs/architecture.md`](docs/architecture.md) puis le README du module sur lequel vous travaillez.

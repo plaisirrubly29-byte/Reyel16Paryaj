@@ -1,0 +1,7 @@
+# Surcharge de TEST DE CHARGE (P8-03), à combiner avec docker/staging/docker-compose.yml sur une pile isolée :
+#   docker compose -f docker-compose.yml -f docker-compose.load.yml …
+# Seule différence : le Caddyfile de load/stack/ (générateur de charge en proxy de confiance). Jamais en production.
+services:
+  web:
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro

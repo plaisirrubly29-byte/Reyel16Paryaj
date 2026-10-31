@@ -24,7 +24,10 @@ class ProviderApiCall extends Model
 
     protected $table = 'sports_data_api_calls';
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'provider', 'endpoint', 'competition', 'cost', 'remaining', 'used', 'status', 'called_at',
+    ];
 
     protected function casts(): array
     {

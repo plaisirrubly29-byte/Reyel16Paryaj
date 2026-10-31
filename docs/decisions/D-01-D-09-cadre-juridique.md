@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P0-01 |
-| **Statut** | 🟡 Proposition à valider — **aucune activité en argent réel tant que ce document n'est pas validé par écrit** |
+| **Statut** | ⏸ Reportée (2026-10-30) — la proposition s'applique à la V1 en fonds fictifs ; **aucune activité en argent réel tant que ce document n'est pas validé par écrit** |
 | **Décideur** | Rubly PLAISIR (chef de projet), sur avis écrit d'un conseil juridique du territoire visé |
 | **Préparé le** | 2026-10-15 |
 

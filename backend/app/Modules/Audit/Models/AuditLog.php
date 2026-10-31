@@ -29,7 +29,11 @@ class AuditLog extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $guarded = ['id'];
+    /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
+    protected $fillable = [
+        'action', 'actor_id', 'actor_email', 'subject_type', 'subject_id', 'before', 'after', 'reason',
+        'metadata', 'ip_address', 'user_agent', 'request_id', 'created_at',
+    ];
 
     protected function casts(): array
     {
