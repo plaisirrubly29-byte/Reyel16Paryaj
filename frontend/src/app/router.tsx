@@ -20,9 +20,15 @@ import { CouponsPage } from '../features/betting/pages/CouponsPage';
 import { RequirePermission } from '../admin/components/RequireAdmin';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { AdminHomePage } from '../admin/pages/AdminHomePage';
+import { AuditPage } from '../admin/pages/AuditPage';
 import { CorrectionDetailPage } from '../admin/pages/CorrectionDetailPage';
 import { EventDetailPage } from '../admin/pages/EventDetailPage';
 import { EventsPage } from '../admin/pages/EventsPage';
+import { FinanceCorrectionDetailPage } from '../admin/pages/FinanceCorrectionDetailPage';
+import { FinanceCorrectionsPage } from '../admin/pages/FinanceCorrectionsPage';
+import { LedgerPage } from '../admin/pages/LedgerPage';
+import { ReconciliationPage } from '../admin/pages/ReconciliationPage';
+import { SettingsPage } from '../admin/pages/SettingsPage';
 import { SettlementsPage } from '../admin/pages/SettlementsPage';
 import { UserDetailPage } from '../admin/pages/UserDetailPage';
 import { TicketDetailPage } from '../admin/pages/TicketDetailPage';
@@ -81,10 +87,13 @@ export const routes = [
       section('tickets', <TicketsPage />),
       section('tickets/:id', <TicketDetailPage />),
       section('risk', <RiskPage />),
-      section('finance', <Placeholder title="Finance" task="P6-08" />),
+      section('finance', <LedgerPage />),
+      section('finance/reconciliation', <ReconciliationPage />),
+      section('finance/corrections', <FinanceCorrectionsPage />),
+      section('finance/corrections/:id', <FinanceCorrectionDetailPage />),
       section('system', <SystemPage />),
-      section('settings', <Placeholder title="Paramètres" task="P6-08" />),
-      section('audit', <Placeholder title="Audit & rapports" task="P6-08" />),
+      section('settings', <SettingsPage />),
+      section('audit', <AuditPage />),
     ],
   },
   { path: '*', element: <Placeholder title="Page introuvable" task="—" /> },

@@ -27,7 +27,7 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => ['Idempotent-Replayed', 'Retry-After'],
+    'exposed_headers' => ['Idempotent-Replayed', 'Retry-After', 'Content-Disposition'],
 
     'max_age' => 0,
 

@@ -34,6 +34,11 @@ class FinanceCorrectionController extends Controller
         return FinanceCorrectionResource::collection($corrections);
     }
 
+    public function show(FinanceCorrection $correction): FinanceCorrectionResource
+    {
+        return new FinanceCorrectionResource($correction->load(self::RELATIONS));
+    }
+
     public function store(Request $request, FinanceCorrectionService $corrections): JsonResponse
     {
         $data = $request->validate([

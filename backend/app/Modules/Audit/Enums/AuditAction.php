@@ -33,6 +33,9 @@ enum AuditAction: string
     case ResultCorrectionApproved = 'result.correction_approved';
     case ResultCorrectionRejected = 'result.correction_rejected';
 
+    // Admin — paramètres de la plateforme versionnés (P6-08)
+    case SettingsUpdated = 'settings.updated';
+
     // Audit
     case AuditViewed = 'audit.viewed';
     case AuditExported = 'audit.exported';
