@@ -7,6 +7,7 @@ use App\Modules\Admin\Services\PlatformSettings;
 use App\Modules\Betting\Services\TicketStakeHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
+use App\Modules\Monitoring\Services\QueueHeartbeat;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
@@ -16,6 +17,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -44,6 +46,9 @@ class AppServiceProvider extends ServiceProvider
         // Paramètres versionnés (P6-08) : une instance par processus, qui retient les valeurs par défaut de config/.
         $this->app->singleton(PlatformSettings::class);
 
+        // Une instance par processus : le signal de vie du travailleur de file n'est écrit qu'une fois par 30 s (P9-02).
+        $this->app->singleton(QueueHeartbeat::class);
+
         // Mises d'un joueur pour les limites de jeu responsable : fournies par Betting à Compliance (P7-02).
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
 
@@ -68,6 +73,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Dernière version des paramètres modifiés depuis l'administration, par-dessus config/ (P6-08).
         $this->app->make(PlatformSettings::class)->apply();
+
+        // Signal de vie du travailleur de file, lu par monitoring:check (P9-02) : écrit à chaque tour de queue:work.
+        Queue::looping(fn () => $this->app->make(QueueHeartbeat::class)->beat());
 
         $this->configurePasswords();
         $this->configureRateLimiting();

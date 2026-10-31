@@ -46,3 +46,9 @@ Schedule::command('settlement:run')
     ->everyFifteenMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+// Monitoring de production (P9-02) : alertes poussées à l'astreinte (Telegram, e-mail) et signal de vie externe.
+Schedule::command('monitoring:check')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();

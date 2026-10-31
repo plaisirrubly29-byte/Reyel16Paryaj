@@ -4,7 +4,7 @@
 |---|---|
 | **Tâche** | P8-04 — procédure d'incident (ticket #55) |
 | **Portée** | Staging et production. En local, données et fonds fictifs : suivre la même démarche pour s'entraîner. |
-| **Liés** | [Sauvegarde et restauration](sauvegarde-restauration.md) · D-10 (RPO 15 min, RTO 4 h) · P9-02 (alertes et astreinte, à venir) |
+| **Liés** | [Sauvegarde et restauration](sauvegarde-restauration.md) · D-10 (RPO 15 min, RTO 4 h) · [Monitoring et alertes](monitoring-alertes.md) (P9-02) |
 
 Règle d'or : **ne jamais modifier le ledger, les tickets, les résultats ni le journal d'audit à la main.** Ils sont
 en ajout seul (déclencheurs PostgreSQL) ; toute correction passe par une écriture compensatoire auditée (P6-04).
@@ -31,7 +31,10 @@ explicitement** au début.
 | **Communication** | Informe les joueurs (bannière, réseaux) et l'équipe ; prévient le conseil juridique si P1 de données (J-9) |
 | **Secrétaire** | Tient le journal horodaté de l'incident (actions, décisions, commandes) — base du post-mortem |
 
-Astreinte et canal d'alerte : à définir avec P9-02. En attendant : Benginio Jean-Baptiste et Rubly PLAISIR.
+Astreinte et canal d'alerte (P9-02, [monitoring-alertes.md](monitoring-alertes.md) §3) : Benginio Jean-Baptiste et
+Rubly PLAISIR, tous les deux en permanence ; alertes sur le groupe Telegram d'astreinte et par e-mail. Le premier
+disponible répond « je prends » et devient responsable d'incident ; sans réponse en 15 min sur une alerte critique,
+appel téléphonique.
 
 ## 3. Déroulé général
 
