@@ -33,7 +33,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Fournisseur de données sportives choisi par SPORTS_DATA_PROVIDER (config/sports_data.php).
         $this->app->singleton(SportsDataProvider::class, fn ($app) => match (config('sports_data.provider')) {
-            'fake' => new FakeSportsDataProvider,
+            'fake' => new FakeSportsDataProvider($app->make('cache.store')),
             'theodds' => new TheOddsApiProvider(
                 $app->make(HttpFactory::class),
                 $app->make('cache.store'),
