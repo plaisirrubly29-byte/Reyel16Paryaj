@@ -126,6 +126,38 @@ export async function api<T>(path: string, options: RequestOptions = {}, retried
   return data as T;
 }
 
+/**
+ * POST qui renvoie un fichier (ex. export CSV) : déclenche son téléchargement dans le navigateur.
+ * Mêmes règles que api() (cookie de session, jeton CSRF renouvelé une fois sur 419, ApiError en cas de refus).
+ */
+export async function downloadFile(path: string, body: unknown, retried = false): Promise<void> {
+  await ensureCsrfCookie();
+  const headers: Record<string, string> = { Accept: 'text/csv, application/json', 'Content-Type': 'application/json' };
+  const token = readCookie('XSRF-TOKEN');
+  if (token) headers['X-XSRF-TOKEN'] = token;
+
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), { method: 'POST', headers, body: JSON.stringify(body), credentials: 'include' });
+  } catch {
+    throw new ApiError(0, null);
+  }
+
+  if (response.status === 419 && !retried) {
+    await ensureCsrfCookie(true);
+    return downloadFile(path, body, true);
+  }
+  if (!response.ok) throw new ApiError(response.status, await response.json().catch(() => null));
+
+  const filename = /filename="?([^";]+)"?/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? 'export.csv';
+  const url = URL.createObjectURL(await response.blob());
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const newIdempotencyKey = () => crypto.randomUUID();
 
 /** Enveloppe { data } des ressources de l'API. */

@@ -38,7 +38,7 @@ class AdminSupervisionController extends Controller
         $results = [];
 
         if ($user->hasPermission('users.view')) {
-            $results['users'] = UserSearch::apply(User::query(), $q)
+            $results['users'] = UserSearch::apply(User::query(), $q, $user->hasPermission('users.view_personal_data'))
                 ->orderByDesc('id')
                 ->limit(self::SEARCH_LIMIT)
                 ->get(['id', 'name', 'status'])

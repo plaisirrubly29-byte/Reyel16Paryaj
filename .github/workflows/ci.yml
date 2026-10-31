@@ -4,9 +4,12 @@ on:
   pull_request:
   push:
     branches: [main, develop]
+  # Appelé par deploy-staging.yml : tests du commit exact avant tout déploiement (P1-06).
+  workflow_call:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # github.workflow : l'appel depuis Deploy Staging n'annule pas la CI du même push (et inversement).
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

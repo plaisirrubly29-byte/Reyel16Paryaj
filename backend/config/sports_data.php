@@ -21,7 +21,7 @@ return [
         'regions' => env('SPORTS_DATA_REGIONS', 'eu'),
         'markets' => env('SPORTS_DATA_MARKETS', 'h2h'),
 
-        // Bookmaker de référence pour les cotes publiées (null = premier disponible). À valider (P0-04).
+        // Bookmaker de référence pour les cotes publiées (null = premier disponible, choix V1 : décision D-02).
         'reference_bookmaker' => env('SPORTS_DATA_REFERENCE_BOOKMAKER'),
     ],
 
@@ -98,5 +98,9 @@ return [
     'live_daily_credits' => (int) env('SPORTS_DATA_LIVE_DAILY_CREDITS', 30),
     // Règle de fraîcheur en direct : une cote bouge vite pendant le match, elle est bloquée plus tôt.
     'max_live_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_LIVE_ODDS_AGE', 20),
+
+    // Cache des réponses du catalogue public (P8-03), en secondes ; 0 = désactivé (développement, tests). Le pari
+    // revérifie toujours la cote côté serveur : une cote affichée depuis le cache peut avoir ce retard, jamais le ticket.
+    'catalogue_cache_seconds' => (int) env('CATALOGUE_CACHE_SECONDS', 0),
 
 ];

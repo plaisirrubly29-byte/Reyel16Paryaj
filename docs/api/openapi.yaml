@@ -343,7 +343,7 @@ paths:
       description: |
         Le serveur recharge les marchés et applique SES cotes : la cote envoyée ne sert qu'à détecter un changement.
         Ticket, sélections figées et réservation de la mise sont créés dans une seule transaction.
-        Règles provisoires (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
+        Règles validées (config/betting.php, décisions D-04/D-05/D-06) : mise 10,00 à 50 000,00, gain plafonné
         à 1 000 000,00, combinés de 20 sélections au plus et une seule sélection par match, toute cote changée refusée.
       security: [{ sessionCookie: [] }]
       parameters:
@@ -837,7 +837,7 @@ paths:
       description: Données minimales par défaut ; profil et rôles seulement avec users.view_personal_data.
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: search, in: query, description: "Email, nom, téléphone ou identifiant", schema: { type: string } }
+        - { name: search, in: query, description: "Nom (fragment), email (fragment ; complet seulement sans users.view_personal_data), téléphone complet ou identifiant", schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
         - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
         - $ref: "#/components/parameters/Page"
@@ -1093,7 +1093,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: "`no_result_to_correct`, `result_unchanged` ou `correction_already_pending`"
+          description: "`no_result_to_correct`, `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "428": { description: En-tête Idempotency-Key manquant }
@@ -1138,7 +1138,7 @@ paths:
       tags: [Admin]
       summary: Valider une correction (second administrateur, motif requis, audité)
       description: |
-        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden). Dans une transaction : nouvelle
+        Permission results.approve ; jamais le demandeur (403 self_approval_forbidden), ni un rôle attribué par un administrateur depuis moins de 24 h (403 approver_role_too_recent). Dans une transaction : nouvelle
         version du résultat (source manual, validateur, motif), réévaluation des tickets déjà réglés — gain ou
         remboursement précédent compensé (reversal), nouvelle écriture si besoin, nouvelle révision du règlement. Un
         gain repris peut rendre le solde négatif. Un combiné perdu sur ce match redevient « pending » si d'autres matchs
@@ -1155,7 +1155,7 @@ paths:
         "200":
           description: Correction appliquée
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResultCorrection" } } } } }
-        "403": { description: "`forbidden` ou `self_approval_forbidden`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: "`forbidden`, `self_approval_forbidden` ou `approver_role_too_recent`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: "`correction_not_pending` ou `result_changed`"
@@ -1209,6 +1209,129 @@ paths:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: "#/components/schemas/AuditLog" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/audit-logs/export:
+    post:
+      tags: [Admin]
+      summary: Exporter le journal d'audit en CSV (permission audit.export, motif requis, export journalisé)
+      description: |
+        Mêmes filtres que la liste. L'export est enregistré (`audit.exported` : filtres, nombre de lignes, motif)
+        avant l'envoi du fichier. CSV UTF-8 avec BOM, séparateur « ; » ; les cellules commençant par = + - @ sont
+        préfixées d'une apostrophe (injection de formules). Au-delà de 10 000 lignes : `422 export_too_large`.
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                action: { type: string, example: roles.updated }
+                actor_id: { type: integer }
+                subject_type: { type: string }
+                subject_id: { type: string }
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Fichier journal-audit-AAAAMMJJ-HHMMSS.csv (lignes de la plus ancienne à la plus récente)
+          content: { text/csv: { schema: { type: string } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: "Validation (motif), ou `export_too_large` (details.count, details.max)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/settings:
+    get:
+      tags: [Admin]
+      summary: Paramètres de la plateforme en vigueur, avec leur valeur par défaut (permission settings.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Version en vigueur (0 = valeurs de la configuration du serveur) et paramètres modifiables
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PlatformSettings" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Admin]
+      summary: Enregistrer une nouvelle version des paramètres (permission settings.update, motif requis, auditée)
+      description: |
+        Seules les valeurs envoyées changent ; la nouvelle version est un instantané complet, en ajout seul, et
+        s'applique immédiatement. `base_version` est la version affichée : si une autre version a été enregistrée
+        entre-temps, `409 settings_changed` (rien n'est écrasé). Les paramètres déjà figés sur un ticket ne changent pas.
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, base_version, reason]
+              properties:
+                values:
+                  type: object
+                  description: Valeurs groupées par préfixe ; toute autre clé est refusée.
+                  properties:
+                    betting:
+                      type: object
+                      properties:
+                        min_stake_minor: { type: integer, minimum: 1 }
+                        max_stake_minor: { type: integer, minimum: 1, description: ">= min_stake_minor" }
+                        max_payout_minor: { type: integer, minimum: 1, description: ">= max_stake_minor" }
+                        allow_multiple: { type: boolean }
+                        max_selections: { type: integer, minimum: 1, maximum: 30 }
+                        allow_live: { type: boolean }
+                    wallet:
+                      type: object
+                      properties:
+                        welcome_credit_minor: { type: integer, minimum: 0 }
+                    sports_data:
+                      type: object
+                      properties:
+                        provider: { type: string, enum: [fake, theodds], description: "theodds exige SPORTS_DATA_API_KEY" }
+                  example: { betting: { min_stake_minor: 2500, allow_live: true } }
+                base_version: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Nouvelle version en vigueur
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PlatformSettings" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`settings_changed` (details.version : version en vigueur)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "Validation (valeurs incohérentes ou clé inconnue), ou `no_change`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/settings/versions:
+    get:
+      tags: [Admin]
+      summary: Historique des versions des paramètres (permission settings.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Versions, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SettingVersion" } }
                   links: { $ref: "#/components/schemas/PaginationLinks" }
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
@@ -1360,11 +1483,26 @@ paths:
           description: "Validation, ou `entry_not_correctable` (details.reason : reversal_entry, linked_to_ticket, already_reversed)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "428": { description: En-tête Idempotency-Key manquant }
+  /admin/finance/corrections/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une correction financière et de son écriture (permission ledger.view)
+      x-task: P6-08
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Correction
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /admin/finance/corrections/{id}/approve:
     post:
       tags: [Admin]
       summary: Valider une correction et passer l'écriture compensatoire (permission finance.approve, motif requis)
-      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`).
+      description: Seconde étape, par un administrateur différent du demandeur (`403 self_approval_forbidden`) dont le rôle n'a pas été attribué par un administrateur depuis moins de 24 h (`403 approver_role_too_recent`).
       x-task: P6-04
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1378,7 +1516,7 @@ paths:
           description: Correction validée (status approved, reversal_entry_id renseigné)
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/FinanceCorrection" } } } } }
         "403":
-          description: "Permission refusée, ou `self_approval_forbidden`"
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1556,8 +1694,8 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        phone: { type: string, example: "34123456" }
-        email: { type: [string, "null"] }
+        phone: { type: string, example: "34123456", description: "Masqué sans users.view_personal_data : \"•••• 3456\"" }
+        email: { type: [string, "null"], description: "Masqué sans users.view_personal_data : \"an•••@example.com\"" }
         status: { type: string, enum: [active, suspended, excluded, closed] }
         status_changed_at: { type: [string, "null"], format: date-time }
         is_admin: { type: boolean }
@@ -1905,6 +2043,44 @@ components:
         decision_reason: { type: [string, "null"] }
         decided_at: { type: [string, "null"], format: date-time }
         reversal_entry_id: { type: [string, "null"], description: Écriture compensatoire passée à la validation }
+    PlatformSettings:
+      type: object
+      properties:
+        version: { type: integer, description: "0 : aucune version enregistrée (configuration du serveur)" }
+        updated_at: { type: [string, "null"], format: date-time }
+        updated_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, example: betting.min_stake_minor }
+              group: { type: string, example: Paris }
+              label: { type: string, example: Mise minimale }
+              type: { type: string, enum: [money, integer, boolean, choice] }
+              help: { type: [string, "null"] }
+              options: { type: [array, "null"], items: { type: string } }
+              currency: { type: [string, "null"], description: "Type money : montants en unité mineure" }
+              value: { description: Valeur en vigueur }
+              default: { description: "Valeur de la configuration du serveur (.env)" }
+    SettingVersion:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              label: { type: string }
+              type: { type: string, enum: [money, integer, boolean, choice] }
+              from: {}
+              to: {}
+        reason: { type: string }
+        created_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        created_at: { type: string, format: date-time }
     Money:
       type: object
       description: Montant en unité mineure (entier) — jamais de nombre décimal.

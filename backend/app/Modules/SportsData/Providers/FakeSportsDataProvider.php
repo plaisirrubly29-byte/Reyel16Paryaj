@@ -25,6 +25,7 @@ use LogicException;
  * $fake->setResult('fake-1', '2', '1') publie un score final (completed: false = match en cours) ;
  * $fake->setStartsAt('fake-1', now()->subMinutes(30)) fait commencer un match (cotes en direct).
  * Les matchs de football ont un 1X2 (h2h) et un plus/moins 2.5 buts (totals) ; la NBA n'a que le h2h.
+ * eventMarkets() ajoute un score exact (correct_score), absent de la liste events() comme chez The Odds API.
  *
  * Matchs de scénario (tests de bout en bout, P8-01) : avec un dépôt (le cache de l'application, partagé entre les
  * processus), addScenarioMatch() ajoute un match de Premier League unique, puis finishScenarioMatch() le fait
@@ -35,6 +36,12 @@ class FakeSportsDataProvider implements SportsDataProvider
 {
     /** Ligne par défaut du marché totals. */
     private const TOTALS_LINE = '2.5';
+
+    /** Score exact, seulement par eventMarkets() : "Domicile:buts|Extérieur:buts" => cote. */
+    private const CORRECT_SCORES = [
+        'fake-1' => ['Arsenal:1|Chelsea:0' => '7.50', 'Arsenal:1|Chelsea:1' => '6.50', 'Arsenal:2|Chelsea:1' => '9.00', 'Arsenal:0|Chelsea:1' => '11.00'],
+        'fake-2' => ['Liverpool:2|Everton:0' => '6.00', 'Liverpool:1|Everton:1' => '9.50'],
+    ];
 
     /** Clé du dépôt des matchs de scénario. */
     public const SCENARIO_KEY = 'sports-data:fake:scenario-matches';
@@ -135,6 +142,31 @@ class FakeSportsDataProvider implements SportsDataProvider
                 markets: array_map(fn (string $key, array $odds) => $this->market($id, $key, $odds, $updatedAt), array_keys($markets), $markets),
             );
         }, $this->fixtures($sportKey));
+    }
+
+    public function eventMarkets(string $sportKey, string $eventId, string $markets): EventData
+    {
+        $this->guard();
+
+        $event = collect($this->events($sportKey))->firstWhere('externalId', $eventId)
+            ?? throw new SportsDataException(SportsDataException::NOT_FOUND, "Événement inconnu : {$eventId}");
+        $keys = array_map('trim', explode(',', $markets));
+        $updatedAt = $this->updatedAtOverride ?? CarbonImmutable::now()->startOfMinute()->subMinutes(2);
+
+        $available = [...$event->markets];
+        if (isset(self::CORRECT_SCORES[$eventId])) {
+            $available[] = $this->market($eventId, 'correct_score', self::CORRECT_SCORES[$eventId], $updatedAt);
+        }
+
+        return new EventData(
+            externalId: $event->externalId,
+            sportKey: $event->sportKey,
+            competition: $event->competition,
+            homeTeam: $event->homeTeam,
+            awayTeam: $event->awayTeam,
+            startsAt: $event->startsAt,
+            markets: array_values(array_filter($available, fn (MarketData $m) => in_array($m->key, $keys, true))),
+        );
     }
 
     /**

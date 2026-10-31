@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\DB;
  *   détecter un changement, jamais de base de calcul ;
  * - disponibilité (match pas commencé ou en direct, marché ouvert, cote assez récente), limites de mise,
  *   type de pari et une seule sélection par match ;
- * - politique de changement de cote (config betting.odds_change_policy, décision D-05 provisoire) :
+ * - politique de changement de cote (config betting.odds_change_policy, décision D-05) :
  *   409 odds_changed avec les nouvelles cotes, rien n'est créé ;
  * - ticket, sélections figées et réservation de la mise dans UNE transaction : solde insuffisant → rien n'est créé.
  *
@@ -180,6 +180,10 @@ class BetPlacementService
      * Sélections demandées, dans l'ordre du coupon, avec marché et match ; marchés verrouillés jusqu'à la fin
      * de la transaction (une synchro ne peut pas changer la cote entre la vérification et le ticket).
      *
+     * Verrou PARTAGÉ (FOR SHARE) : la synchro et la suspension, qui modifient la ligne du marché, attendent la fin
+     * des paris en cours (et inversement), mais les paris sur un même marché ne s'attendent plus entre eux.
+     * Avec un verrou exclusif, tous les paris d'un match populaire passaient un par un (test de charge P8-03).
+     *
      * @param  list<array{selection_id: int|string, odds: string}>  $picks
      * @return Collection<int, Selection>
      */
@@ -189,7 +193,7 @@ class BetPlacementService
         $selections = Selection::whereKey($ids)->get()->keyBy('id');
 
         $marketIds = $selections->pluck('market_id')->unique()->sort()->values()->all();
-        $markets = Market::whereKey($marketIds)->orderBy('id')->lockForUpdate()->with('event.homeTeam', 'event.awayTeam')->get()->keyBy('id');
+        $markets = Market::whereKey($marketIds)->orderBy('id')->sharedLock()->with('event.homeTeam', 'event.awayTeam')->get()->keyBy('id');
 
         // Relues après le verrou : la cote est celle en vigueur.
         $fresh = Selection::whereKey($ids)->get()->keyBy('id');
@@ -280,6 +284,7 @@ class BetPlacementService
             'max_selections' => (int) config('betting.max_selections'),
             'allow_live' => (bool) config('betting.allow_live'),
             'odds_change_policy' => (string) config('betting.odds_change_policy'),
+            'postponed_void_hours' => (int) config('betting.postponed_void_hours'),
         ];
     }
 }

@@ -25,6 +25,10 @@ return [
         'max_failures_before_logout' => 5, // échecs consécutifs de mfa/verify
     ],
 
+    // M3 (décision D-07) : un rôle attribué par un administrateur ne permet de valider une demande d'un autre
+    // (*.approve) qu'après ce délai. Un rôle donné depuis le serveur (identity:grant-role) n'en a pas.
+    'approval_role_min_age_hours' => (int) env('IDENTITY_APPROVAL_ROLE_MIN_AGE_HOURS', 24),
+
     // Numéro de téléphone haïtien local : identifiant de connexion (voir PhoneNumber::normalize).
     'phone' => [
         'country_code' => '509',

@@ -1,0 +1,49 @@
+# Caddyfile de TEST DE CHARGE (P8-03) : celui de production (docker/production/Caddyfile) + une seule différence,
+# la confiance accordée au générateur de charge (k6 dans le conteneur web : 127.0.0.1 ou ::1) pour son en-tête X-Forwarded-For :
+# chaque visiteur virtuel garde ainsi sa propre adresse, et donc ses propres limites de débit. Jamais en production.
+#   SITE_ADDRESS : nom de domaine (ex. staging.reyel16.ht) ; « localhost » pour un essai local (certificat interne).
+#   ACME_EMAIL   : adresse de contact Let's Encrypt (expiration, incidents).
+{
+	email {$ACME_EMAIL}
+	# Seule différence avec la production : le générateur de charge (même conteneur) est un proxy de confiance.
+	servers {
+		trusted_proxies static 127.0.0.1/32 ::1/128
+	}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# API Laravel (php-fpm) : /api/v1/…, cookie CSRF de Sanctum, santé de Laravel (/up).
+	@backend path /api/* /sanctum/* /up
+	handle @backend {
+		root * /var/www/backend/public
+		php_fastcgi {$PHP_FPM_ADDRESS:backend:9000}
+	}
+
+	# Frontend React : fichiers statiques, routes de l'application renvoyées vers index.html.
+	handle {
+		root * /srv/frontend
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /assets/*
+		header @pages Cache-Control "no-cache"
+		# Pages du site (P8-02 B3) : scripts, styles et appels de l'application seulement ; Google Fonts ; QR code du MFA en data: ;
+		# jamais dans une iframe (clickjacking de l'administration). L'API garde sa propre CSP, plus stricte (SecurityHeaders).
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Frame-Options "DENY"
+		}
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log
+}
