@@ -308,7 +308,8 @@ class CatalogueSyncTest extends TestCase
 
     public function test_sync_command_reports_each_competition(): void
     {
-        config(['sports_data.sports' => ['soccer_epl', 'basketball_nba']]);
+        // Sans budget : en début de mois, le budget par synchro (crédits restants ÷ synchros restantes) n'en couvre qu'une.
+        config(['sports_data.sports' => ['soccer_epl', 'basketball_nba'], 'sports_data.budget_enabled' => false]);
 
         $this->artisan('sports-data:sync')
             ->expectsOutputToContain('soccer_epl')
