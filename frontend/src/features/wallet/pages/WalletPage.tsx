@@ -4,13 +4,14 @@ import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Icon, type IconName } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
 import { Spinner } from '../../../shared/components/Spinner';
+import { useMe } from '../../auth/api/auth';
 import { ENTRY_LABELS, useWallet, useWalletTransactions } from '../api/wallet';
 
 /**
- * Dépôt ou retrait. Aucun prestataire de paiement n'est intégré (P7-01, bloqué par la validation
- * juridique) : la section explique pourquoi l'opération est fermée, sans formulaire factice.
+ * Dépôt ou retrait. Aucun prestataire de paiement n'est intégré (P7-01) : le joueur paie ou est payé
+ * auprès de REYEL 16 PARYAJ avec son numéro de compte, puis l'opération est enregistrée par l'administration.
  */
-function MoneyMovement({ id, icon, title, intro, simulated }: { id: string; icon: IconName; title: string; intro: string; simulated: boolean }) {
+function MoneyMovement({ id, icon, title, intro, steps, accountId }: { id: string; icon: IconName; title: string; intro: string; steps: string; accountId?: string }) {
   return (
     <section className="money-card" aria-labelledby={id}>
       <header className="money-card-head">
@@ -19,19 +20,10 @@ function MoneyMovement({ id, icon, title, intro, simulated }: { id: string; icon
           <h2 id={id}>{title}</h2>
           <p className="muted small">{intro}</p>
         </div>
-        <span className="soon-tag">Bientôt</span>
       </header>
       <div className="money-card-body">
-        <p>
-          {simulated
-            ? 'La plateforme fonctionne pour l’instant en fonds fictifs : aucun argent réel n’est accepté ni versé.'
-            : 'Les paiements ne sont pas encore ouverts.'}
-          {' '}Cette opération sera disponible dès que les moyens de paiement locaux seront autorisés et intégrés.
-        </p>
-        <button type="button" className="btn btn-secondary" disabled aria-describedby={`${id}-why`}>
-          {title}
-        </button>
-        <p id={`${id}-why`} className="muted small">Indisponible pour le moment.</p>
+        <p>{steps}</p>
+        {accountId && <p className="small">Votre numéro de compte : <strong className="mono">{accountId}</strong></p>}
       </div>
     </section>
   );
@@ -41,7 +33,7 @@ function MoneyMovement({ id, icon, title, intro, simulated }: { id: string; icon
 export function WalletPage() {
   const wallet = useWallet();
   const recent = useWalletTransactions({ page: 1 });
-  const simulated = wallet.data?.simulated ?? true;
+  const { data: me } = useMe();
 
   return (
     <section className="stack">
@@ -53,7 +45,6 @@ export function WalletPage() {
         <div className="balance-card">
           <span className="muted">Solde disponible</span>
           <strong className="balance"><MoneyText value={wallet.data.balance} /></strong>
-          {wallet.data.simulated && <span className="badge">Fonds fictifs</span>}
         </div>
       )}
       {wallet.data?.status === 'frozen' && (
@@ -61,8 +52,10 @@ export function WalletPage() {
       )}
 
       <div className="money-grid">
-        <MoneyMovement id="deposit" icon="deposit" title="Dépôt" intro="Alimenter votre solde." simulated={simulated} />
-        <MoneyMovement id="withdraw" icon="withdraw" title="Retrait" intro="Retirer vos gains." simulated={simulated} />
+        <MoneyMovement id="deposit" icon="deposit" title="Dépôt" intro="Alimenter votre solde." accountId={me?.id}
+          steps="Effectuez votre dépôt auprès de REYEL 16 PARYAJ en indiquant votre numéro de compte. Votre solde est crédité dès réception du paiement." />
+        <MoneyMovement id="withdraw" icon="withdraw" title="Retrait" intro="Retirer vos gains." accountId={me?.id}
+          steps="Demandez votre retrait auprès de REYEL 16 PARYAJ avec votre numéro de compte. Le montant est débité de votre solde puis vous est remis." />
       </div>
 
       <section className="stack-sm" aria-labelledby="recent-ops">

@@ -36,7 +36,7 @@ export function RegisterPage() {
   }
 
   return (
-    <AuthShell title="Créer un compte" subtitle="Version de démonstration : les mises se font avec des fonds fictifs." icon="user">
+    <AuthShell title="Créer un compte" subtitle="Rejoignez REYEL 16 PARYAJ en quelques secondes." icon="user">
       {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
       <form className="stack" onSubmit={submit} noValidate>

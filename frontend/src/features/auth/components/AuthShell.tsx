@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../../../shared/components/Icon';
 const HIGHLIGHTS: { icon: IconName; text: string }[] = [
   { icon: 'bolt', text: 'Cotes actualisées chaque jour' },
   { icon: 'shield', text: 'Cote revérifiée au moment du pari' },
-  { icon: 'wallet', text: 'Démonstration : fonds fictifs' },
+  { icon: 'wallet', text: 'Solde et historique toujours à jour' },
 ];
 
 type Props = {

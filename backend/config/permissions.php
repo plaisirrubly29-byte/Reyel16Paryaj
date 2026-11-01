@@ -35,6 +35,7 @@ return [
         'ledger.view' => 'Consulter le ledger et le rapprochement',
         'finance.correct' => 'Initier une correction financière',
         'finance.approve' => 'Valider une correction financière initiée par un autre',
+        'wallet.adjust' => "Créditer / débiter le solde d'un joueur (dépôt ou retrait reçu hors plateforme, motif)",
         'settings.view' => 'Consulter les paramètres',
         'settings.update' => 'Modifier les paramètres (versionnés)',
         'responsible_gaming.view' => 'Consulter les limites de jeu responsable',
@@ -48,7 +49,7 @@ return [
         'super_admin' => [
             'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve',
             'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend',
-            'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'settings.view',
+            'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view',
             'settings.update', 'responsible_gaming.view', 'audit.view', 'audit.export', 'roles.manage',
         ],
         'operations' => [

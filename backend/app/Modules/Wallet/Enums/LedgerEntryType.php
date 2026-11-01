@@ -10,6 +10,12 @@ enum LedgerEntryType: string
     /** Fonds fictifs attribués (V1 simulée). */
     case SimulatedCredit = 'simulated_credit';
 
+    /** Dépôt enregistré par le Super Admin (paiement reçu hors plateforme). */
+    case Deposit = 'deposit';
+
+    /** Retrait enregistré par le Super Admin (montant remis au joueur hors plateforme). */
+    case Withdrawal = 'withdrawal';
+
     /** Mise réservée à l'acceptation d'un ticket. */
     case Stake = 'stake';
 
@@ -26,8 +32,8 @@ enum LedgerEntryType: string
     public function sign(): ?int
     {
         return match ($this) {
-            self::SimulatedCredit, self::Payout, self::Refund => 1,
-            self::Stake => -1,
+            self::SimulatedCredit, self::Deposit, self::Payout, self::Refund => 1,
+            self::Stake, self::Withdrawal => -1,
             self::Reversal => null,
         };
     }

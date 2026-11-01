@@ -352,9 +352,9 @@ export function AdminHomePage() {
                 hint={`+${count(data.users.new_today)} aujourd’hui · +${count(data.users.new_in_period)} sur la période · ${plural(data.users.suspended, 'suspendu')}`} to="/admin/users" />
             )}
             {data.finance && !data.finance.payments_available && (
-              <Kpi icon="wallet" label="Dépôts et retraits" value="Non disponibles" muted
-                definition="Aucun prestataire de paiement n'est intégré : la V1 fonctionne en fonds fictifs (tâche P7-01, bloquée par la validation juridique)."
-                hint="Fonds fictifs en V1 · paiements bloqués (P7-01)" />
+              <Kpi icon="wallet" label="Dépôts et retraits" value="Manuels" muted
+                definition="Aucun prestataire de paiement n'est intégré (P7-01) : les dépôts et retraits sont reçus hors plateforme, puis enregistrés par le Super Admin depuis la fiche du joueur."
+                hint="Saisis par le Super Admin · fiche du joueur" />
             )}
           </div>
 

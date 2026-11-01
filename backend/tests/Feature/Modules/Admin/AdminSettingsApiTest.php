@@ -83,14 +83,14 @@ class AdminSettingsApiTest extends TestCase
     public function test_the_latest_version_applies_on_top_of_config_in_a_new_process(): void
     {
         $this->saveSettings(['betting' => ['max_payout_minor' => 200_000_00]])->assertOk();
-        $this->saveSettings(['wallet' => ['welcome_credit_minor' => 0]], baseVersion: 1)->assertOk();
+        $this->saveSettings(['wallet' => ['welcome_credit_minor' => 2_500_00]], baseVersion: 1)->assertOk();
 
         // Nouveau processus : config/ revient à ses valeurs, puis la dernière version s'applique.
-        config(['betting.max_payout_minor' => 1_000_000_00, 'wallet.welcome_credit_minor' => 5_000_00]);
+        config(['betting.max_payout_minor' => 1_000_000_00, 'wallet.welcome_credit_minor' => 0]);
         (new PlatformSettings)->apply();
 
         $this->assertSame(200_000_00, config('betting.max_payout_minor'));
-        $this->assertSame(0, config('wallet.welcome_credit_minor'));
+        $this->assertSame(2_500_00, config('wallet.welcome_credit_minor'));
     }
 
     public function test_versions_are_listed_newest_first_with_their_changes(): void

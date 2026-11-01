@@ -47,6 +47,22 @@ class LedgerService
         return $this->post($wallet, LedgerEntryType::SimulatedCredit, $amount, $reference, description: $description, actor: $actor);
     }
 
+    /** Dépôt reçu hors plateforme, enregistré par le Super Admin. Jamais exposé par une route joueur. */
+    public function deposit(Wallet $wallet, Money $amount, string $reference, string $description, User $actor): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Deposit, $amount, $reference, description: $description, actor: $actor);
+    }
+
+    /**
+     * Retrait remis hors plateforme, enregistré par le Super Admin. Refusé si le solde est insuffisant ou gelé.
+     *
+     * @throws ApiException insufficient_funds, wallet_frozen
+     */
+    public function withdraw(Wallet $wallet, Money $amount, string $reference, string $description, User $actor): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Withdrawal, $amount, $reference, description: $description, actor: $actor);
+    }
+
     /**
      * Réserve (débite) la mise d'un ticket. Refusé si le solde disponible est insuffisant.
      *

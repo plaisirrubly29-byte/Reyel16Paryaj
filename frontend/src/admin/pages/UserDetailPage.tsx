@@ -4,9 +4,12 @@ import { ApiError, newIdempotencyKey } from '../../shared/api/client';
 import { Alert } from '../../shared/components/Alert';
 import { Button } from '../../shared/components/Button';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
+import { MoneyText } from '../../shared/components/MoneyText';
 import { Spinner } from '../../shared/components/Spinner';
+import { TextField } from '../../shared/components/TextField';
 import { useMe } from '../../features/auth/api/auth';
-import { ROLE_LABELS, useAdminUser, useChangeUserStatus, type AdminUser } from '../api/users';
+import { parseStakeMinor, sanitizeStake } from '../../features/betting/slip/stake';
+import { ROLE_LABELS, useAdjustUserWallet, useAdminUser, useAdminUserWallet, useChangeUserStatus, type AdminUser } from '../api/users';
 import { initials } from '../roles';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
@@ -51,6 +54,7 @@ export function UserDetailPage() {
             <UserDetails user={u} />
           </section>
           <StatusPanel user={u} />
+          {!u.is_admin && <WalletPanel user={u} />}
         </div>
       )}
     </section>
@@ -160,5 +164,115 @@ function StatusPanel({ user }: { user: AdminUser }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Solde du joueur (ledger.view) et dépôt / retrait reçu hors plateforme (wallet.adjust, Super Admin).
+ * Le montant est saisi en gourdes ; le solde, le plafond et le solde suffisant sont vérifiés par l'API.
+ */
+function WalletPanel({ user }: { user: AdminUser }) {
+  const { data: me } = useMe();
+  const canView = !!me?.permissions.includes('ledger.view');
+  const canAdjust = !!me?.permissions.includes('wallet.adjust');
+  const wallet = useAdminUserWallet(user.id, canView);
+  const adjust = useAdjustUserWallet(user.id);
+  const [type, setType] = useState<'deposit' | 'withdrawal'>('deposit');
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
+
+  if (!canView && !canAdjust) return null;
+
+  const amountMinor = parseStakeMinor(amount);
+  const error = adjust.error instanceof ApiError ? adjust.error : null;
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (amountMinor === null) return;
+    adjust.mutate(
+      { type, amount_minor: Number(amountMinor), reason: reason.trim(), idempotencyKey },
+      {
+        onSuccess: () => { setAmount(''); setReason(''); setIdempotencyKey(newIdempotencyKey()); },
+        onError: (err) => {
+          if (err instanceof ApiError && err.status !== 0) setIdempotencyKey(newIdempotencyKey());
+        },
+      },
+    );
+  }
+
+  return (
+    <section className="admin-card stack">
+      <h2 className="card-title">Solde</h2>
+      {canView && (
+        <>
+          {wallet.isPending && <Spinner />}
+          <ErrorAlert error={wallet.error} onRetry={() => wallet.refetch()} />
+          {wallet.data && (
+            <p>
+              <strong className="balance"><MoneyText value={wallet.data.balance} /></strong>
+              {wallet.data.status === 'frozen' && <span className="badge"> Gelé</span>}
+            </p>
+          )}
+        </>
+      )}
+
+      {canAdjust && (
+        <form className="stack" onSubmit={submit} noValidate>
+          <p className="muted small">
+            Enregistrez un dépôt reçu ou un retrait remis au joueur hors plateforme. L'opération apparaît dans son
+            historique et dans le journal d'audit avec votre motif.
+          </p>
+
+          {adjust.isSuccess && (
+            <Alert tone="success">
+              {adjust.data.type === 'deposit' ? 'Dépôt enregistré.' : 'Retrait enregistré.'} Nouveau solde : <MoneyText value={adjust.data.balance_after} />
+            </Alert>
+          )}
+          {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
+
+          <div className="field">
+            <label htmlFor="wallet-type">Opération</label>
+            <select id="wallet-type" value={type} onChange={(e) => setType(e.target.value as 'deposit' | 'withdrawal')}>
+              <option value="deposit">Créditer (dépôt)</option>
+              <option value="withdrawal">Débiter (retrait)</option>
+            </select>
+          </div>
+
+          <TextField
+            label="Montant"
+            inputMode="decimal"
+            name="amount"
+            autoComplete="off"
+            prefix={wallet.data?.currency ?? 'HTG'}
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(sanitizeStake(e.target.value))}
+            error={error?.fieldErrors.amount_minor}
+          />
+
+          <div className={['field', error?.fieldErrors.reason && 'field-invalid'].filter(Boolean).join(' ')}>
+            <label htmlFor="wallet-reason">Motif (obligatoire)</label>
+            <textarea
+              id="wallet-reason"
+              rows={2}
+              maxLength={500}
+              placeholder="Ex. dépôt MonCash reçu, réf. 123456"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              aria-invalid={error?.fieldErrors.reason ? true : undefined}
+            />
+            {error?.fieldErrors.reason && <small className="field-error" role="alert">{error.fieldErrors.reason}</small>}
+          </div>
+
+          <div>
+            <Button type="submit" variant={type === 'deposit' ? 'primary' : 'danger'} loading={adjust.isPending}
+              disabled={amountMinor === null || reason.trim().length < 5}>
+              {type === 'deposit' ? 'Créditer le solde' : 'Débiter le solde'}
+            </Button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

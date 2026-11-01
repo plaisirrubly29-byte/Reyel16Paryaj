@@ -32,7 +32,7 @@ export type AdminTicketSelection = {
 
 export type AdminLedgerEntry = {
   id: string;
-  type: 'simulated_credit' | 'stake' | 'payout' | 'refund' | 'reversal';
+  type: 'simulated_credit' | 'deposit' | 'withdrawal' | 'stake' | 'payout' | 'refund' | 'reversal';
   amount: Money;
   balance_after: Money;
   reference: string;
@@ -67,6 +67,8 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
 
 export const LEDGER_TYPE_LABELS: Record<AdminLedgerEntry['type'], string> = {
   simulated_credit: 'Crédit fictif',
+  deposit: 'Dépôt',
+  withdrawal: 'Retrait',
   stake: 'Mise',
   payout: 'Gain',
   refund: 'Remboursement',
