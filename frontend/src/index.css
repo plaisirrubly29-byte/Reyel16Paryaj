@@ -93,10 +93,6 @@ p { margin: 0; }
   display: flex; align-items: center; gap: 1.25rem;
 }
 .site-header .brand-logo { height: 2.9rem; border-radius: 8px; box-shadow: none; }
-.demo-pill {
-  flex: 0 0 auto; padding: 0.15rem 0.55rem; border-radius: 999px; cursor: help;
-  border: 1px solid rgba(245, 179, 1, 0.55); color: #ffd56a; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
-}
 
 /* Navigation : pastilles discrètes, l'onglet actif est souligné de rouge */
 .main-nav { display: flex; align-items: center; gap: 0.25rem; height: 100%; margin-left: 0.5rem; }
@@ -1300,7 +1296,6 @@ a.match-line-teams:hover { color: var(--brand); }
   .sports-sidebar { display: none; }
   .content-wide { padding: 1rem; }
   .header-search { flex-basis: 220px; }
-  .demo-pill { display: none; }
 }
 
 /* --- Tablette et mobile : une colonne, panier en panneau, barre d'onglets en bas --- */

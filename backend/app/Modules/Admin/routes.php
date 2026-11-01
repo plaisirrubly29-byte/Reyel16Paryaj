@@ -9,6 +9,7 @@ use App\Modules\Admin\Http\Controllers\AdminSettingsController;
 use App\Modules\Admin\Http\Controllers\AdminSupervisionController;
 use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
+use App\Modules\Admin\Http\Controllers\AdminWalletController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
 use App\Modules\Admin\Http\Controllers\ResultCorrectionController;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,10 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/users', [AdminUserController::class, 'index'])->middleware('permission:users.view');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->middleware('permission:users.view');
     Route::patch('/users/{user}', [AdminUserController::class, 'update'])->middleware(['permission:users.suspend', 'idempotent']);
+
+    // Solde d'un joueur : consultation (ledger.view) ; dépôt / retrait reçu hors plateforme, réservé au Super Admin (motif).
+    Route::get('/users/{user}/wallet', [AdminWalletController::class, 'show'])->middleware('permission:ledger.view');
+    Route::post('/users/{user}/wallet/adjustments', [AdminWalletController::class, 'store'])->middleware(['permission:wallet.adjust', 'idempotent']);
 
     // Jeu responsable d'un joueur (P7-02) : consultation auditée ; réouverture d'une auto-exclusion échue (motif).
     Route::get('/users/{user}/responsible-gaming', [AdminResponsibleGamingController::class, 'show'])->middleware('permission:responsible_gaming.view');

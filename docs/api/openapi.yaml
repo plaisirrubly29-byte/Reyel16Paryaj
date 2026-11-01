@@ -563,7 +563,7 @@ paths:
       summary: Historique des écritures (plus récentes d'abord)
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, deposit, withdrawal, stake, payout, refund, reversal] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -896,6 +896,66 @@ paths:
           description: "`invalid_status_transition`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/wallet:
+    get:
+      tags: [Admin]
+      summary: Solde d'un compte (permission ledger.view)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user_id: { type: string }
+                      currency: { type: string, example: HTG }
+                      balance: { $ref: "#/components/schemas/Money" }
+                      status: { type: string, enum: [active, frozen] }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/users/{id}/wallet/adjustments:
+    post:
+      tags: [Admin]
+      summary: Enregistrer un dépôt ou un retrait reçu hors plateforme (motif requis, audité)
+      description: |
+        Permission wallet.adjust (Super Admin). Aucun prestataire de paiement n'est intégré (P7-01) : le joueur paie
+        ou est payé auprès de l'opérateur, puis l'opération est inscrite au ledger (écriture deposit ou withdrawal).
+        Compte administrateur : 422 not_a_player. Retrait supérieur au solde : 422 insufficient_funds ; solde gelé :
+        423 wallet_frozen. Audit : wallet.deposited / wallet.withdrawn.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, amount_minor, reason]
+              properties:
+                type: { type: string, enum: [deposit, withdrawal] }
+                amount_minor: { type: integer, minimum: 100, maximum: 100000000, description: "Unité mineure (100 = 1,00 HTG)" }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Opération enregistrée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminLedgerEntry" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: "`validation_failed`, `not_a_player` ou `insufficient_funds`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423":
+          description: "`wallet_frozen`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
   /admin/events:
     get:
       tags: [Admin]
@@ -1388,7 +1448,7 @@ paths:
       parameters:
         - { name: user_id, in: query, schema: { type: integer } }
         - { name: wallet_id, in: query, schema: { type: integer } }
-        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] } }
+        - { name: type, in: query, schema: { type: string, enum: [simulated_credit, deposit, withdrawal, stake, payout, refund, reversal] } }
         - { name: reference, in: query, description: Référence exacte de l'écriture, schema: { type: string, example: "bet:42:stake" } }
         - { name: ticket_id, in: query, description: "Écritures d'un ticket (mise, gain, remboursement)", schema: { type: integer } }
         - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
@@ -1618,7 +1678,7 @@ components:
       type: object
       properties:
         id: { type: string }
-        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        type: { type: string, enum: [simulated_credit, deposit, withdrawal, stake, payout, refund, reversal] }
         amount: { $ref: "#/components/schemas/Money" }
         balance_after: { $ref: "#/components/schemas/Money" }
         related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
@@ -1948,7 +2008,7 @@ components:
         id: { type: string }
         wallet_id: { type: string }
         user_id: { type: string }
-        type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+        type: { type: string, enum: [simulated_credit, deposit, withdrawal, stake, payout, refund, reversal] }
         amount: { $ref: "#/components/schemas/Money" }
         balance_after: { $ref: "#/components/schemas/Money" }
         reference: { type: string, example: "bet:42:stake" }
@@ -1975,7 +2035,7 @@ components:
             type: object
             properties:
               currency: { type: string, example: HTG }
-              type: { type: string, enum: [simulated_credit, stake, payout, refund, reversal] }
+              type: { type: string, enum: [simulated_credit, deposit, withdrawal, stake, payout, refund, reversal] }
               entries: { type: integer }
               sum: { $ref: "#/components/schemas/Money" }
         discrepancies_count: { type: integer }

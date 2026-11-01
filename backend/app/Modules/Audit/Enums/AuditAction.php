@@ -28,6 +28,10 @@ enum AuditAction: string
     case FinanceCorrectionApproved = 'finance.correction_approved';
     case FinanceCorrectionRejected = 'finance.correction_rejected';
 
+    // Admin — dépôt / retrait enregistré par le Super Admin (paiement hors plateforme)
+    case WalletDeposited = 'wallet.deposited';
+    case WalletWithdrawn = 'wallet.withdrawn';
+
     // Settlement — correction de résultat à double contrôle (P5-06)
     case ResultCorrectionRequested = 'result.correction_requested';
     case ResultCorrectionApproved = 'result.correction_approved';

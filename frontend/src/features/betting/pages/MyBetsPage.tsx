@@ -19,7 +19,7 @@ export function MyBetsPage() {
     <section className="stack my-bets">
       <div className="my-bets-head">
         <h1>MES PARIS</h1>
-        <p className="muted small">Fonds fictifs : aucun argent réel n'est engagé.</p>
+        <p className="muted small">Vos tickets en cours et réglés.</p>
       </div>
 
       {bets.isPending && <Spinner />}

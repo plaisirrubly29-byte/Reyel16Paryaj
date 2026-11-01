@@ -86,8 +86,8 @@ export function SystemPage() {
               <p className="muted small">Règlements et traitements différés (connexion <code>{s.queue.connection}</code>).</p>
             </ServiceCard>
 
-            <ServiceCard title="Paiements" health="off" healthLabel="Non intégrés">
-              <p className="muted small">Aucun prestataire de paiement : la V1 fonctionne en fonds fictifs. Intégration bloquée par la validation juridique (P7-01).</p>
+            <ServiceCard title="Paiements" health="off" healthLabel="Manuels">
+              <p className="muted small">Aucun prestataire de paiement intégré (P7-01) : dépôts et retraits reçus hors plateforme, enregistrés par le Super Admin depuis la fiche du joueur.</p>
             </ServiceCard>
 
             <ServiceCard title="Sauvegardes" health="off" healthLabel="Non suivies ici">

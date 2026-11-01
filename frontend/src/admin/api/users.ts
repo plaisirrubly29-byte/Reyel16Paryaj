@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type Envelope, type Paginated } from '../../shared/api/client';
+import { api, type Envelope, type Money, type Paginated } from '../../shared/api/client';
+import type { AdminLedgerEntry } from './tickets';
 
 export type AccountStatus = 'active' | 'suspended' | 'excluded' | 'closed';
 
@@ -77,6 +78,37 @@ export function useChangeUserStatus(id: string) {
     onSuccess: (user) => {
       queryClient.setQueryData(['admin', 'users', id], user);
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'], exact: false });
+    },
+  });
+}
+
+/** Solde d'un compte (GET /admin/users/{id}/wallet, permission ledger.view). */
+export type AdminUserWallet = { user_id: string; currency: string; balance: Money; status: 'active' | 'frozen' };
+
+export function useAdminUserWallet(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'users', id, 'wallet'],
+    queryFn: async ({ signal }) => (await api<Envelope<AdminUserWallet>>(`/admin/users/${encodeURIComponent(id)}/wallet`, { signal })).data,
+    enabled,
+  });
+}
+
+export type WalletAdjustment = { type: 'deposit' | 'withdrawal'; amount_minor: number; reason: string; idempotencyKey: string };
+
+/** Dépôt ou retrait reçu hors plateforme (Super Admin, motif obligatoire, audité par le serveur). */
+export function useAdjustUserWallet(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ idempotencyKey, ...body }: WalletAdjustment) =>
+      (await api<Envelope<AdminLedgerEntry>>(`/admin/users/${encodeURIComponent(id)}/wallet/adjustments`, {
+        method: 'POST',
+        body,
+        idempotencyKey,
+      })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users', id, 'wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ledger'], exact: false });
     },
   });
 }

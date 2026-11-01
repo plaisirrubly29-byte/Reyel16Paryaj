@@ -35,7 +35,7 @@ describe('solde et transactions', () => {
 
     const balance = await screen.findByText((_, el) => el?.classList.contains('balance') ?? false);
     expect(text(balance)).toBe('1 234,50 HTG');
-    expect(screen.getByText('Fonds fictifs')).toBeInTheDocument();
+    expect(screen.queryByText(/fictif|démonstration/i)).toBeNull();
   });
 
   it("liste l'historique avec les montants signés et le lien vers le ticket", async () => {
@@ -89,20 +89,22 @@ describe('solde et transactions', () => {
 });
 
 describe('espace joueur', () => {
-  it('présente le dépôt et le retrait comme indisponibles, sans formulaire factice', async () => {
+  it('explique le dépôt et le retrait avec le numéro de compte, sans formulaire de paiement', async () => {
     mockApi({
       'GET /me': { status: 200, body: { data: player } },
       'GET /wallet': { status: 200, body: wallet },
-      'GET /wallet/transactions': { status: 200, body: page([entry('1', 'simulated_credit', 5_000_00, 5_000_00)]) },
+      'GET /wallet/transactions': { status: 200, body: page([entry('2', 'withdrawal', -1_000_00, 4_000_00), entry('1', 'deposit', 5_000_00, 5_000_00)]) },
     });
 
     renderApp('/wallet');
 
     expect(await screen.findByRole('heading', { name: 'Solde', level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Dépôt' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Retrait' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Dépôt', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Retrait', level: 2 })).toBeInTheDocument();
+    expect(await screen.findAllByText((_, el) => el?.tagName === 'P' && el.textContent === 'Votre numéro de compte : 1')).toHaveLength(2);
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(await screen.findByText('Crédit de démonstration')).toBeInTheDocument();
+    expect(await screen.findByText('Dépôt', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.getByText('Retrait', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Toutes mes transactions' })).toHaveAttribute('href', '/transactions');
   });
 

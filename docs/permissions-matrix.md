@@ -22,6 +22,7 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Tickets — consulter | ✅ | 👁 | 👁 | 👁 | 👁 |
 | Ledger / rapprochement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 |
 | Correction financière | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ |
+| Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Paramètres (limites, règles, fournisseur) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 |
 | Limites jeu responsable | 👁 | ❌ | ❌ | ❌ | ✅ |
 | Audit & exports | 👁 | ❌ | 👁 | ❌ | 👁 |
