@@ -56,7 +56,7 @@ class PermissionMatrixTest extends TestCase
         self::SUPER_ADMIN => [
             'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'settlement.run',
             'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
-            'finance.correct', 'finance.approve', 'settings.view', 'settings.update', 'responsible_gaming.view',
+            'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
             'audit.view', 'audit.export', 'roles.manage',
         ],
         self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view'],
@@ -93,12 +93,13 @@ class PermissionMatrixTest extends TestCase
         'Tickets — consulter' => ['GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure'],
         'Ledger / rapprochement — consulter' => [
             'GET api/v1/admin/ledger', 'GET api/v1/admin/finance/reconciliation', 'GET api/v1/admin/finance/corrections',
-            'GET api/v1/admin/finance/corrections/{correction}',
+            'GET api/v1/admin/finance/corrections/{correction}', 'GET api/v1/admin/users/{user}/wallet',
         ],
         'Correction financière' => [
             'POST api/v1/admin/finance/corrections', 'POST api/v1/admin/finance/corrections/{correction}/approve',
             'POST api/v1/admin/finance/corrections/{correction}/reject',
         ],
+        'Solde joueur — dépôt / retrait' => ['POST api/v1/admin/users/{user}/wallet/adjustments'],
         'Paramètres' => ['GET api/v1/admin/settings', 'GET api/v1/admin/settings/versions', 'GET api/v1/admin/system', 'PUT api/v1/admin/settings'],
         'Limites jeu responsable' => ['GET api/v1/admin/users/{user}/responsible-gaming', 'POST api/v1/admin/users/{user}/responsible-gaming/reopen'],
         'Audit & exports' => ['GET api/v1/admin/audit-logs', 'POST api/v1/admin/audit-logs/export'],
@@ -275,6 +276,13 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', 'finance/reconciliation', $allowed);
         $this->assertAccess('GET', 'finance/corrections', $allowed);
         $this->assertAccess('GET', 'finance/corrections/'.self::MISSING, $allowed);
+        $this->assertAccess('GET', "users/{$this->player->id}/wallet", $allowed);
+    }
+
+    public function test_row_player_wallet_deposit_and_withdrawal_are_reserved_to_super_admin(): void
+    {
+        $this->assertAccess('POST', "users/{$this->player->id}/wallet/adjustments", [self::SUPER_ADMIN]);
+        $this->assertSame(0, LedgerEntry::count(), 'Aucune requête sans corps ne doit écrire au ledger.');
     }
 
     public function test_row_finance_correction_is_double_validated_by_super_admin_and_finance(): void

@@ -21,7 +21,7 @@ export function SiteFooter() {
       <div className="footer-inner">
         <div className="footer-brand">
           <p className="brand"><BrandLogo /><span className="sr-only">REYEL 16 PARYAJ</span></p>
-          <p className="small">Paris sportifs sur le football, le basketball et le baseball. Version de démonstration : fonds fictifs uniquement.</p>
+          <p className="small">Paris sportifs sur le football, le basketball et le baseball.</p>
         </div>
 
         <nav className="footer-col" aria-label="Paris sportifs">
@@ -49,7 +49,7 @@ export function SiteFooter() {
       </div>
 
       <div className="footer-bottom">
-        <p className="small">© REYEL 16 PARYAJ {new Date().getFullYear()} · Version de démonstration · Fonds fictifs uniquement</p>
+        <p className="small">© REYEL 16 PARYAJ {new Date().getFullYear()} · Tous droits réservés</p>
         <p className="small">
           <span className={`dot ${health.data?.status === 'ok' ? 'dot-ok' : health.isPending ? '' : 'dot-down'}`} aria-hidden="true" />
           Service : {status}

@@ -134,6 +134,8 @@ jobs:
       FRONTEND_URL: http://localhost:4173
       SANCTUM_STATEFUL_DOMAINS: localhost:4173
       SPORTS_DATA_PROVIDER: fake
+      # Le parcours part d'un solde de 5 000 HTG offert à l'inscription (désactivé par défaut en production).
+      WALLET_WELCOME_CREDIT_MINOR: 500000
       PHP_CLI_SERVER_WORKERS: 4
       E2E_BASE_URL: http://localhost:4173
       E2E_ARTISAN: php backend/artisan

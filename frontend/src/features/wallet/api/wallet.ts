@@ -9,7 +9,7 @@ export type Wallet = {
   simulated: boolean;
 };
 
-export type LedgerEntryType = 'simulated_credit' | 'stake' | 'payout' | 'refund' | 'reversal';
+export type LedgerEntryType = 'simulated_credit' | 'deposit' | 'withdrawal' | 'stake' | 'payout' | 'refund' | 'reversal';
 
 export type LedgerEntry = {
   id: string;
@@ -22,7 +22,9 @@ export type LedgerEntry = {
 };
 
 export const ENTRY_LABELS: Record<LedgerEntryType, string> = {
-  simulated_credit: 'Crédit de démonstration',
+  simulated_credit: 'Bonus de bienvenue',
+  deposit: 'Dépôt',
+  withdrawal: 'Retrait',
   stake: 'Mise',
   payout: 'Gain',
   refund: 'Remboursement',

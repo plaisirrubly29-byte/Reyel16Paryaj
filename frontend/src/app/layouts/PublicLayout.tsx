@@ -80,9 +80,6 @@ function PublicShell() {
       <header className="site-header">
         <div className="site-header-inner">
           <Brand />
-          <span className="demo-pill" title="Version de démonstration — fonds fictifs uniquement">
-            Démo<span className="sr-only"> : version de démonstration, fonds fictifs uniquement</span>
-          </span>
 
           <nav className="main-nav" aria-label="Navigation principale">
             <Link to="/" className={sportsActive ? 'active' : undefined} aria-current={sportsActive ? 'page' : undefined}>

@@ -157,7 +157,7 @@ Anomalies : **bloquante** (empêche le lancement), **majeure** (contournement n�
 
 | Limite | Conséquence | Suite prévue |
 |---|---|---|
-| **Fonds fictifs uniquement** | Aucun dépôt ni retrait ; aucun gain réel | Argent réel après G1 et P7-01 |
+| **Dépôts et retraits manuels** | Reçus hors plateforme puis enregistrés par le Super Admin depuis la fiche du joueur (audités, motif obligatoire) ; aucun prestataire de paiement intégré | Paiement en ligne après G1 et P7-01 |
 | Paiements (P7-01) bloqués | Pas de prestataire intégré | Après validation juridique écrite |
 | Paris en direct désactivés | Matchs en cours visibles, non pariables | Décision d'équipe, cotes de quelques secondes requises (P8-02 E1) |
 | Capacité (P8-03) | Catalogue : objectif de 200 ms tenu jusqu'à ~480 visiteurs simultanés sur 10 cœurs (~150 à 200 sur 4 vCPU) ; paris : 30/s | Cache HTTP devant PHP, Laravel Octane ou plus de serveurs (tâche à créer) |

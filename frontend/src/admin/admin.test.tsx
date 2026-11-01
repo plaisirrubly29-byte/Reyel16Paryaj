@@ -200,7 +200,7 @@ describe('tableau de bord', () => {
     expect(within(stakes).getByText(/1\s500,00/)).toBeInTheDocument();
     expect(within(stakes).getByText(/Définition : Montant des tickets placés/)).toBeInTheDocument();
     expect(screen.getByText('1 250')).toBeInTheDocument();
-    expect(screen.getByText('Non disponibles')).toBeInTheDocument();
+    expect(screen.getByText('Manuels')).toBeInTheDocument();
     expect(await screen.findByText('Crédits du fournisseur épuisés')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Mises par sport' })).toBeInTheDocument();
     // Une alerte critique sur un service : l'indicateur de la barre du haut le signale.

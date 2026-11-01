@@ -84,7 +84,6 @@ export function AccountPage() {
           <strong className="profile-balance-amount">
             {wallet.data ? <MoneyText value={wallet.data.balance} /> : wallet.isPending ? '…' : '—'}
           </strong>
-          {wallet.data?.simulated && <span className="profile-balance-badge">Fonds fictifs</span>}
           <span className="profile-balance-cta">Voir le solde<Icon name="arrowRight" size={15} /></span>
         </Link>
       </header>

@@ -170,4 +170,42 @@ describe('fiche utilisateur', () => {
 
     expect(await screen.findByText('Votre rôle ne donne pas accès à cette section.')).toBeInTheDocument();
   });
+
+  it('crédite le solde d\'un joueur (Super Admin) avec un motif', async () => {
+    let balance = 0;
+    const fetchMock = mockApi({
+      'GET /me': me(['users.view', 'ledger.view', 'wallet.adjust']),
+      'GET /admin/users/7': { status: 200, body: { data: account() } },
+      'GET /admin/users/7/wallet': () => ({ status: 200, body: { data: { user_id: '7', currency: 'HTG', balance: { minor: balance, currency: 'HTG' }, status: 'active' } } }),
+      'POST /admin/users/7/wallet/adjustments': (init) => {
+        balance += JSON.parse(String(init?.body)).amount_minor;
+        return { status: 201, body: { data: { id: '1', type: 'deposit', amount: { minor: balance, currency: 'HTG' }, balance_after: { minor: balance, currency: 'HTG' } } } };
+      },
+    });
+    renderApp('/admin/users/7');
+
+    const button = await screen.findByRole('button', { name: 'Créditer le solde' });
+    expect(button).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Montant'), '2500,50');
+    await userEvent.type(screen.getByLabelText('Motif (obligatoire)'), 'Dépôt MonCash reçu');
+    await userEvent.click(screen.getByRole('button', { name: 'Créditer le solde' }));
+
+    expect(await screen.findByText(/Dépôt enregistré/)).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([u, init]) => String(u).endsWith('/admin/users/7/wallet/adjustments') && init?.method === 'POST');
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ type: 'deposit', amount_minor: 250050, reason: 'Dépôt MonCash reçu' });
+    expect((call?.[1]?.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('masque le formulaire de crédit sans la permission wallet.adjust', async () => {
+    mockApi({
+      'GET /me': me(['users.view', 'ledger.view']),
+      'GET /admin/users/7': { status: 200, body: { data: account() } },
+      'GET /admin/users/7/wallet': { status: 200, body: { data: { user_id: '7', currency: 'HTG', balance: { minor: 1_000_00, currency: 'HTG' }, status: 'active' } } },
+    });
+    renderApp('/admin/users/7');
+
+    expect(await screen.findByRole('heading', { name: 'Solde' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créditer le solde' })).toBeNull();
+  });
 });
