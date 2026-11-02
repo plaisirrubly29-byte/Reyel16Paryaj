@@ -22,7 +22,10 @@ RUN apt-get update \
 COPY docker/production/php.ini "$PHP_INI_DIR/conf.d/zz-reyel16.ini"
 COPY docker/production/php-fpm.conf /usr/local/etc/php-fpm.d/zz-reyel16.conf
 # Processus php-fpm au plus (docker/production/php-fpm.conf) ; à fixer selon les vCPU du serveur dans le .env.
-ENV PHP_FPM_MAX_CHILDREN=10
+# La réserve (START, MAX_SPARE) est recalculée au démarrage par entrypoint.sh ; valeurs pour 10 processus.
+ENV PHP_FPM_MAX_CHILDREN=10 \
+    PHP_FPM_START_SERVERS=2 \
+    PHP_FPM_MAX_SPARE_SERVERS=4
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/backend
