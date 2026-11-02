@@ -34,7 +34,9 @@ class ResultCorrectionResource extends JsonResource
             'id' => (string) $this->id,
             'event' => ['id' => (string) $event->id, 'name' => "{$event->homeTeam->name} – {$event->awayTeam->name}"],
             'status' => $this->status->value,
-            'current' => self::outcome($this->basedOn),
+            // initial : premier résultat saisi à la main, le fournisseur n'en ayant publié aucun (V2-D04).
+            'kind' => $this->based_on_result_id === null ? 'initial' : 'correction',
+            'current' => $this->basedOn === null ? null : self::outcome($this->basedOn),
             'proposed' => [
                 'status' => $this->result_status->value,
                 'score' => $this->home_score === null ? null : "{$this->home_score}-{$this->away_score}",

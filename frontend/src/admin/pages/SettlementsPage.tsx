@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { DataTable, type Column } from '../../shared/components/DataTable';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Pagination } from '../../shared/components/Pagination';
-import { CORRECTION_STATUS_LABELS, outcomeLabel, sourceLabel, useResultCorrections, type CorrectionStatus, type ResultCorrection } from '../api/results';
+import { CORRECTION_STATUS_LABELS, currentLabel, outcomeLabel, sourceLabel, useResultCorrections, type CorrectionStatus, type ResultCorrection } from '../api/results';
 import { PageHeader } from '../components/PageHeader';
 import { dateTime } from '../api/events';
 
@@ -25,7 +25,7 @@ const columns: Column<ResultCorrection>[] = [
       </div>
     ),
   },
-  { key: 'change', header: 'Correction', render: (c) => <span className="nowrap">{outcomeLabel(c.current)} → <strong>{outcomeLabel(c.proposed)}</strong></span> },
+  { key: 'change', header: 'Correction', render: (c) => <span className="nowrap">{currentLabel(c)} → <strong>{outcomeLabel(c.proposed)}</strong></span> },
   {
     key: 'by',
     header: 'Demandée par',

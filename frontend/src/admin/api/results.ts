@@ -18,6 +18,8 @@ export type CorrectionImpact = {
   tickets_count: number;
   /** Somme des variations de gain : négatif = argent repris aux joueurs. */
   ledger_delta_minor: number;
+  /** Premier résultat validé (V2-D04) : tickets en attente, réglés juste après. */
+  pending_tickets_count?: number;
   tickets: {
     ticket_id: string;
     reference: string;
@@ -33,7 +35,10 @@ export type ResultCorrection = {
   id: string;
   event: { id: string; name: string };
   status: CorrectionStatus;
-  current: Outcome & { version: number };
+  /** initial : premier résultat saisi à la main, le fournisseur n'en ayant publié aucun (V2-D04). */
+  kind: 'initial' | 'correction';
+  /** null pour un premier résultat. */
+  current: (Outcome & { version: number }) | null;
   proposed: Outcome;
   /** « manual » : administrateur ; sinon nom du fournisseur. */
   source: string;
@@ -64,6 +69,9 @@ export type ResultHistory = { event_id: string; results: ResultVersion[]; correc
 
 export const outcomeLabel = (o: Outcome) => (o.status === 'cancelled' ? 'Match annulé' : (o.score ?? '—'));
 
+/** Résultat en vigueur lors de la demande ; aucun pour un premier résultat saisi à la main (V2-D04). */
+export const currentLabel = (c: ResultCorrection) => (c.current ? outcomeLabel(c.current) : 'Aucun résultat');
+
 export const sourceLabel = (source: string) => (source === 'manual' ? 'Administration' : `Fournisseur (${source})`);
 
 export function useResultCorrections(filters: { status?: CorrectionStatus; page: number }) {
@@ -90,7 +98,15 @@ export function useResultHistory(eventId: string, enabled = true) {
   });
 }
 
-export type CorrectionRequest = { status: ResultStatus; home_score: string | null; away_score: string | null; reason: string; idempotencyKey: string };
+export type CorrectionRequest = {
+  status: ResultStatus;
+  home_score: string | null;
+  away_score: string | null;
+  /** D-03 : score du temps réglementaire confirmé (exigé pour le football). */
+  regulation_time: boolean;
+  reason: string;
+  idempotencyKey: string;
+};
 
 /** Demander une correction (permission results.enter) : rien ne change avant la validation d'un autre administrateur. */
 export function useRequestCorrection(eventId: string) {

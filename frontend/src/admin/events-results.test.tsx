@@ -178,10 +178,14 @@ describe('écran Événements & marchés', () => {
     await userEvent.type(screen.getByLabelText('Domicile'), '1');
     await userEvent.type(screen.getByLabelText('Extérieur'), '2');
     await userEvent.type(screen.getByLabelText('Motif (obligatoire)'), 'Score officiel publié par la ligue');
+
+    // Football (D-03, V2-D04) : envoi bloqué tant que le score du temps réglementaire n'est pas confirmé.
+    expect(screen.getByRole('button', { name: 'Envoyer la demande' })).toBeDisabled();
+    await userEvent.click(screen.getByLabelText(/Score à la fin du temps réglementaire/));
     await userEvent.click(screen.getByRole('button', { name: 'Envoyer la demande' }));
 
     expect(await screen.findByText(/attend la validation d'un second administrateur/)).toBeInTheDocument();
-    expect(JSON.parse(String(post?.body))).toEqual({ status: 'final', home_score: '1', away_score: '2', reason: 'Score officiel publié par la ligue' });
+    expect(JSON.parse(String(post?.body))).toEqual({ status: 'final', home_score: '1', away_score: '2', regulation_time: true, reason: 'Score officiel publié par la ligue' });
     expect(headers(post)['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
   });
 

@@ -1124,12 +1124,20 @@ paths:
   /admin/events/{id}/result-corrections:
     post:
       tags: [Admin]
-      summary: Demander la correction du résultat d'un match (motif requis, audité) — rien ne change avant validation
+      summary: Demander la correction du résultat d'un match, ou son premier résultat (motif requis, audité) — rien ne change avant validation
       description: |
         Permission results.enter. Une seule demande en attente par match. La réponse contient l'aperçu de l'impact
         (tickets dont l'issue change, montants). Une correction envoyée par le fournisseur après règlement crée aussi
         une demande (requested_by null), à valider de la même façon.
-      x-task: P5-06
+
+        **Premier résultat (V2-D04)** : si le fournisseur n'a publié aucun résultat, la demande crée le premier
+        (`kind: initial`, `current: null`), au plus tôt 3 h après le coup d'envoi (BETTING_MANUAL_RESULT_MIN_HOURS_AFTER_START).
+        Sa validation par un autre administrateur enregistre le résultat (source `manual`) et règle les tickets.
+        Si le fournisseur publie entre-temps, la validation est refusée (`result_changed`).
+
+        **Temps réglementaire (D-03)** : pour le football, le score est celui de la fin du temps réglementaire
+        (90 min + arrêts de jeu), sans prolongation ni tirs au but ; `regulation_time: true` est exigé pour un résultat `final`.
+      x-task: P5-06, V2-D04
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -1146,6 +1154,9 @@ paths:
                 home_score: { type: [string, "null"], example: "1", description: "Obligatoire si final" }
                 away_score: { type: [string, "null"], example: "2", description: "Obligatoire si final" }
                 reason: { type: string, minLength: 5, maxLength: 500 }
+                regulation_time:
+                  type: boolean
+                  description: "Le score est celui du temps réglementaire (D-03). Exigé à true pour le football si status = final"
       responses:
         "201":
           description: Demande créée, en attente
@@ -1153,9 +1164,9 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: "`no_result_to_correct`, `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
+          description: "`result_too_early` (premier résultat avant 3 h après le coup d'envoi, details.available_at), `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
-        "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "`regulation_time_required` (football : confirmer le score du temps réglementaire), `invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "428": { description: En-tête Idempotency-Key manquant }
   /admin/result-corrections:
     get:
@@ -2061,6 +2072,7 @@ components:
       properties:
         tickets_count: { type: integer }
         ledger_delta_minor: { type: integer, description: "Somme des variations de gain (négatif : argent repris)" }
+        pending_tickets_count: { type: integer, description: "Premier résultat validé (V2-D04) : tickets en attente, réglés juste après" }
         tickets:
           type: array
           items:
@@ -2078,7 +2090,8 @@ components:
         id: { type: string }
         event: { type: object, properties: { id: { type: string }, name: { type: string, example: "Arsenal – Chelsea" } } }
         status: { type: string, enum: [pending, approved, rejected] }
-        current: { type: object, description: "Version en vigueur lors de la demande", properties: { version: { type: integer }, status: { type: string }, score: { type: [string, "null"] } } }
+        kind: { type: string, enum: [initial, correction], description: "initial : premier résultat saisi à la main, le fournisseur n'en ayant publié aucun (V2-D04)" }
+        current: { type: [object, "null"], description: "Version en vigueur lors de la demande ; null pour un premier résultat", properties: { version: { type: integer }, status: { type: string }, score: { type: [string, "null"] } } }
         proposed: { type: object, properties: { status: { type: string, enum: [final, cancelled] }, score: { type: [string, "null"] } } }
         source: { type: string, description: "manual (administrateur) ou nom du fournisseur" }
         reason: { type: string }

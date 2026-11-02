@@ -33,6 +33,14 @@ return [
     // avec la nouvelle cote) ; le joueur confirme en renvoyant le pari avec la cote à jour.
     'odds_change_policy' => 'reject',
 
+    // V2-D04 : premier résultat saisi à la main quand le fournisseur n'en publie pas — pas avant ce délai après le
+    // coup d'envoi (un match de football avec arrêts de jeu et mi-temps dure environ 2 h).
+    'manual_result_min_hours_after_start' => (int) env('BETTING_MANUAL_RESULT_MIN_HOURS_AFTER_START', 3),
+
+    // D-03 : sports réglés sur le score du temps réglementaire (90 min + arrêts de jeu), sans prolongation ni tirs au
+    // but. Une saisie manuelle doit le confirmer (regulation_time). Slugs de la table sports.
+    'regulation_time_sports' => ['soccer'],
+
     // D-05 : match reporté — la sélection est annulée (cote 1) si le match ne commence pas dans ce délai
     // après l'heure prévue au moment du pari (bet_selections.event_starts_at).
     'postponed_void_hours' => (int) env('BETTING_POSTPONED_VOID_HOURS', 48),

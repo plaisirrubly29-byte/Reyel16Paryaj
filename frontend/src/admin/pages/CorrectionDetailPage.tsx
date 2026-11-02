@@ -45,7 +45,10 @@ export function CorrectionDetailPage() {
       {c && (
         <>
           <dl className="summary-grid">
-            <div className="summary-item"><dt>Résultat en vigueur</dt><dd>{outcomeLabel(c.current)} <span className="muted small">(version {c.current.version})</span></dd></div>
+            <div className="summary-item">
+              <dt>Résultat en vigueur</dt>
+              <dd>{c.current ? <>{outcomeLabel(c.current)} <span className="muted small">(version {c.current.version})</span></> : 'Aucun : premier résultat saisi à la main'}</dd>
+            </div>
             <div className="summary-item"><dt>Proposé</dt><dd><strong>{outcomeLabel(c.proposed)}</strong></dd></div>
             <div className="summary-item"><dt>Demandée par</dt><dd>{c.requested_by ? c.requested_by.name : sourceLabel(c.source)}</dd></div>
             <div className="summary-item"><dt>Le</dt><dd>{dateTime(c.created_at)}</dd></div>
