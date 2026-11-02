@@ -19,6 +19,8 @@ export type AdminUser = {
   is_admin: boolean;
   created_at: string;
   last_login_at: string | null;
+  /** Mise maximale par ticket posée par un administrateur (V2-D05), en unité mineure ; null = limite générale. */
+  max_stake_minor: number | null;
   roles?: string[];
   mfa_enabled?: boolean;
   profile?: {

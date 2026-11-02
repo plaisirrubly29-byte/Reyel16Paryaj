@@ -89,7 +89,7 @@ class PermissionMatrixTest extends TestCase
         ],
         'Règlement — lancer / relancer' => [], // aucune route : règlement automatique (job, commande settlement:run)
         'Utilisateurs — rechercher / consulter' => ['GET api/v1/admin/users', 'GET api/v1/admin/users/{user}'],
-        'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}'],
+        'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}', 'PUT api/v1/admin/users/{user}/stake-limit'],
         'Tickets — consulter' => ['GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure'],
         'Ledger / rapprochement — consulter' => [
             'GET api/v1/admin/ledger', 'GET api/v1/admin/finance/reconciliation', 'GET api/v1/admin/finance/corrections',
@@ -259,6 +259,9 @@ class PermissionMatrixTest extends TestCase
     {
         $this->assertAccess('PATCH', "users/{$this->player->id}", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE]);
         $this->assertSame('active', $this->player->fresh()->status->value);
+        // Mise maximale propre au joueur (V2-D05) : même ligne, restriction plus légère qu'une suspension.
+        $this->assertAccess('PUT', "users/{$this->player->id}/stake-limit", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE]);
+        $this->assertNull($this->player->fresh()->max_stake_minor);
     }
 
     public function test_row_tickets_are_readable_by_every_role(): void

@@ -20,6 +20,11 @@ return [
     // Gain potentiel plafonné (le gain affiché et versé ne dépasse jamais ce montant) : 1 000 000,00.
     'max_payout_minor' => (int) env('BETTING_MAX_PAYOUT_MINOR', 1_000_000_00),
 
+    // V2-D05 : perte maximale de la maison (pire cas des tickets en cours) sur un match, tous marchés confondus,
+    // et sur un seul marché. Un pari qui ferait dépasser l'un des deux est refusé (risk_limit_exceeded).
+    'max_event_liability_minor' => (int) env('BETTING_MAX_EVENT_LIABILITY_MINOR', 500_000_00),
+    'max_market_liability_minor' => (int) env('BETTING_MAX_MARKET_LIABILITY_MINOR', 250_000_00),
+
     // D-04 : combinés autorisés, 20 sélections au plus, une seule sélection par match (issues liées).
     'allow_multiple' => (bool) env('BETTING_ALLOW_MULTIPLE', true),
     'max_selections' => (int) env('BETTING_MAX_SELECTIONS', 20),

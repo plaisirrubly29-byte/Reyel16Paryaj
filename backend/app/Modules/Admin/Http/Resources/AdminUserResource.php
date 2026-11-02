@@ -47,6 +47,7 @@ class AdminUserResource extends JsonResource
             'is_admin' => $this->isAdmin(),
             'created_at' => $this->created_at?->toIso8601String(),
             'last_login_at' => $this->last_login_at?->toIso8601String(),
+            'max_stake_minor' => $this->max_stake_minor,
             $this->mergeWhen($full, fn () => [
                 'roles' => $this->roles->pluck('slug')->values(),
                 'mfa_enabled' => $this->mfa_confirmed_at !== null,

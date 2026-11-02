@@ -43,6 +43,21 @@ Garde-fous :
 - Clé d’idempotence obligatoire : une requête répétée ne crée pas de second ticket.
 - Création du ticket + réservation de mise dans une seule transaction SQL.
 
+## Plafonds d'engagement (V2-D05)
+
+- **Perte maximale de la maison** sur un match (`BETTING_MAX_EVENT_LIABILITY_MINOR`, 500 000 HTG) et sur un marché
+  (`BETTING_MAX_MARKET_LIABILITY_MINOR`, 250 000 HTG), modifiables dans les paramètres de l'admin (groupe « Risque »).
+  Un pari qui ferait dépasser l'un des deux est refusé : `422 risk_limit_exceeded` (`details.scope` event|market).
+- Pire cas d'un marché : gains de l'issue la plus chère − mises des paris simples sur ce marché ; celui d'un match
+  additionne ses marchés. Un **combiné** compte, pour son gain entier, sur l'issue choisie d'un match seulement quand
+  toutes ses autres sélections sont gagnées ou annulées.
+- Un pari qui **réduit** le pire cas reste accepté, même au-dessus d'un plafond qu'on vient de baisser.
+- Concurrence : sous la moitié d'un plafond, les paris d'un même match passent en parallèle (test de charge P8-03) ;
+  au-delà, le match est verrouillé et le calcul refait, les paris passent un par un (`ExposureGuard`).
+- **Mise maximale par joueur** : posée par un administrateur (`PUT /admin/users/{id}/stake-limit`, permission
+  `users.suspend`, motif, audit `user.stake_limit_changed`) ; elle ne fait que baisser la limite générale
+  (`stake_out_of_range`, `details.max` = limite du joueur).
+
 ## Organisation
 
 ```

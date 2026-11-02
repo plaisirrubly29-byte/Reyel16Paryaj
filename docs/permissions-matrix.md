@@ -18,7 +18,7 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Résultats — saisir / valider | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ |
 | Règlement — lancer / relancer | — | — | — | — | — |
 | Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 |
-| Utilisateur — suspendre (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Utilisateur — suspendre, limiter sa mise maximale (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Tickets — consulter | ✅ | 👁 | 👁 | 👁 | 👁 |
 | Ledger / rapprochement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 |
 | Correction financière | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ |

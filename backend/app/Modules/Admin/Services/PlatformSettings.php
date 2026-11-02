@@ -35,6 +35,10 @@ class PlatformSettings
         'betting.allow_multiple' => ['group' => 'Paris', 'label' => 'Paris combinés autorisés', 'type' => 'boolean', 'rules' => ['boolean']],
         'betting.max_selections' => ['group' => 'Paris', 'label' => 'Sélections maximum par combiné', 'type' => 'integer', 'rules' => ['integer', 'min:1', 'max:30']],
         'betting.allow_live' => ['group' => 'Paris', 'label' => 'Paris en direct autorisés', 'type' => 'boolean', 'rules' => ['boolean']],
+        'betting.max_event_liability_minor' => ['group' => 'Risque', 'label' => 'Perte maximale sur un match', 'type' => 'money', 'rules' => ['integer', 'min:1', 'max:100000000000'],
+            'help' => 'Pire cas des tickets en cours, tous marchés du match confondus. Au-delà, les nouveaux paris sur ce match sont refusés.'],
+        'betting.max_market_liability_minor' => ['group' => 'Risque', 'label' => 'Perte maximale sur un marché', 'type' => 'money', 'rules' => ['integer', 'min:1', 'max:100000000000'],
+            'help' => 'Pire cas des tickets en cours sur un seul marché (ex. le 1X2 d\'un match).'],
         'wallet.welcome_credit_minor' => ['group' => 'Portefeuille', 'label' => 'Crédit de bienvenue (fonds fictifs)', 'type' => 'money', 'rules' => ['integer', 'min:0', 'max:100000000'],
             'help' => 'Versé à chaque nouvelle inscription ; 0 pour le désactiver.'],
         'sports_data.provider' => ['group' => 'Fournisseur', 'label' => 'Fournisseur de données sportives', 'type' => 'choice', 'rules' => ['string', 'in:fake,theodds'], 'options' => ['fake', 'theodds'],
@@ -218,6 +222,9 @@ class PlatformSettings
         }
         if ($values['betting.max_payout_minor'] < $values['betting.max_stake_minor']) {
             $errors['values.betting.max_payout_minor'] = __('Le plafond de gain doit être supérieur ou égal à la mise maximale.');
+        }
+        if ($values['betting.max_market_liability_minor'] > $values['betting.max_event_liability_minor']) {
+            $errors['values.betting.max_market_liability_minor'] = __('La perte maximale sur un marché ne peut pas dépasser celle sur un match.');
         }
         if ($values['sports_data.provider'] === 'theodds' && blank(config('sports_data.theodds.key'))) {
             $errors['values.sports_data.provider'] = __('The Odds API exige une clé (SPORTS_DATA_API_KEY) dans la configuration du serveur.');
