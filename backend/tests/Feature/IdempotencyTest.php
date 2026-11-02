@@ -160,4 +160,29 @@ class IdempotencyTest extends TestCase
 
         $this->assertSame(1, IdempotencyKey::count());
     }
+
+    /** Revue P8-02, F10 : la réponse mémorisée (données personnelles possibles) est chiffrée en base, rejouée à l'identique. */
+    public function test_the_stored_response_is_encrypted_and_replayed_as_is(): void
+    {
+        $key = (string) Str::uuid();
+        $first = $this->send($key, ['amount' => 987654])->assertCreated();
+
+        $stored = DB::table('idempotency_keys')->value('response_body');
+        $this->assertStringNotContainsString('987654', $stored);
+
+        $this->send($key, ['amount' => 987654])
+            ->assertCreated()
+            ->assertHeader('Idempotent-Replayed', 'true')
+            ->assertExactJson($first->json());
+    }
+
+    /** Clé enregistrée en clair avant le chiffrement (au plus 24 h avant la purge) : encore rejouée. */
+    public function test_a_response_stored_before_encryption_is_still_replayed(): void
+    {
+        $key = (string) Str::uuid();
+        $this->send($key)->assertCreated();
+        DB::table('idempotency_keys')->update(['response_body' => '{"data":{"id":1,"amount":100}}']);
+
+        $this->send($key)->assertCreated()->assertExactJson(['data' => ['id' => 1, 'amount' => 100]]);
+    }
 }

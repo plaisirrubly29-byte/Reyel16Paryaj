@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Crypt;
 
 /**
  * Réponse mémorisée pour une clé d'idempotence (voir RequireIdempotencyKey).
@@ -33,6 +36,24 @@ class IdempotencyKey extends Model
         'scope', 'key', 'method', 'path', 'fingerprint', 'status', 'response_status', 'response_body',
         'response_content_type', 'created_at', 'updated_at',
     ];
+
+    /**
+     * Réponse chiffrée en base avec APP_KEY : elle peut contenir des données personnelles (revue P8-02, F10).
+     * Une réponse enregistrée en clair avant le chiffrement (purgée sous 24 h) est rendue telle quelle.
+     */
+    protected function responseBody(): Attribute
+    {
+        return Attribute::make(
+            get: function (?string $value) {
+                try {
+                    return $value === null ? null : Crypt::decryptString($value);
+                } catch (DecryptException) {
+                    return $value;
+                }
+            },
+            set: fn (?string $value) => $value === null ? null : Crypt::encryptString($value),
+        );
+    }
 
     /** Purge quotidienne : `php artisan model:prune` (planifié dans routes/console.php). */
     public function prunable(): Builder
