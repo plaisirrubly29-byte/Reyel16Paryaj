@@ -1,9 +1,13 @@
 import { BRAND_LOGO_URL } from '../../../app/layouts/BrandLogo';
+import { useSports } from '../api/catalogue';
 import { BettingBoard } from '../components/BettingBoard';
 import { TopMatches } from '../components/TopMatches';
 
 /** Accueil : bandeau (logo et devise), top matchs, puis matchs à venir ou en direct, avec le coupon à droite. */
 export function HomePage() {
+  // Seuls les sports qui ont des matchs sont annoncés.
+  const sports = useSports().data ?? [];
+
   return (
     <>
       <h1 className="sr-only">REYEL 16 PARYAJ — paris sportifs</h1>
@@ -11,7 +15,7 @@ export function HomePage() {
       <BettingBoard title="Tous les matchs" perPage={50} paginate>
         <section className="hero" aria-label="Bienvenue">
           <div className="hero-text">
-            <p className="hero-kicker">Football · Basketball · Baseball</p>
+            <p className="hero-kicker">{sports.length > 0 ? sports.map((s) => s.name).join(' · ') : 'Paris sportifs'}</p>
             <p className="hero-title">Parye sou espò ou renmen</p>
             <p className="hero-motto"><span>Pi fasil</span><span>Pi rapid</span><span>Pi sekirite</span></p>
             <p className="hero-sub">Cotes mises à jour toute la journée.</p>

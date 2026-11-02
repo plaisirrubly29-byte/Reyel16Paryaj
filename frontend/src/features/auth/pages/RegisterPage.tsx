@@ -3,10 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
+import { SelectField } from '../../../shared/components/SelectField';
 import { TextField } from '../../../shared/components/TextField';
 import { useRegister, type RegisterInput } from '../api/auth';
 import { AuthShell } from '../components/AuthShell';
+import { countryOptions, DEFAULT_COUNTRY } from '../countries';
 import { digitsOnly } from '../phone';
+
+const COUNTRIES = countryOptions().map((c) => ({ value: c.code, label: c.name }));
 
 const empty: RegisterInput = {
   name: '',
@@ -15,7 +19,7 @@ const empty: RegisterInput = {
   password: '',
   password_confirmation: '',
   birth_date: '',
-  country: 'HT',
+  country: DEFAULT_COUNTRY,
 };
 
 export function RegisterPage() {
@@ -80,30 +84,28 @@ export function RegisterPage() {
           onChange={set('email')}
           error={fieldErrors.email}
         />
-        <div className="field-row">
-          <TextField
-            label="Date de naissance"
-            type="date"
-            name="birth_date"
-            autoComplete="bday"
-            icon="calendar"
-            required
-            value={form.birth_date}
-            onChange={set('birth_date')}
-            error={fieldErrors.birth_date}
-            hint="Vous devez être majeur pour ouvrir un compte."
-          />
-          <TextField
-            label="Pays (code à 2 lettres)"
-            name="country"
-            autoComplete="country"
-            icon="flag"
-            maxLength={2}
-            value={form.country ?? ''}
-            onChange={set('country')}
-            error={fieldErrors.country}
-          />
-        </div>
+        <TextField
+          label="Date de naissance"
+          type="date"
+          name="birth_date"
+          autoComplete="bday"
+          icon="calendar"
+          required
+          value={form.birth_date}
+          onChange={set('birth_date')}
+          error={fieldErrors.birth_date}
+          hint="Vous devez être majeur pour ouvrir un compte."
+        />
+        <SelectField
+          label="Pays"
+          name="country"
+          autoComplete="country"
+          icon="flag"
+          options={COUNTRIES}
+          value={form.country ?? DEFAULT_COUNTRY}
+          onChange={set('country')}
+          error={fieldErrors.country}
+        />
         <TextField
           label="Mot de passe"
           labelHidden

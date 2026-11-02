@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { guest, mockApi, player, renderApp } from '../../test/renderApp';
 import { safeRedirect } from './api/auth';
@@ -136,6 +136,31 @@ describe('inscription', () => {
     const body = JSON.parse(String(registerCall?.[1]?.body));
     expect(body.phone).toBe('34123456');
     expect(body).not.toHaveProperty('email');
+  });
+
+  it('propose le pays dans une liste, Haïti par défaut et en tête', async () => {
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/register': { status: 201, body: { data: player } },
+    });
+    renderApp('/register');
+
+    const country = await screen.findByRole('combobox', { name: 'Pays' });
+    expect(country).toHaveValue('HT');
+    const options = within(country).getAllByRole('option');
+    expect(options[0]).toHaveTextContent('Haïti');
+    expect(options.length).toBeGreaterThan(200);
+
+    await userEvent.selectOptions(country, 'Canada');
+    await userEvent.type(screen.getByLabelText('Nom'), 'Ana Joueuse');
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
+    await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
+    expect(JSON.parse(String(registerCall?.[1]?.body)).country).toBe('CA');
   });
 });
 

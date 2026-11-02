@@ -246,15 +246,15 @@ p { margin: 0; }
 /* Champs en pilule avec badge d'icône (ou indicatif) intégré, dans l'esprit d'un écran de connexion mobile sobre. */
 .auth-card .field label { font-size: 0.85rem; }
 .field-control { position: relative; display: flex; align-items: center; }
-.field-control > input { padding-left: 3.4rem; }
-.auth-card .field-control input {
+.field-control > input, .field-control > select { padding-left: 3.4rem; }
+.auth-card .field-control input, .auth-card .field-control select {
   border-radius: 999px; background: var(--surface-2); border: 1px solid transparent; min-height: 3.2rem; padding-left: 3.6rem;
 }
-.auth-card .field-control input:hover { background: var(--surface-3); }
-.auth-card .field-control input:focus {
+.auth-card .field-control input:hover, .auth-card .field-control select:hover { background: var(--surface-3); }
+.auth-card .field-control input:focus, .auth-card .field-control select:focus {
   background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring);
 }
-.auth-card .field-invalid .field-control input { border-color: var(--danger); background: #fff8f8; }
+.auth-card .field-invalid .field-control input, .auth-card .field-invalid .field-control select { border-color: var(--danger); background: #fff8f8; }
 .field-icon-badge {
   position: absolute; left: 0.5rem; display: inline-flex; align-items: center; justify-content: center;
   width: 2.3rem; height: 2.3rem; border-radius: 50%; background: var(--accent-soft); color: var(--accent); pointer-events: none;
@@ -268,9 +268,10 @@ p { margin: 0; }
 .auth-card .field label,
 .auth-card .field-hint,
 .auth-card .field-error { text-align: center; }
-.auth-card .field-control input { text-align: center; padding-right: 3.6rem; }
+.auth-card .field-control input, .auth-card .field-control select { text-align: center; padding-right: 3.6rem; }
+.auth-card .field-control select { text-align-last: center; cursor: pointer; }
 /* Champs et bouton principal de même dimension : pleine largeur, même hauteur. */
-.auth-card .field-control input,
+.auth-card .field-control input, .auth-card .field-control select,
 .auth-card .field input { flex: 1; width: 100%; min-width: 0; height: 3.2rem; }
 .auth-card .btn-primary { width: 100%; height: 3.2rem; }
 
@@ -1154,6 +1155,8 @@ a.match-line-teams:hover { color: var(--brand); }
   display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
   background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 2rem; text-align: center; color: var(--muted);
 }
+.empty-state p { margin: 0; }
+.board-subtitle { margin: 0; padding: 0.5rem 1.5rem 0; font-size: 1.15rem; }
 .empty-icon { display: grid; place-items: center; width: 3.25rem; height: 3.25rem; border-radius: 50%; background: var(--surface-2); color: var(--muted); }
 .see-all { display: flex; justify-content: center; }
 
