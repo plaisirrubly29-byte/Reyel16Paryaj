@@ -4,6 +4,7 @@ namespace App\Modules\IdentityAccess\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\IdentityAccess\Http\Middleware\EnforceSessionLifetime;
 use App\Modules\IdentityAccess\Http\Requests\LoginRequest;
 use App\Modules\IdentityAccess\Http\Requests\RegisterRequest;
 use App\Modules\IdentityAccess\Http\Resources\UserResource;
@@ -40,6 +41,9 @@ class AuthController extends Controller
     public function logout(Request $request): Response
     {
         Auth::guard('web')->logout();
+        // Le garde sanctum garde sinon le compte en mémoire : la nouvelle session (invitée) serait enregistrée à son nom
+        // et listée parmi ses appareils (V2-C06).
+        Auth::guard('sanctum')->forgetUser();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -59,5 +63,7 @@ class AuthController extends Controller
 
         // Nouvel identifiant de session après authentification (anti fixation de session).
         $request->session()->regenerate();
+        // Point de départ de la durée maximale de la session (EnforceSessionLifetime).
+        $request->session()->put(EnforceSessionLifetime::STARTED_AT, now()->getTimestamp());
     }
 }

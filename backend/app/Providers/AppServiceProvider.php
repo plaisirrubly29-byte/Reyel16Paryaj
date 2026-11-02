@@ -134,6 +134,10 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
 
+        // POST /bets : par joueur connecté (V2-C06).
+        RateLimiter::for('bets', fn (Request $request) => Limit::perMinute(config('betting.max_bets_per_minute'))
+            ->by('bets:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
         // MFA, par compte : sans plafond long, 5 essais/min laissent 7 200 essais par jour (revue P8-02, M2).
         RateLimiter::for('mfa', function (Request $request) {
             $id = $request->user()?->getAuthIdentifier() ?? $request->ip();

@@ -255,6 +255,62 @@ paths:
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/sessions:
+    get:
+      tags: [Auth]
+      summary: Appareils connectés au compte
+      x-task: V2-C06
+      description: |
+        Sessions ouvertes du compte, l'appareil en cours d'abord. Une session se ferme après SESSION_LIFETIME
+        d'inactivité, et au plus tard 12 h après la connexion pour un joueur, 8 h pour un compte administratif.
+        Un administrateur inactif depuis 30 min doit saisir un nouveau code MFA (403 mfa_required, data.mfa.verified false dans /me).
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, description: "Empreinte SHA-256 de la session (jamais l'identifiant lui-même)" }
+                        ip_address: { type: [string, "null"] }
+                        user_agent: { type: [string, "null"] }
+                        last_active_at: { type: string, format: date-time }
+                        current: { type: boolean, description: Appareil de la requête }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    delete:
+      tags: [Auth]
+      summary: Déconnecter tous les autres appareils
+      x-task: V2-C06
+      description: La session en cours reste ouverte. Audité (sessions.revoked) si au moins un appareil est déconnecté.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Autres appareils déconnectés }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/sessions/{session}:
+    delete:
+      tags: [Auth]
+      summary: Déconnecter un autre appareil
+      x-task: V2-C06
+      description: Audité (sessions.revoked). La session en cours se ferme avec POST /auth/logout.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: session, in: path, required: true, schema: { type: string }, description: "id renvoyé par GET /me/sessions" }
+      responses:
+        "204": { description: Appareil déconnecté }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: "not_found — aucun appareil de ce compte avec cet id"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "409":
+          description: "current_session — c'est l'appareil en cours"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   /sports:
     get:
@@ -397,6 +453,9 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
         "428": { description: En-tête Idempotency-Key manquant }
+        "429":
+          description: "too_many_requests — plus de 10 paris par minute pour ce joueur (BETTING_MAX_BETS_PER_MINUTE, V2-C06) ; en-tête Retry-After"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     get:
       tags: [Bets]
       summary: Mes tickets (plus récents d'abord)

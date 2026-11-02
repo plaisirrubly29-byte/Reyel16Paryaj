@@ -24,6 +24,9 @@ class MfaService
 {
     public const SESSION_KEY = 'mfa_verified_user_id';
 
+    /** Dernière requête d'administration (secondes) : au-delà de l'inactivité permise, nouveau code MFA (V2-C06). */
+    public const LAST_ACTIVITY_KEY = 'mfa_last_activity_at';
+
     public const RECOVERY_CODES = 8;
 
     public function __construct(private readonly AuditLogger $audit) {}
@@ -33,9 +36,26 @@ class MfaService
         return $user->mfa_confirmed_at !== null;
     }
 
+    /**
+     * Code MFA validé dans cette session, et administration utilisée depuis moins de
+     * identity.session.admin_mfa_idle_minutes (revue P8-02 F12, V2-C06) : sinon le frontend redemande le code.
+     */
     public function isVerified(User $user, ?Session $session): bool
     {
-        return $session !== null && $session->get(self::SESSION_KEY) === $user->getKey();
+        if ($session === null || $session->get(self::SESSION_KEY) !== $user->getKey()) {
+            return false;
+        }
+
+        $lastActivity = $session->get(self::LAST_ACTIVITY_KEY);
+
+        return ! is_int($lastActivity)
+            || now()->getTimestamp() - $lastActivity <= (int) config('identity.session.admin_mfa_idle_minutes') * 60;
+    }
+
+    /** Requête d'administration servie : repousse l'échéance d'inactivité du MFA. */
+    public function touch(Session $session): void
+    {
+        $session->put(self::LAST_ACTIVITY_KEY, now()->getTimestamp());
     }
 
     /**
@@ -81,6 +101,7 @@ class MfaService
         // Nouvel identifiant de session, comme verify : un identifiant fixé avant ne devient pas une session MFA (P8-02, F3).
         $session->migrate(true);
         $session->put(self::SESSION_KEY, $user->getKey());
+        $this->touch($session);
 
         return $codes;
     }
@@ -109,6 +130,7 @@ class MfaService
         RateLimiter::clear($this->failuresKey($user));
         $session->migrate(true);
         $session->put(self::SESSION_KEY, $user->getKey());
+        $this->touch($session);
     }
 
     /**

@@ -11,6 +11,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'active'])->prefix('bets')->group(function () {
     Route::get('/', [BetController::class, 'index']);
-    Route::post('/', [BetController::class, 'store'])->middleware('idempotent');
+    Route::post('/', [BetController::class, 'store'])->middleware(['throttle:bets', 'idempotent']);
     Route::get('/{id}', [BetController::class, 'show'])->whereNumber('id');
 });
