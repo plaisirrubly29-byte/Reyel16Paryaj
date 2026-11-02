@@ -86,16 +86,12 @@ class LedgerService
     /**
      * Écriture compensatoire : annule l'effet de $entry par une écriture de sens opposé.
      * Une écriture ne peut être compensée qu'une fois ; une compensation ne se compense pas.
+     * Le joueur voit un libellé neutre ; le motif interne ($reason) reste dans metadata, pour l'équipe (revue P8-02, F7).
      */
     public function reverse(LedgerEntry $entry, string $reference, string $reason, ?User $actor = null): LedgerEntry
     {
         if ($entry->type === LedgerEntryType::Reversal) {
             throw new LogicException('Une écriture compensatoire ne peut pas être compensée.');
-        }
-
-        $existing = LedgerEntry::where('reversal_of_id', $entry->id)->first();
-        if ($existing !== null) {
-            return $this->assertReplay($existing, LedgerEntryType::Reversal, -$entry->amount_minor, $reference);
         }
 
         return $this->post(
@@ -105,9 +101,10 @@ class LedgerService
             $reference,
             $entry->related_type,
             $entry->related_id,
-            description: $reason,
+            description: __("Correction de l'opération n° :id", ['id' => $entry->id]),
             actor: $actor,
             reversalOf: $entry,
+            metadata: ['reason' => $reason],
         );
     }
 
@@ -124,6 +121,7 @@ class LedgerService
         ?string $description = null,
         ?User $actor = null,
         ?LedgerEntry $reversalOf = null,
+        ?array $metadata = null,
     ): LedgerEntry {
         if ($amount->currency !== $wallet->currency) {
             throw new InvalidArgumentException("Devise {$amount->currency} différente de celle du portefeuille ({$wallet->currency}).");
@@ -136,12 +134,19 @@ class LedgerService
 
         $signed = $sign === null ? $amount->minor : $sign * $amount->minor;
 
-        return DB::transaction(function () use ($wallet, $type, $signed, $reference, $relatedType, $relatedId, $description, $actor, $reversalOf) {
+        return DB::transaction(function () use ($wallet, $type, $signed, $reference, $relatedType, $relatedId, $description, $actor, $reversalOf, $metadata) {
             // Verrou sur le portefeuille : les écritures d'un même portefeuille sont sérialisées.
             $locked = Wallet::whereKey($wallet->id)->lockForUpdate()->firstOrFail();
 
             // Idempotence : la même opération rejouée renvoie l'écriture d'origine.
             $existing = LedgerEntry::where('reference', $reference)->first();
+            if ($existing !== null) {
+                return $this->assertReplay($existing, $type, $signed, $reference, $locked->id);
+            }
+
+            // Déjà compensée, y compris par une requête concurrente sous une autre référence : on rejoue la compensation
+            // existante. Vérifié sous le verrou, sinon la contrainte unique donnait une erreur 500 (revue P8-02, F8).
+            $existing = $reversalOf === null ? null : LedgerEntry::where('reversal_of_id', $reversalOf->id)->first();
             if ($existing !== null) {
                 return $this->assertReplay($existing, $type, $signed, $reference, $locked->id);
             }
@@ -170,6 +175,7 @@ class LedgerService
                 'related_type' => $relatedType,
                 'related_id' => $relatedId,
                 'description' => $description,
+                'metadata' => $metadata,
                 'created_by' => $actor?->id,
             ]);
         });

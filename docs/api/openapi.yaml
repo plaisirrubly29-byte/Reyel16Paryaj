@@ -2124,7 +2124,8 @@ components:
         related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
         reversal_of_id: { type: [string, "null"], description: Écriture compensée par celle-ci }
         reversed_by_id: { type: [string, "null"], description: Écriture qui compense celle-ci }
-        description: { type: [string, "null"] }
+        description: { type: [string, "null"], description: "Libellé vu par le joueur ; neutre pour une compensation" }
+        reason: { type: [string, "null"], description: "Motif interne d'une compensation, jamais renvoyé au joueur" }
         created_by: { type: [string, "null"], description: "Administrateur à l'origine de l'écriture ; null = système" }
         created_at: { type: string, format: date-time }
         correctable: { type: boolean, description: "true : peut faire l'objet d'une correction financière" }
