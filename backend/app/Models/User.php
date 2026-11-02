@@ -29,6 +29,7 @@ use Illuminate\Support\Collection;
  * @property Carbon|null $mfa_confirmed_at
  * @property list<string>|null $mfa_recovery_codes
  * @property int|null $mfa_last_used_step
+ * @property int|null $max_stake_minor mise maximale par ticket posée par un administrateur (V2-D05)
  */
 #[Fillable(['name', 'email', 'phone', 'password'])]
 #[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
@@ -63,6 +64,7 @@ class User extends Authenticatable
             'mfa_confirmed_at' => 'datetime',
             'mfa_recovery_codes' => 'encrypted:array',
             'mfa_last_used_step' => 'integer',
+            'max_stake_minor' => 'integer',
         ];
     }
 

@@ -31,6 +31,7 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/users', [AdminUserController::class, 'index'])->middleware('permission:users.view');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->middleware('permission:users.view');
     Route::patch('/users/{user}', [AdminUserController::class, 'update'])->middleware(['permission:users.suspend', 'idempotent']);
+    Route::put('/users/{user}/stake-limit', [AdminUserController::class, 'stakeLimit'])->middleware(['permission:users.suspend', 'idempotent']);
 
     // Solde d'un joueur : consultation (ledger.view) ; dépôt / retrait reçu hors plateforme, réservé au Super Admin (motif).
     Route::get('/users/{user}/wallet', [AdminWalletController::class, 'show'])->middleware('permission:ledger.view');

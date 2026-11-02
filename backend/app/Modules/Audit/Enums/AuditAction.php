@@ -13,6 +13,7 @@ enum AuditAction: string
     case UserReactivated = 'user.reactivated';
     case UserSelfExcluded = 'user.self_excluded'; // auto-exclusion du joueur (P7-02)
     case UserSelfExclusionEnded = 'user.self_exclusion_ended'; // réouverture par la Conformité, après échéance
+    case UserStakeLimitChanged = 'user.stake_limit_changed'; // mise maximale propre au joueur (V2-D05)
     case ResponsibleGamingViewed = 'responsible_gaming.viewed';
     case MfaReset = 'mfa.reset';
     case MfaFailed = 'mfa.failed';

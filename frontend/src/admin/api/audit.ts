@@ -25,6 +25,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'user.reactivated': 'Compte réactivé',
   'user.self_excluded': 'Auto-exclusion',
   'user.self_exclusion_ended': 'Fin d\'auto-exclusion',
+  'user.stake_limit_changed': 'Mise maximale du joueur modifiée',
   'responsible_gaming.viewed': 'Jeu responsable consulté',
   'mfa.reset': 'MFA réinitialisé',
   'mfa.failed': 'Échec MFA',

@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\DB;
  *   type de pari et une seule sélection par match ;
  * - politique de changement de cote (config betting.odds_change_policy, décision D-05) :
  *   409 odds_changed avec les nouvelles cotes, rien n'est créé ;
+ * - plafonds d'engagement par match et par marché (V2-D05, ExposureGuard) et mise maximale propre au joueur ;
  * - ticket, sélections figées et réservation de la mise dans UNE transaction : solde insuffisant → rien n'est créé.
  *
  * Doublon : le middleware "idempotent" rejoue la réponse d'une requête déjà traitée. Il libère pourtant sa clé
@@ -40,6 +41,7 @@ class BetPlacementService
     public function __construct(
         private readonly LedgerService $ledger,
         private readonly ResponsibleGamingService $responsibleGaming,
+        private readonly ExposureGuard $exposure,
     ) {}
 
     /**
@@ -48,7 +50,7 @@ class BetPlacementService
      *
      * @throws ApiException stake_out_of_range, multiple_not_allowed, selection_unavailable,
      *                      same_event_selections, odds_changed, insufficient_funds, wallet_frozen,
-     *                      idempotency_key_reused, betting_paused, stake_limit_exceeded
+     *                      idempotency_key_reused, betting_paused, stake_limit_exceeded, risk_limit_exceeded
      */
     public function place(User $user, array $picks, int $stakeMinor, ?string $currency = null, ?string $placementKey = null): BetTicket
     {
@@ -112,7 +114,8 @@ class BetPlacementService
         }
 
         $min = (int) config('betting.min_stake_minor');
-        $max = (int) config('betting.max_stake_minor');
+        // Mise maximale posée par un administrateur pour ce joueur (V2-D05), jamais au-dessus de la limite générale.
+        $max = min((int) config('betting.max_stake_minor'), $user->max_stake_minor ?? PHP_INT_MAX);
         if ($stakeMinor < $min || $stakeMinor > $max) {
             throw new ApiException('stake_out_of_range', __('Mise hors limites.'), 422, [
                 'min' => ['minor' => $min, 'currency' => $wallet->currency],
@@ -168,6 +171,9 @@ class BetPlacementService
                     'odds_version' => $market->odds_version,
                 ]);
             }
+
+            // Plafonds d'engagement, ticket inséré : il compte dans le calcul ; un refus annule la transaction.
+            $this->exposure->assertWithinLimits($ticket);
 
             // Échec (solde insuffisant, portefeuille gelé) : l'exception annule toute la transaction.
             $this->ledger->reserveStake($wallet, Money::ofMinor($stakeMinor, $wallet->currency), "bet:{$ticket->id}:stake", (string) $ticket->id);

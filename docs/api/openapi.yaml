@@ -388,9 +388,12 @@ paths:
           description: |
             validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
             direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ;
-            multiple_not_allowed ; stake_out_of_range (details.min / max) ; currency_mismatch ; insufficient_funds ;
+            multiple_not_allowed ; stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée
+            par un administrateur pour ce joueur, V2-D05) ; currency_mismatch ; insufficient_funds ;
             jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
-            limit_minor, remaining_minor).
+            limit_minor, remaining_minor) ; risk_limit_exceeded (V2-D05 : le pari ferait dépasser la perte maximale
+            acceptée sur le match ou le marché ; details.scope event|market, details.event_id ; ni plafond ni
+            exposition ne sont communiqués).
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
         "428": { description: En-tête Idempotency-Key manquant }
@@ -896,6 +899,39 @@ paths:
           description: "`invalid_status_transition`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/stake-limit:
+    put:
+      tags: [Admin]
+      summary: Mise maximale par ticket propre à un joueur (motif requis, audité)
+      description: |
+        Permission users.suspend (V2-D05). Baisse la limite générale betting.max_stake_minor pour ce joueur ; null la
+        retire. Audit user.stake_limit_changed (avant / après, motif). Comptes joueurs uniquement (422 not_a_player).
+      x-task: V2-D05
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [max_stake_minor, reason]
+              properties:
+                max_stake_minor:
+                  type: [integer, "null"]
+                  description: Entre betting.min_stake_minor et betting.max_stake_minor ; null = limite générale.
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Limite appliquée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: validation_failed ; not_a_player (compte administrateur)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   /admin/users/{id}/wallet:
     get:
       tags: [Admin]
@@ -1351,6 +1387,8 @@ paths:
                         allow_multiple: { type: boolean }
                         max_selections: { type: integer, minimum: 1, maximum: 30 }
                         allow_live: { type: boolean }
+                        max_event_liability_minor: { type: integer, minimum: 1, description: "Perte maximale sur un match (V2-D05)" }
+                        max_market_liability_minor: { type: integer, minimum: 1, description: "Perte maximale sur un marché, <= max_event_liability_minor" }
                     wallet:
                       type: object
                       properties:
@@ -1761,6 +1799,7 @@ components:
         is_admin: { type: boolean }
         created_at: { type: string, format: date-time }
         last_login_at: { type: [string, "null"], format: date-time }
+        max_stake_minor: { type: [integer, "null"], description: "Mise maximale par ticket posée par un administrateur (V2-D05) ; null = limite générale" }
         roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
         mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
         profile: { type: object, description: "Avec users.view_personal_data uniquement" }
