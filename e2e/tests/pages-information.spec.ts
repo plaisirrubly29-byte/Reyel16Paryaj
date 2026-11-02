@@ -54,7 +54,8 @@ test('l\'inscription exige la case des conditions', async ({ page }) => {
   // Lien vers le règlement : nouvel onglet, le formulaire reste ouvert.
   const [rules] = await Promise.all([
     page.waitForEvent('popup'),
-    page.getByRole('link', { name: 'règlement des paris' }).click(),
+    // exact : le pied de page a aussi « Règlement des paris » (majuscule).
+    page.getByRole('link', { name: 'règlement des paris', exact: true }).click(),
   ]);
   await expect(rules.getByRole('heading', { level: 1, name: 'Règlement des paris' })).toBeVisible();
   await expect(page).toHaveURL(/\/register$/);
