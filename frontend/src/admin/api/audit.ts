@@ -29,6 +29,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'mfa.reset': 'MFA réinitialisé',
   'mfa.failed': 'Échec MFA',
   'mfa.recovery_codes_regenerated': 'Codes de secours régénérés',
+  'sessions.revoked': 'Appareils déconnectés',
   'user.personal_data_viewed': 'Données personnelles consultées',
   'market.suspended': 'Marché suspendu',
   'market.reopened': 'Marché rouvert',

@@ -25,6 +25,14 @@ return [
         'max_failures_before_logout' => 5, // échecs consécutifs de mfa/verify
     ],
 
+    // Sessions (V2-C06, revue P8-02 F12). En plus de SESSION_LIFETIME (inactivité), une durée maximale depuis la
+    // connexion, même si le compte reste actif ; et, pour l'administration, un nouveau code MFA après inactivité.
+    'session' => [
+        'player_max_minutes' => (int) env('IDENTITY_PLAYER_SESSION_MAX_MINUTES', 720), // 12 h
+        'admin_max_minutes' => (int) env('IDENTITY_ADMIN_SESSION_MAX_MINUTES', 480), // 8 h
+        'admin_mfa_idle_minutes' => (int) env('IDENTITY_ADMIN_MFA_IDLE_MINUTES', 30),
+    ],
+
     // M3 (décision D-07) : un rôle attribué par un administrateur ne permet de valider une demande d'un autre
     // (*.approve) qu'après ce délai. Un rôle donné depuis le serveur (identity:grant-role) n'en a pas.
     'approval_role_min_age_hours' => (int) env('IDENTITY_APPROVAL_ROLE_MIN_AGE_HOURS', 24),

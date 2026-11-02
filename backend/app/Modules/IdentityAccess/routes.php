@@ -4,6 +4,7 @@ use App\Modules\IdentityAccess\Http\Controllers\AuthController;
 use App\Modules\IdentityAccess\Http\Controllers\MfaController;
 use App\Modules\IdentityAccess\Http\Controllers\PasswordResetController;
 use App\Modules\IdentityAccess\Http\Controllers\RoleAssignmentController;
+use App\Modules\IdentityAccess\Http\Controllers\SessionController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,6 +34,13 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+
+    // Appareils connectés : liste, déconnexion d'un autre appareil ou de tous les autres (V2-C06).
+    Route::prefix('me/sessions')->group(function () {
+        Route::get('/', [SessionController::class, 'index']);
+        Route::delete('/', [SessionController::class, 'destroyOthers']);
+        Route::delete('/{session}', [SessionController::class, 'destroy']);
+    });
 
     Route::middleware(['mfa', 'permission:roles.manage', 'idempotent'])->prefix('admin/users/{user}')->group(function () {
         Route::put('/roles', [RoleAssignmentController::class, 'update']);

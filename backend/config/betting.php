@@ -29,6 +29,10 @@ return [
     // qu'après une décision écrite, avec des cotes rafraîchies en quelques secondes et un délai d'acceptation.
     'allow_live' => (bool) env('BETTING_ALLOW_LIVE', false),
 
+    // Paris placés au plus par minute et par joueur (V2-C06) : 1 toutes les 6 s suffit à un humain, une rafale de
+    // robot ou de double envoi est refusée (429). Pas une règle d'acceptation : hors rules_snapshot.
+    'max_bets_per_minute' => (int) env('BETTING_MAX_BETS_PER_MINUTE', 10),
+
     // D-05 : "reject" — toute cote différente de celle vue par le joueur est refusée (409 odds_changed,
     // avec la nouvelle cote) ; le joueur confirme en renvoyant le pari avec la cote à jour.
     'odds_change_policy' => 'reject',

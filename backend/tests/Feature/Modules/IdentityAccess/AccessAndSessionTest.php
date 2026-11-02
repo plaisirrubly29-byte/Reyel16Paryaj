@@ -75,6 +75,140 @@ class AccessAndSessionTest extends TestCase
         $this->browser('GET', '/api/v1/me')->assertOk();
     }
 
+    // ---------------------------------------------------------------- Durée maximale (V2-C06)
+
+    public function test_a_player_session_ends_after_12_hours_even_when_active(): void
+    {
+        $this->login($this->player());
+
+        // Une requête toutes les 100 min : jamais inactif plus de SESSION_LIFETIME (120 min).
+        for ($minutes = 100; $minutes <= 700; $minutes += 100) {
+            $this->travel(100)->minutes();
+            $this->browser('GET', '/api/v1/me')->assertOk();
+        }
+
+        $this->travel(21)->minutes(); // 721 min depuis la connexion
+        $this->browser('GET', '/api/v1/me')->assertUnauthorized()->assertJsonPath('error.code', 'unauthenticated');
+    }
+
+    public function test_an_admin_session_ends_after_8_hours_even_when_active(): void
+    {
+        $admin = $this->admin(RoleSlug::Compliance);
+        $this->login($admin);
+        $this->verifyMfa($admin);
+
+        // Une requête d'administration toutes les 20 min : ni inactivité, ni nouveau code MFA.
+        for ($minutes = 20; $minutes <= 460; $minutes += 20) {
+            $this->travel(20)->minutes();
+            $this->browser('GET', '/api/v1/admin/audit-logs')->assertOk();
+        }
+
+        $this->travel(21)->minutes(); // 481 min depuis la connexion
+        $this->browser('GET', '/api/v1/admin/audit-logs')->assertUnauthorized();
+    }
+
+    public function test_an_idle_admin_must_enter_a_new_mfa_code_after_30_minutes(): void
+    {
+        $admin = $this->admin(RoleSlug::Compliance);
+        $this->login($admin);
+        $this->verifyMfa($admin);
+
+        $this->travel(29)->minutes();
+        $this->browser('GET', '/api/v1/admin/audit-logs')->assertOk(); // l'activité repousse l'échéance
+
+        $this->travel(31)->minutes();
+        $this->browser('GET', '/api/v1/admin/audit-logs')->assertForbidden()->assertJsonPath('error.code', 'mfa_required');
+        // Le frontend lit cet état pour afficher la saisie du code ; la connexion, elle, reste ouverte.
+        $this->browser('GET', '/api/v1/me')->assertOk()->assertJsonPath('data.mfa.verified', false);
+
+        // Le test ne dure que quelques secondes réelles : le nouveau code tombe dans la même période TOTP que le premier,
+        // que l'anti-rejeu refuserait. En vrai, 30 minutes séparent les deux codes.
+        $admin->forceFill(['mfa_last_used_step' => null])->save();
+        $this->verifyMfa($admin);
+        $this->browser('GET', '/api/v1/admin/audit-logs')->assertOk();
+    }
+
+    // ---------------------------------------------------------------- Appareils connectés (V2-C06)
+
+    public function test_a_player_lists_their_connected_devices(): void
+    {
+        $player = $this->player();
+        $this->login($player);
+        $this->sessionCookie = null; // second navigateur
+        $this->login($player);
+        $this->sessionCookie = null;
+        $this->login($this->player()); // autre compte, autre navigateur : jamais listé
+        $this->sessionCookie = null;
+        $this->login($player);
+
+        $devices = $this->browser('GET', '/api/v1/me/sessions')->assertOk()->json('data');
+
+        $this->assertCount(3, $devices);
+        $this->assertSame([true, false, false], array_column($devices, 'current'));
+        foreach ($devices as $device) {
+            $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $device['id']); // empreinte, pas l'identifiant
+            $this->assertArrayHasKey('ip_address', $device);
+            $this->assertArrayHasKey('user_agent', $device);
+            $this->assertNotNull($device['last_active_at']);
+        }
+    }
+
+    public function test_a_player_logs_out_all_other_devices(): void
+    {
+        $player = $this->player();
+        $this->login($player);
+        $other = $this->sessionCookie;
+        $this->sessionCookie = null;
+        $this->login($player);
+        $current = $this->sessionCookie;
+
+        $this->browser('DELETE', '/api/v1/me/sessions')->assertNoContent();
+
+        $this->browser('GET', '/api/v1/me')->assertOk(); // la session en cours reste ouverte
+        $this->sessionCookie = $other;
+        $this->browser('GET', '/api/v1/me')->assertUnauthorized();
+        $this->assertDatabaseHas('audit_logs', ['action' => 'sessions.revoked', 'actor_id' => $player->id]);
+
+        $this->sessionCookie = $current;
+        $this->assertCount(1, $this->browser('GET', '/api/v1/me/sessions')->json('data'));
+    }
+
+    public function test_a_player_logs_out_one_other_device(): void
+    {
+        $player = $this->player();
+        $this->login($player);
+        $other = $this->sessionCookie;
+        $this->sessionCookie = null;
+        $this->login($player);
+        $current = $this->sessionCookie;
+
+        $devices = collect($this->browser('GET', '/api/v1/me/sessions')->json('data'));
+        $this->browser('DELETE', '/api/v1/me/sessions/'.$devices->firstWhere('current', false)['id'])->assertNoContent();
+        $this->browser('DELETE', '/api/v1/me/sessions/'.$devices->firstWhere('current', true)['id'])
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'current_session');
+
+        $this->sessionCookie = $other;
+        $this->browser('GET', '/api/v1/me')->assertUnauthorized();
+        $this->sessionCookie = $current;
+        $this->browser('GET', '/api/v1/me')->assertOk();
+    }
+
+    public function test_a_player_cannot_log_out_someone_else(): void
+    {
+        $victim = $this->player();
+        $this->login($victim);
+        $victimCookie = $this->sessionCookie;
+        $victimDevice = $this->browser('GET', '/api/v1/me/sessions')->json('data.0.id');
+
+        $this->sessionCookie = null;
+        $this->login($this->player());
+        $this->browser('DELETE', '/api/v1/me/sessions/'.$victimDevice)->assertNotFound();
+
+        $this->sessionCookie = $victimCookie;
+        $this->browser('GET', '/api/v1/me')->assertOk();
+    }
+
     // ---------------------------------------------------------------- Révocation
 
     public function test_logout_revokes_the_session_cookie_for_good(): void
@@ -83,6 +217,8 @@ class AccessAndSessionTest extends TestCase
         $stolen = $this->sessionCookie;
 
         $this->browser('POST', '/api/v1/auth/logout')->assertNoContent();
+        // La session invitée qui suit n'est plus au nom du joueur : elle ne figure pas parmi ses appareils (V2-C06).
+        $this->assertDatabaseMissing('sessions', ['user_id' => User::query()->value('id')]);
 
         $this->sessionCookie = $stolen; // rejeu du cookie d'avant la déconnexion
         $this->browser('GET', '/api/v1/me')->assertUnauthorized();
@@ -243,6 +379,7 @@ class AccessAndSessionTest extends TestCase
     {
         // En production chaque requête est un nouveau processus : rien ne doit survivre en mémoire.
         $this->app['auth']->forgetGuards();
+        $this->app->forgetInstance('auth.driver'); // garde par défaut mémorisé : sert à attribuer la session en base
         $this->app['session']->forgetDrivers();
         $this->app->forgetInstance('session.store');
         $this->flushHeaders();
@@ -270,7 +407,8 @@ class AccessAndSessionTest extends TestCase
 
     private function verifyMfa(User $admin): void
     {
-        $code = Totp::codeAt($admin->fresh()->mfa_secret, intdiv(now()->getTimestamp(), Totp::PERIOD));
+        // Horloge réelle, comme Totp::verify (time()), même après un travel() dans le test.
+        $code = Totp::codeAt($admin->fresh()->mfa_secret, intdiv(time(), Totp::PERIOD));
 
         $this->browser('POST', '/api/v1/auth/mfa/verify', ['code' => $code])->assertNoContent();
     }

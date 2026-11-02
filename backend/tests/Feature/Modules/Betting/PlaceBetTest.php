@@ -74,6 +74,28 @@ class PlaceBetTest extends TestCase
         ], ['Idempotency-Key' => $key ?? (string) Str::uuid()]);
     }
 
+    /** V2-C06 : 10 paris par minute et par joueur ; le 11e est refusé sans débit, un autre joueur n'est pas gêné. */
+    public function test_bets_are_limited_to_10_per_minute_per_player(): void
+    {
+        for ($i = 1; $i <= 10; $i++) {
+            $this->bet([[$this->selection()]], 10_00)->assertCreated();
+        }
+
+        $this->bet([[$this->selection()]], 10_00)
+            ->assertStatus(429)
+            ->assertJsonPath('error.code', 'too_many_requests')
+            ->assertHeader('Retry-After');
+        $this->assertSame(10, BetTicket::count());
+        $this->assertSame(900_00, $this->balance());
+
+        $other = User::factory()->create();
+        $this->credit($other, 100_00);
+        $this->bet([[$this->selection()]], 10_00, as: $other)->assertCreated();
+
+        $this->travel(61)->seconds();
+        $this->bet([[$this->selection()]], 10_00)->assertCreated();
+    }
+
     public function test_a_single_bet_is_accepted_and_the_stake_debited(): void
     {
         $response = $this->bet([[$this->selection()]])->assertCreated();

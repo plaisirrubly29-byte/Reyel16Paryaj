@@ -3,12 +3,14 @@
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\RequireIdempotencyKey;
 use App\Http\Middleware\SecurityHeaders;
+use App\Modules\IdentityAccess\Http\Middleware\EnforceSessionLifetime;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
 use App\Modules\Monitoring\Http\Middleware\CountApiResponses;
 use App\Support\Http\ApiErrorRenderer;
 use App\Support\QueryErrorSanitizer;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -44,6 +46,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Compteurs des réponses de l'API et des 5xx pour l'alerte « erreurs API » (P9-02, monitoring:check).
         $middleware->appendToGroup('api', CountApiResponses::class);
+
+        // Durée maximale d'une session depuis la connexion : 12 h joueur, 8 h admin (V2-C06). Après la session Sanctum,
+        // mais avant auth:sanctum, que la liste de priorité ferait passer devant : sinon le compte, déjà chargé, servirait
+        // encore la requête qui dépasse la durée.
+        $middleware->appendToGroup('api', EnforceSessionLifetime::class);
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnforceSessionLifetime::class);
 
         // L'API ne redirige jamais : un invité reçoit 401 "unauthenticated".
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/');
