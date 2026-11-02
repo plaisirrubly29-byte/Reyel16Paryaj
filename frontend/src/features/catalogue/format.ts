@@ -23,6 +23,19 @@ export function startsIn(iso: string, now: Date = new Date()): string | null {
   return `Dans ${Math.floor(minutes / 60)} h${minutes % 60 >= 5 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
 }
 
+const SPORT_NAMES: Record<string, string> = {
+  soccer: 'Football',
+  basketball: 'Basketball',
+  baseball: 'Baseball',
+  tennis: 'Tennis',
+  icehockey: 'Hockey sur glace',
+};
+
+/** Nom d'un sport demandé dans l'URL (?sport=), même quand GET /sports ne le renvoie pas faute de match. */
+export function sportName(slug: string): string | null {
+  return SPORT_NAMES[slug] ?? null;
+}
+
 export function isLiveStatus(status: string): boolean {
   return ['live', 'in_play', 'in-play'].includes(status.trim().toLowerCase());
 }

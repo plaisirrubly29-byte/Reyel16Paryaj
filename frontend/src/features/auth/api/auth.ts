@@ -37,6 +37,9 @@ export type RegisterInput = {
   password_confirmation: string;
   birth_date: string;
   country?: string;
+  /** Case « J'accepte les conditions » cochée (V2-E01), avec la version des textes affichés. */
+  terms_accepted: true;
+  terms_version: string;
 };
 
 export type ResetPasswordInput = {

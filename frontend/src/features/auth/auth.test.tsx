@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { guest, mockApi, player, renderApp } from '../../test/renderApp';
+import { LEGAL_VERSION } from '../legal/legal';
 import { safeRedirect } from './api/auth';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -95,7 +96,8 @@ describe('connexion', () => {
   });
 });
 
-describe('inscription', () => {
+// Formulaire complet saisi touche par touche : plus long que le délai par défaut quand toute la suite tourne.
+describe('inscription', { timeout: 15_000 }, () => {
   it('affiche les erreurs de validation sous chaque champ', async () => {
     mockApi({
       'GET /me': guest,
@@ -112,7 +114,8 @@ describe('inscription', () => {
     });
     renderApp('/register');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Créer mon compte' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /J'accepte les conditions/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
 
     expect(await screen.findByText('Vous devez avoir au moins 18 ans pour ouvrir un compte.')).toBeInTheDocument();
     expect(screen.getByLabelText('Numéro de téléphone')).toHaveAccessibleDescription('Ce numéro est déjà utilisé.');
@@ -130,12 +133,66 @@ describe('inscription', () => {
     await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
 
     const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
     const body = JSON.parse(String(registerCall?.[1]?.body));
     expect(body.phone).toBe('34123456');
     expect(body).not.toHaveProperty('email');
+  });
+
+  it('propose le pays dans une liste, Haïti par défaut et en tête', async () => {
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/register': { status: 201, body: { data: player } },
+    });
+    renderApp('/register');
+
+    const country = await screen.findByRole('combobox', { name: 'Pays' });
+    expect(country).toHaveValue('HT');
+    const options = within(country).getAllByRole('option');
+    expect(options[0]).toHaveTextContent('Haïti');
+    expect(options.length).toBeGreaterThan(200);
+
+    await userEvent.selectOptions(country, 'Canada');
+    await userEvent.type(screen.getByLabelText('Nom'), 'Ana Joueuse');
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
+    await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
+    expect(JSON.parse(String(registerCall?.[1]?.body)).country).toBe('CA');
+  });
+
+  it('exige la case des conditions et envoie la version acceptée', async () => {
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/register': { status: 201, body: { data: player } },
+    });
+    renderApp('/register');
+
+    // Sans la case : message sous la case, rien n'est envoyé.
+    await userEvent.click(await screen.findByRole('button', { name: 'Créer mon compte' }));
+    const terms = screen.getByRole('checkbox', { name: /J'accepte les conditions/ });
+    expect(terms).toHaveAccessibleDescription('Cochez la case pour accepter les conditions et créer votre compte.');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/auth/register'))).toBe(false);
+
+    // Les textes s'ouvrent dans un nouvel onglet : le formulaire reste rempli.
+    expect(screen.getByRole('link', { name: "conditions d'utilisation" })).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: 'règlement des paris' })).toHaveAttribute('href', '/reglement');
+
+    await userEvent.click(terms);
+    expect(screen.queryByText('Cochez la case pour accepter les conditions et créer votre compte.')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
+    const body = JSON.parse(String(registerCall?.[1]?.body));
+    expect(body.terms_accepted).toBe(true);
+    expect(body.terms_version).toBe(LEGAL_VERSION);
   });
 });
 

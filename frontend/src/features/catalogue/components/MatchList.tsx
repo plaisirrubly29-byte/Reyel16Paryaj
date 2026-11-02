@@ -5,8 +5,11 @@ import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Pagination } from '../../../shared/components/Pagination';
 import { Spinner } from '../../../shared/components/Spinner';
 import { useEvents, type CatalogueEvent, type ListMarketKey } from '../api/catalogue';
-import { isLiveStatus } from '../format';
+import { isLiveStatus, sportName } from '../format';
 import { MatchRow } from './MatchRow';
+
+/** Prochains matchs montrés dans l'onglet Live quand aucun match n'est en direct. */
+const UPCOMING_IN_LIVE = 10;
 
 type Props = {
   sport?: string;
@@ -36,9 +39,12 @@ export function MatchList({ sport, competition, search, market = 'h2h', live = f
 
   const { meta } = events.data;
   const needle = search ? normalize(search) : '';
-  const list = events.data.data.filter((e) =>
-    (!live || isLiveStatus(e.status))
-    && (!needle || normalize(`${e.home_team} ${e.away_team} ${e.competition.name} ${e.competition.country ?? ''}`).includes(needle)));
+  const found = events.data.data.filter((e) =>
+    !needle || normalize(`${e.home_team} ${e.away_team} ${e.competition.name} ${e.competition.country ?? ''}`).includes(needle));
+  const list = live ? found.filter((e) => isLiveStatus(e.status)) : found;
+  // Onglet Live sans match en direct : les prochains coups d'envoi plutôt qu'un onglet vide.
+  const upcoming = live && list.length === 0 ? found.slice(0, UPCOMING_IN_LIVE) : [];
+  const name = sport ? sportName(sport) : null;
 
   return (
     <>
@@ -47,24 +53,30 @@ export function MatchList({ sport, competition, search, market = 'h2h', live = f
       )}
 
       {list.length === 0 ? (
-        <p className="empty-state">
+        <div className="empty-state">
           <span className="empty-icon" aria-hidden="true"><Icon name={live ? 'live' : 'clock'} size={26} /></span>
-          {live
-            ? 'Aucun match en direct pour le moment. Les paris en direct arrivent bientôt.'
-            : search
-              ? 'Aucun match ne correspond à votre recherche.'
-              : 'Aucun match ouvert aux paris pour le moment. Les cotes sont mises à jour plusieurs fois par jour : revenez bientôt.'}
-        </p>
-      ) : (
-        <div className="match-groups">
-          {groupByCompetition(list).map(({ competition: c, events: items }) => (
-            <section key={c.id} className="match-group" aria-label={c.name}>
-              <ul className="match-lines">
-                {items.map((e) => <MatchRow key={e.id} event={e} marketKey={market} />)}
-              </ul>
-            </section>
-          ))}
+          <p>
+            {live
+              ? upcoming.length > 0
+                ? 'Aucun match en direct en ce moment. Voici les prochains matchs ouverts aux paris.'
+                : 'Aucun match en direct en ce moment.'
+              : search
+                ? 'Aucun match ne correspond à votre recherche.'
+                : sport
+                  ? `Aucun match ${name ? `de ${name.toLowerCase()}` : 'de ce sport'} ouvert aux paris pour le moment.`
+                  : 'Aucun match ouvert aux paris pour le moment. Les cotes sont mises à jour plusieurs fois par jour : revenez bientôt.'}
+          </p>
+          {sport && !live && !search && <Link to="/sports" className="btn btn-secondary">Voir tous les matchs</Link>}
         </div>
+      ) : (
+        <MatchGroups events={list} market={market} />
+      )}
+
+      {upcoming.length > 0 && (
+        <section className="upcoming-in-live" aria-labelledby="upcoming-title">
+          <h3 id="upcoming-title" className="board-subtitle">Prochains matchs</h3>
+          <MatchGroups events={upcoming} market={market} />
+        </section>
       )}
 
       {onPage
@@ -77,6 +89,20 @@ export function MatchList({ sport, competition, search, market = 'h2h', live = f
           </p>
         )}
     </>
+  );
+}
+
+function MatchGroups({ events, market }: { events: CatalogueEvent[]; market: ListMarketKey }) {
+  return (
+    <div className="match-groups">
+      {groupByCompetition(events).map(({ competition: c, events: items }) => (
+        <section key={c.id} className="match-group" aria-label={c.name}>
+          <ul className="match-lines">
+            {items.map((e) => <MatchRow key={e.id} event={e} marketKey={market} />)}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }
 

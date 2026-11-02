@@ -52,7 +52,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, phone, password, password_confirmation, birth_date]
+              required: [name, phone, password, password_confirmation, birth_date, terms_accepted, terms_version]
               properties:
                 name: { type: string, maxLength: 100 }
                 phone: { type: string, description: "Numéro haïtien local, 8 chiffres (espaces/tirets et préfixe +509/509 acceptés)", example: "+509 3412-3456" }
@@ -61,6 +61,19 @@ paths:
                 password_confirmation: { type: string }
                 birth_date: { type: string, format: date, example: "1998-05-21" }
                 country: { type: string, minLength: 2, maxLength: 2, example: HT }
+                terms_accepted:
+                  type: boolean
+                  const: true
+                  description: |
+                    V2-E01 : case « J'accepte les conditions d'utilisation et le règlement des paris » cochée. Absente ou
+                    false : 422 (details.terms_accepted).
+                terms_version:
+                  type: string
+                  example: "2026-11-02"
+                  description: |
+                    V2-E01 : version des textes affichés au joueur (LEGAL_VERSION du frontend, en tête de /conditions).
+                    Le serveur enregistre l'acceptation (version, date, IP). Version différente de la version en vigueur
+                    côté serveur : 422 (details.terms_version), le joueur recharge la page.
       responses:
         "201":
           description: Compte créé, session ouverte

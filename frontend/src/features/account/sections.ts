@@ -11,5 +11,6 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
   { to: '/loyalty', label: 'Points de fidélité', icon: 'star', soon: true },
   { to: '/referral', label: 'Parrainage', icon: 'gift', soon: true },
   { to: '/account', label: 'Mes informations', icon: 'user' },
+  { to: '/responsible-gaming', label: 'Jeu responsable', icon: 'shield' },
   { to: '/messages', label: 'Messagerie', icon: 'chat', soon: true },
 ];

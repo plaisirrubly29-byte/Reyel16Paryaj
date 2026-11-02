@@ -7,6 +7,7 @@ import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlip
 import { SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
+import { CookieBanner } from '../../features/legal/components/CookieBanner';
 import { BrandLogo } from './BrandLogo';
 import { SiteFooter } from './SiteFooter';
 
@@ -117,6 +118,7 @@ function PublicShell() {
         <Outlet />
       </main>
       <SiteFooter />
+      <CookieBanner />
 
       {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. */}
       {mobile && (

@@ -135,6 +135,7 @@ export function AccountPage() {
             <div>
               <h2 id="profile-responsible">Jeu responsable</h2>
               <p>Le jeu doit rester un divertissement. Fixez-vous des limites et faites une pause si besoin.</p>
+              <Link to="/responsible-gaming" className="profile-link">Régler mes limites</Link>
             </div>
           </section>
 
