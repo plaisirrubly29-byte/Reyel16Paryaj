@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useSports } from '../../features/catalogue/api/catalogue';
+import { LEGAL_PAGES } from '../../features/legal/legal';
 import { api } from '../../shared/api/client';
 import { BrandLogo } from './BrandLogo';
 
@@ -48,6 +49,11 @@ export function SiteFooter() {
           <p className="small">Interdit aux moins de 18 ans. Le jeu doit rester un divertissement : fixez-vous des limites et faites une pause si besoin.</p>
           <span className="age-badge" aria-label="Réservé aux plus de 18 ans">18+</span>
         </div>
+
+        <nav className="footer-col" aria-label="Informations">
+          <p className="footer-title">Informations</p>
+          {LEGAL_PAGES.map((p) => <Link key={p.to} to={p.to}>{p.title}</Link>)}
+        </nav>
       </div>
 
       <div className="footer-bottom">

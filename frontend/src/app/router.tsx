@@ -36,7 +36,11 @@ import { TicketsPage } from '../admin/pages/TicketsPage';
 import { RiskPage } from '../admin/pages/RiskPage';
 import { SystemPage } from '../admin/pages/SystemPage';
 import { UsersPage } from '../admin/pages/UsersPage';
-import { Placeholder } from '../shared/components/Placeholder';
+import { BettingRulesPage } from '../features/legal/pages/BettingRulesPage';
+import { NotFoundPage } from '../features/legal/pages/NotFoundPage';
+import { PrivacyPage } from '../features/legal/pages/PrivacyPage';
+import { ResponsibleGamingPage } from '../features/legal/pages/ResponsibleGamingPage';
+import { TermsPage } from '../features/legal/pages/TermsPage';
 
 /** Écran d'une section admin, protégé par la permission déclarée dans admin/navigation.ts. */
 function section(path: string, element: ReactNode, sectionPath = path.split('/')[0]) {
@@ -55,6 +59,11 @@ export const routes = [
       { path: 'register', element: <RegisterPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
       { path: 'reset-password', element: <ResetPasswordPage /> },
+      // Pages d'information (V2-E01), liées depuis le pied de page et l'inscription.
+      { path: 'conditions', element: <TermsPage /> },
+      { path: 'reglement', element: <BettingRulesPage /> },
+      { path: 'confidentialite', element: <PrivacyPage /> },
+      { path: 'jeu-responsable', element: <ResponsibleGamingPage /> },
       // Espace joueur : menu commun des rubriques, accessible une fois connecté.
       {
         element: <RequireAuth><AccountLayout /></RequireAuth>,
@@ -69,6 +78,7 @@ export const routes = [
           { path: 'messages', element: <MessagesPage /> },
         ],
       },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
   // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
@@ -96,7 +106,6 @@ export const routes = [
       section('audit', <AuditPage />),
     ],
   },
-  { path: '*', element: <Placeholder title="Page introuvable" task="—" /> },
 ];
 
 // basename = sous-dossier de publication (ex. XAMPP : /dashboard/…/frontend/dist), "/" sinon.

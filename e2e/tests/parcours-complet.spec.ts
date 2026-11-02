@@ -34,6 +34,7 @@ test('parcours complet du joueur, du compte au règlement', async ({ page }) => 
     await page.getByLabel('Date de naissance').fill('1995-05-21');
     await page.getByLabel('Mot de passe', { exact: true }).fill(password);
     await page.getByLabel('Confirmer le mot de passe').fill(password);
+    await page.getByRole('checkbox', { name: /J'accepte les conditions/ }).check();
     await page.getByRole('button', { name: 'Créer mon compte' }).click();
 
     await expect(page).toHaveURL(/\/account$/);
