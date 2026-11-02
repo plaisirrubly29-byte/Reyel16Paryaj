@@ -61,10 +61,12 @@ class ResultCorrectionController extends Controller
             'home_score' => ['nullable', 'required_if:status,final', 'string', 'max:10'],
             'away_score' => ['nullable', 'required_if:status,final', 'string', 'max:10'],
             'reason' => ['required', 'string', 'min:5', 'max:500'],
+            // D-03 : le score est celui du temps réglementaire (exigé pour le football, V2-D04).
+            'regulation_time' => ['sometimes', 'boolean'],
         ]);
 
         $correction = $this->corrections->request($request->user(), $event, ResultStatus::from($data['status']),
-            $data['home_score'] ?? null, $data['away_score'] ?? null, trim($data['reason']));
+            $data['home_score'] ?? null, $data['away_score'] ?? null, trim($data['reason']), (bool) ($data['regulation_time'] ?? false));
 
         return $this->show($correction)->response()->setStatusCode(201);
     }

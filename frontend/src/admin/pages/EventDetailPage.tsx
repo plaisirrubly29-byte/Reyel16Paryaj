@@ -5,7 +5,7 @@ import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
 import { since, useAdminEvent, useChangeMarketStatus, type AdminEvent, type AdminMarket } from '../api/events';
-import { CORRECTION_STATUS_LABELS, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory, type ResultStatus } from '../api/results';
+import { CORRECTION_STATUS_LABELS, currentLabel, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory, type ResultStatus } from '../api/results';
 import { EventStatusBadge, MarketStatusBadge } from '../components/MarketStatusBadge';
 import { PageHeader } from '../components/PageHeader';
 import { ReasonForm } from '../components/ReasonForm';
@@ -136,7 +136,7 @@ function ResultSection({ event }: { event: AdminEvent }) {
         <ul className="stack-sm">
           {h.corrections.map((c) => (
             <li key={c.id} className="small">
-              <Link to={`/admin/settlements/${c.id}`}>Demande n° {c.id}</Link> : {outcomeLabel(c.current)} → <strong>{outcomeLabel(c.proposed)}</strong>
+              <Link to={`/admin/settlements/${c.id}`}>Demande n° {c.id}</Link> : {currentLabel(c)} → <strong>{outcomeLabel(c.proposed)}</strong>
               {' '}— {CORRECTION_STATUS_LABELS[c.status]}
             </li>
           ))}
@@ -145,16 +145,19 @@ function ResultSection({ event }: { event: AdminEvent }) {
 
       {pending && <Alert tone="info">Une correction attend la validation d'un second administrateur : <Link to={`/admin/settlements/${pending.id}`}>voir la demande</Link>.</Alert>}
 
-      {h && h.results.length > 0 && !pending && me?.permissions.includes('results.enter') && <CorrectionRequestForm eventId={event.id} />}
+      {h && h.results.length > 0 && !pending && me?.permissions.includes('results.enter') && <CorrectionRequestForm eventId={event.id} sportSlug={event.sport.slug} />}
     </section>
   );
 }
 
-function CorrectionRequestForm({ eventId }: { eventId: string }) {
+function CorrectionRequestForm({ eventId, sportSlug }: { eventId: string; sportSlug: string }) {
   const request = useRequestCorrection(eventId);
   const [status, setStatus] = useState<ResultStatus>('final');
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
+  const [regulationTime, setRegulationTime] = useState(false);
+  // D-03 : football réglé sur le temps réglementaire, à confirmer par le saisisseur (exigé par l'API, V2-D04).
+  const needsRegulationTime = status === 'final' && sportSlug === 'soccer';
   const scoreMissing = status === 'final' && (home.trim() === '' || away.trim() === '');
 
   return (
@@ -165,12 +168,13 @@ function CorrectionRequestForm({ eventId }: { eventId: string }) {
         title="Demande de correction"
         description="Rien ne change tant qu'un autre administrateur n'a pas validé la demande. À la validation, les tickets déjà réglés sont réévalués (gains repris ou versés)."
         submitLabel="Envoyer la demande"
-        incomplete={scoreMissing}
+        incomplete={scoreMissing || (needsRegulationTime && !regulationTime)}
         successMessage="Demande envoyée : elle attend la validation d'un second administrateur."
         onSubmit={(reason, idempotencyKey) => request.mutateAsync({
           status,
           home_score: status === 'final' ? home.trim() : null,
           away_score: status === 'final' ? away.trim() : null,
+          regulation_time: needsRegulationTime && regulationTime,
           reason,
           idempotencyKey,
         })}
@@ -192,6 +196,12 @@ function CorrectionRequestForm({ eventId }: { eventId: string }) {
               <label htmlFor="correction-away">Extérieur</label>
               <input id="correction-away" inputMode="numeric" maxLength={3} value={away} onChange={(ev) => setAway(ev.target.value)} />
             </div>
+          </div>
+        )}
+        {needsRegulationTime && (
+          <div className="setting-toggle">
+            <input id="correction-regulation" type="checkbox" checked={regulationTime} onChange={(ev) => setRegulationTime(ev.target.checked)} />
+            <label htmlFor="correction-regulation">Score à la fin du temps réglementaire (90 minutes et arrêts de jeu), sans prolongation ni tirs au but</label>
           </div>
         )}
       </ReasonForm>

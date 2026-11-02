@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $event_id
- * @property int $based_on_result_id
+ * @property int|null $based_on_result_id null : premier résultat saisi à la main (V2-D04)
  * @property ResultCorrectionStatus $status
  * @property ResultStatus $result_status
  * @property string|null $home_score

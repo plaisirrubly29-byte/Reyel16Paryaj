@@ -58,6 +58,19 @@
 
 Chaque étape est auditée avec son motif (`result.correction_requested|approved|rejected`).
 
+## Premier résultat saisi à la main (V2-D04)
+
+Quand le fournisseur ne publie aucun résultat, le même circuit sert à saisir le premier : la demande n'a pas de
+version de départ (`based_on_result_id` null, `kind: initial`).
+
+- Au plus tôt `BETTING_MANUAL_RESULT_MIN_HOURS_AFTER_START` (3 h) après le coup d'envoi (`result_too_early`).
+- **Temps réglementaire (D-03)** : pour le football (`betting.regulation_time_sports`), le score est celui de la fin
+  du temps réglementaire (90 min + arrêts de jeu), sans prolongation ni tirs au but ; le saisisseur le confirme
+  (`regulation_time: true`, sinon `regulation_time_required`). Exigé aussi pour une correction manuelle.
+- La validation par un autre administrateur enregistre le résultat (source `manual`), qui lance `SettleEventJob`
+  comme un résultat du fournisseur. Si le fournisseur publie entre-temps, la validation est refusée (`result_changed`) ;
+  un score du fournisseur arrivé après le règlement devient une demande de correction, comme d'habitude.
+
 ## Routes
 
 - Pas de route publique : règlement déclenché par les jobs ; corrections et historique par l'API admin
