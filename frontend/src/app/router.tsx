@@ -41,6 +41,8 @@ import { NotFoundPage } from '../features/legal/pages/NotFoundPage';
 import { PrivacyPage } from '../features/legal/pages/PrivacyPage';
 import { ResponsibleGamingPage } from '../features/legal/pages/ResponsibleGamingPage';
 import { TermsPage } from '../features/legal/pages/TermsPage';
+import { ResponsibleSettingsPage } from '../features/responsible/pages/ResponsibleSettingsPage';
+import { SelfExclusionDonePage } from '../features/responsible/pages/SelfExclusionDonePage';
 
 /** Écran d'une section admin, protégé par la permission déclarée dans admin/navigation.ts. */
 function section(path: string, element: ReactNode, sectionPath = path.split('/')[0]) {
@@ -64,6 +66,8 @@ export const routes = [
       { path: 'reglement', element: <BettingRulesPage /> },
       { path: 'confidentialite', element: <PrivacyPage /> },
       { path: 'jeu-responsable', element: <ResponsibleGamingPage /> },
+      // Après l'auto-exclusion, le joueur est déconnecté : confirmation hors de l'espace joueur.
+      { path: 'auto-exclusion', element: <SelfExclusionDonePage /> },
       // Espace joueur : menu commun des rubriques, accessible une fois connecté.
       {
         element: <RequireAuth><AccountLayout /></RequireAuth>,
@@ -75,6 +79,7 @@ export const routes = [
           { path: 'loyalty', element: <LoyaltyPage /> },
           { path: 'referral', element: <ReferralPage /> },
           { path: 'account', element: <AccountPage /> },
+          { path: 'responsible-gaming', element: <ResponsibleSettingsPage /> },
           { path: 'messages', element: <MessagesPage /> },
         ],
       },

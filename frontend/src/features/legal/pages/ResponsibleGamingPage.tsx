@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { LegalPage, LegalSection } from '../components/LegalPage';
 
 /** Outils décrits d'après l'API P7-02 (docs/api/openapi.yaml, /responsible-gaming). */
@@ -37,7 +38,10 @@ export function ResponsibleGamingPage() {
             il ne rouvre que sur demande, après examen par l'équipe.
           </li>
         </ul>
-        <p>Le réglage de ces outils depuis votre espace joueur arrive prochainement. En attendant, le support peut vous aider.</p>
+        <p>
+          Réglez-les depuis votre espace joueur, rubrique <Link to="/responsible-gaming">Jeu responsable</Link> (connexion
+          requise). Le support peut aussi vous aider.
+        </p>
       </LegalSection>
 
       <LegalSection title="4. Protéger les mineurs">

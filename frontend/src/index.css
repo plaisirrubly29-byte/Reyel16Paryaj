@@ -1297,6 +1297,45 @@ a.match-line-teams:hover { color: var(--brand); }
 .not-found h1 { margin: 0; font-size: 1.5rem; }
 .not-found p { margin: 0; color: var(--muted); }
 
+/* Jeu responsable du joueur (P7-02) : limites de mise, pause, auto-exclusion */
+.rg { max-width: 860px; }
+.rg-head h1 { margin: 0 0 0.3rem; }
+.rg-head p { margin: 0; }
+.rg-head a { color: var(--brand); font-weight: 700; }
+.rg-card { display: flex; flex-direction: column; gap: 1rem; padding: 1.2rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); }
+.rg-card-danger { border-color: #f5c9c5; }
+.rg-card-danger .money-card-icon { background: #fdecea; color: var(--danger); }
+.rg-limits { container-type: inline-size; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
+/* Trois colonnes, ou une seule quand la carte est étroite (jamais 2 + 1) */
+@container (max-width: 38rem) { .rg-limits > * { grid-column: 1 / -1; } }
+.rg-limit { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 0.9rem; border: 1px solid var(--border); border-radius: var(--radius); background: #fafbfc; }
+.rg-limit-head { display: flex; flex-direction: column; gap: 0.15rem; }
+.rg-limit-head h3 { margin: 0; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.rg-limit-head strong { font-size: 1.2rem; }
+.rg-progress { width: 100%; height: 0.45rem; appearance: none; border: 0; border-radius: 999px; background: #e7eaf0; overflow: hidden; }
+.rg-progress::-webkit-progress-bar { background: #e7eaf0; border-radius: 999px; }
+.rg-progress::-webkit-progress-value { background: var(--brand); border-radius: 999px; }
+.rg-progress::-moz-progress-bar { background: var(--brand); border-radius: 999px; }
+.rg-usage { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.rg-pending, .rg-notice { display: flex; align-items: flex-start; gap: 0.35rem; margin: 0; font-size: 0.85rem; }
+.rg-pending { color: var(--warning); }
+.rg-notice { color: var(--success); font-weight: 600; }
+.rg-pending svg, .rg-notice svg { flex: none; margin-top: 0.15rem; }
+.rg-limit-form, .rg-exclusion-form, .rg-confirm { display: flex; flex-direction: column; gap: 0.75rem; width: 100%; }
+.rg-limit-form input, .rg-exclusion-form input[type='password'] { width: 100%; max-width: 22rem; }
+.rg-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.rg-choices { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; border: 0; }
+.rg-choices legend { width: 100%; margin-bottom: 0.4rem; padding: 0; font-weight: 600; font-size: 0.9rem; }
+.rg-choice { position: relative; cursor: pointer; }
+.rg-choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.rg-choice span { display: inline-block; padding: 0.45rem 1rem; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); font-weight: 600; font-size: 0.9rem; }
+.rg-choice input:checked + span { border-color: var(--navy); background: var(--navy); color: #fff; }
+.rg-choice input:focus-visible + span { outline: 2px solid var(--brand); outline-offset: 2px; }
+.rg-card-danger .rg-choice input:checked + span { border-color: var(--danger); background: var(--danger); }
+@media (max-width: 760px) {
+  .rg-card { padding: 1rem; }
+}
+
 /* Pied de page bleu nuit, liseré rouge */
 .site-footer { background: linear-gradient(180deg, var(--navy), #050b26); border-top: 4px solid var(--accent); color: rgba(255, 255, 255, 0.82); margin-top: 1.5rem; }
 .footer-inner {
