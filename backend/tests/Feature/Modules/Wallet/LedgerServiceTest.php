@@ -9,7 +9,9 @@ use App\Modules\Wallet\Models\Wallet;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
 use Tests\TestCase;
@@ -144,6 +146,47 @@ class LedgerServiceTest extends TestCase
 
         $this->assertSame($first->id, $again->id);
         $this->assertSame(100_00, $this->ledger->balance($this->wallet)->minor);
+    }
+
+    /** Revue P8-02, F7 : le joueur voit ses écritures ; le motif interne d'une compensation reste réservé à l'équipe. */
+    public function test_the_internal_reason_of_a_reversal_is_not_in_the_player_description(): void
+    {
+        $this->ledger->creditSimulated($this->wallet, $this->htg(100_00), 'demo:1');
+        $payout = $this->ledger->payout($this->wallet, $this->htg(40_00), 'bet:5:payout', '5');
+
+        $reversal = $this->ledger->reverse($payout, 'bet:5:payout:reversal', 'Soupçon de fraude : multi-comptes');
+
+        $this->assertStringNotContainsString('fraude', (string) $reversal->description);
+        $this->assertSame("Correction de l'opération n° {$payout->id}", $reversal->description);
+        $this->assertSame('Soupçon de fraude : multi-comptes', $reversal->fresh()->metadata['reason']);
+    }
+
+    /**
+     * Revue P8-02, F8 : deux compensations simultanées de la même écriture (références différentes, ex. deux
+     * corrections) ne donnent pas une erreur 500 : la seconde, servie après le verrou, rejoue la première.
+     * La concurrente est simulée en l'écrivant dès la première lecture du portefeuille (SQLite ignore FOR UPDATE).
+     */
+    public function test_a_concurrent_reversal_of_the_same_entry_is_replayed(): void
+    {
+        $this->ledger->creditSimulated($this->wallet, $this->htg(100_00), 'demo:1');
+        $payout = $this->ledger->payout($this->wallet, $this->htg(40_00), 'bet:5:payout', '5');
+
+        $concurrent = null;
+        DB::listen(function (QueryExecuted $query) use ($payout, &$concurrent) {
+            if ($concurrent === null && str_contains($query->sql, 'from "wallets"')) {
+                $concurrent = false;
+                $concurrent = LedgerEntry::create([
+                    'wallet_id' => $payout->wallet_id, 'type' => LedgerEntryType::Reversal, 'amount_minor' => -40_00,
+                    'currency' => 'HTG', 'balance_after_minor' => 60_00, 'reference' => 'correction:1:reversal',
+                    'reversal_of_id' => $payout->id, 'related_type' => 'bet', 'related_id' => '5',
+                ]);
+            }
+        });
+
+        $reversal = $this->ledger->reverse($payout, 'correction:2:reversal', 'Correction');
+
+        $this->assertSame($concurrent->id, $reversal->id);
+        $this->assertSame(1, LedgerEntry::where('reversal_of_id', $payout->id)->count());
     }
 
     public function test_a_reversal_cannot_be_reversed(): void
