@@ -44,10 +44,26 @@ type BetSlip = {
   /** Panneau du coupon ouvert (mobile : ouvert depuis la barre d'onglets). */
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
-  /** Mise saisie en gourdes (texte). Gardée pendant la navigation, mais pas enregistrée dans le navigateur. */
+  /**
+   * Mise saisie en gourdes (texte) : celle du combiné, ou du pari simple quand le coupon n'a qu'une sélection.
+   * Gardée pendant la navigation, mais pas enregistrée dans le navigateur.
+   */
   stake: string;
   setStake: (value: string) => void;
+  /**
+   * Type de pari : choisi par le joueur, sinon déduit (une sélection = simple, plusieurs = multiple).
+   * Le combiné demande au moins 2 sélections.
+   */
+  mode: BetMode;
+  setMode: (mode: BetMode) => void;
+  /** Mise de chaque pari simple (mode simple avec plusieurs sélections), par sélection. */
+  stakes: Record<string, string>;
+  setStakeFor: (selectionId: string, value: string) => void;
+  /** « Même mise pour tous » : la même mise sur chaque sélection. */
+  setAllStakes: (value: string) => void;
 };
+
+export type BetMode = 'simple' | 'multiple';
 
 const STORAGE_KEY = 'r16p.betslip';
 export const MAX_SELECTIONS = 20;
@@ -75,7 +91,18 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
   const [full, setFull] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [stake, setStake] = useState('');
+  const [chosenMode, setChosenMode] = useState<BetMode | null>(null);
+  const [stakes, setStakes] = useState<Record<string, string>>({});
   const { data: user, isSuccess } = useMe();
+
+  const mode: BetMode = selections.length < 2 ? 'simple' : chosenMode ?? 'multiple';
+
+  // Coupon vidé : le prochain pari repart du type déduit, sans les mises des paris précédents.
+  useEffect(() => {
+    if (selections.length > 0) return;
+    setChosenMode(null);
+    setStakes({});
+  }, [selections.length]);
   const previousUserId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
@@ -124,6 +151,14 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     return result;
   }, [selections]);
 
+  const setMode = useCallback((next: BetMode) => {
+    setChosenMode(next);
+    // Passage aux paris simples : la mise déjà saisie devient celle de chaque sélection encore sans mise.
+    if (next === 'simple' && stake) {
+      setStakes((current) => Object.fromEntries(selections.map((s) => [s.selectionId, current[s.selectionId] || stake])));
+    }
+  }, [selections, stake]);
+
   const value = useMemo<BetSlip>(() => ({
     selections,
     full,
@@ -131,6 +166,11 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     setPanelOpen,
     stake,
     setStake,
+    mode,
+    setMode,
+    stakes,
+    setStakeFor: (id, amount) => setStakes((current) => ({ ...current, [id]: amount })),
+    setAllStakes: (amount) => setStakes(Object.fromEntries(selections.map((s) => [s.selectionId, amount]))),
     has: (id) => selections.some((s) => s.selectionId === id),
     toggle,
     remove: (id) => { setFull(false); setSelections((current) => current.filter((s) => s.selectionId !== id)); },
@@ -140,7 +180,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       return change ? { ...s, odds: change.odds, oddsVersion: change.oddsVersion } : s;
     })),
     clear: () => { setFull(false); setSelections([]); },
-  }), [selections, full, panelOpen, stake, toggle]);
+  }), [selections, full, panelOpen, stake, mode, setMode, stakes, toggle]);
 
   return <BetSlipContext.Provider value={value}>{children}</BetSlipContext.Provider>;
 }
