@@ -2,7 +2,7 @@
 
 > Répartition : **backend → Benginio Jean-Baptiste**, **frontend → Rubly PLAISIR**. Rubly termine aussi les mises à
 > jour frontend de la V1. Quand une tâche a une partie backend et une partie écrans, chacun prend sa partie, et elle a
-> deux issues GitHub liées entre elles. Les numéros d'issues (#137 à #198, label `version:V2`) sont à côté de chaque
+> deux issues GitHub liées entre elles. Les numéros d'issues (#137 à #198, puis #208 et #209, label `version:V2`) sont à côté de chaque
 > responsable.
 
 ## Objectif de la V2
@@ -93,6 +93,7 @@ l'admin.
 | V2-D05 | Risque : plafonds d'engagement par match et par marché, exposition des combinés, limites de mise par joueur | P1 | Benginio #171 | Rubly (écrans admin des plafonds) #172 | — | Pari refusé au-delà du plafond. Combinés inclus dans le pire cas. Limite individuelle posée par l'admin. |
 | V2-D06 | Paris en direct (live) : cotes en direct, délai d'acceptation, suspension sur événement | P3 | Benginio #173 | Rubly (onglet Live, coupon en direct) #174 | V2-A01, V2-D05 | `allow_live` activé seulement après test de charge et budget de crédits validés. |
 | V2-D07 | Cash-out (encaisser avant la fin) | P3 | Benginio #175 | Rubly (bouton et confirmation) #176 | V2-D06 | Montant calculé côté serveur. Cote revérifiée. Ledger cohérent. |
+| V2-D08 | Jeux virtuels : football et courses, par un prestataire tiers (D-11) | P3 | Benginio #208 | Rubly (accueil, épreuve, résultats, « Mes paris ») #209 | D-11, V2-D05 | D-11 validée (avis juridique, prestataire, règles). Mises et gains dans le ledger. Limites de jeu responsable appliquées. |
 
 ## Phase E — Expérience joueur
 
@@ -128,15 +129,15 @@ retour arrière.
 
 | Membre | Rôle en V2 | Tâches | dont seul |
 |---|---|---|---|
-| **Benginio Jean-Baptiste** (@benginio) | Backend : API, paiements, KYC, données sportives, risque, Production | 34 | 12 |
-| **Rubly PLAISIR** (@plaisirrubly29-byte) | Frontend : site joueur et écrans admin de la V2, en plus des mises à jour frontend de la V1 | 28 | 6 |
+| **Benginio Jean-Baptiste** (@benginio) | Backend : API, paiements, KYC, données sportives, risque, Production | 35 | 12 |
+| **Rubly PLAISIR** (@plaisirrubly29-byte) | Frontend : site joueur et écrans admin de la V2, en plus des mises à jour frontend de la V1 | 29 | 6 |
 
 **Benginio seul (12) :** V2-A01, V2-A02, V2-A03, V2-A04, V2-B01, V2-B02, V2-B04, V2-C05, V2-D01, V2-F01, V2-F02,
 V2-F03.
 
 **Rubly seul (6) :** V2-A05, V2-B05, V2-C08 (relecture du code de Benginio), V2-E03, V2-E05, V2-F06.
 
-**En binôme (22) :** Benginio fait l'API, Rubly fait les écrans. Rubly commence ses écrans dès que le contrat de l'API
+**En binôme (23) :** Benginio fait l'API, Rubly fait les écrans. Rubly commence ses écrans dès que le contrat de l'API
 est dans `docs/api/openapi.yaml`, sans attendre que le backend soit fini.
 
 ## Ordre conseillé
@@ -148,6 +149,6 @@ est dans `docs/api/openapi.yaml`, sans attendre que le backend soit fini.
 2. **Dès que les prestataires sont choisis :** phase B et KYC (V2-C01, V2-C03, V2-C04). Benginio fait l'API, Rubly les
    écrans.
 3. **Avant l'ouverture :** phase F, revue de sécurité V2 (V2-C08), puis bêta fermée (V2-F07).
-4. **Après le lancement :** les tâches P3 (live, cash-out, bonus).
+4. **Après le lancement :** les tâches P3 (live, cash-out, bonus, jeux virtuels).
 
-**Total :** 40 tâches, dont 23 en P1, 14 en P2 et 3 en P3.
+**Total :** 41 tâches, dont 23 en P1, 14 en P2 et 4 en P3.
