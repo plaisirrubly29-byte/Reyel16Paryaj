@@ -22,10 +22,15 @@
 |---|---|
 | `users` | Compte : téléphone (identifiant de connexion, 8 chiffres), email optionnel, mot de passe haché, `status` (`AccountStatus` : active, suspended, excluded, closed) |
 | `user_profiles` | Données personnelles (nom, date de naissance, pays) — 1-1 avec `users` |
+| `terms_acceptances` | Acceptation des textes d'information à l'inscription (V2-E01) : version, date, IP, navigateur. Ajout seul |
 | `roles` | Rôles administratifs (`RoleSlug`) — seedés par `RoleSeeder` |
 | `permissions` | Permissions unitaires (`ressource.action`) |
 | `role_permissions` | Rôle → permissions |
 | `user_roles` | Utilisateur → rôles (+ `assigned_by`) |
+
+Inscription (V2-E01) : `terms_accepted: true` et `terms_version` égale à `identity.terms_version`
+(`IDENTITY_TERMS_VERSION`, à garder égale à `LEGAL_VERSION` du frontend), sinon 422 ; l'acceptation est enregistrée
+dans la transaction de l'inscription.
 
 Un joueur n’a aucun rôle. Le statut ne change jamais par affectation de masse (non `fillable`).
 Comptes de démonstration (local) : `php artisan db:seed` — `joueur@example.com`, `super-admin@example.com`,
