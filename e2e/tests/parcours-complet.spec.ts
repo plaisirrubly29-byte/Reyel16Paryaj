@@ -48,6 +48,7 @@ test('parcours complet du joueur, du compte au règlement', async ({ page }) => 
 
   await test.step('coupon : sélection, mise et ticket simulé', async () => {
     await page.getByRole('button', { name: `1 ${match.home} à 2.00` }).first().click();
+    await page.getByRole('button', { name: /^Panier/ }).click(); // panneau flottant sur ordinateur
     const slip = page.getByRole('complementary', { name: 'Coupon' });
     await slip.getByLabel('Montant de la mise').fill('100');
     await slip.getByRole('button', { name: 'Placer mon pari' }).click();
