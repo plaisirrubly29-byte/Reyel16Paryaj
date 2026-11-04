@@ -54,7 +54,7 @@ function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) 
 
   const event = query.data;
   const presentCategories = new Set(event.markets.map(marketCategory));
-  const categories = (['Résultat', 'Buts', 'Score exact', 'Joueurs', 'Autres'] as const)
+  const categories = (['Résultat', 'Buts', 'Handicap', 'Score exact', 'Joueurs', 'Autres'] as const)
     .filter((item) => presentCategories.has(item));
   const visibleMarkets = event.markets.filter((market) =>
     (category === 'Tous' || marketCategory(market) === category)

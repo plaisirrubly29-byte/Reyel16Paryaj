@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { useBetSlip } from '../../betting/slip/BetSlipContext';
 import type { CatalogueEvent, CatalogueMarket } from '../api/catalogue';
 import { isLiveStatus } from '../format';
-import { favoriteSelection, impliedShares, marketTitle, matchingSelections } from '../markets';
+import { favoriteSelection, impliedShares, marketColumns, marketTitle, matchingSelections } from '../markets';
 
 type Props = {
   event: CatalogueEvent;
@@ -37,7 +37,7 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
 
   return (
     <div
-      className={wide ? `market-odds cols-${Math.min(visibleSelections.length, 3)}` : `match-odds match-odds-${variant}`}
+      className={wide ? `market-odds cols-${marketColumns(market, visibleSelections.length)}` : `match-odds match-odds-${variant}`}
       role="group"
       aria-label={wide ? `${marketTitle(market)} : ${match}` : `Cotes ${match}`}
     >

@@ -80,6 +80,18 @@ return [
     'horizon_days' => (int) env('SPORTS_DATA_HORIZON_DAYS', 7),
     'max_events_per_competition' => (int) env('SPORTS_DATA_MAX_EVENTS', 10),
 
+    // Marchés chargés match par match (sports-data:extra-markets) pour le football, tous réglés sur le score final.
+    // Coût chez The Odds API : 1 crédit par marché reçu (× régions) et PAR MATCH. Planifié seulement si
+    // SPORTS_DATA_EXTRA=true : matchs qui commencent dans extra_markets_hours, plafond de crédits par jour.
+    'extra_markets' => env('SPORTS_DATA_EXTRA_MARKETS',
+        'double_chance,draw_no_bet,btts,correct_score,spreads,alternate_spreads,alternate_totals,team_totals,alternate_team_totals,odd_even'),
+    'extra_markets_enabled' => (bool) env('SPORTS_DATA_EXTRA', false),
+    'extra_markets_cron' => env('SPORTS_DATA_EXTRA_CRON', '30 */3 * * *'),
+    'extra_markets_hours' => (int) env('SPORTS_DATA_EXTRA_HOURS', 72),
+    // Compétitions concernées, ex. "soccer_epl,soccer_spain_la_liga" ; vide = toutes les compétitions de football actives.
+    'extra_markets_competitions' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_EXTRA_COMPETITIONS', ''))))),
+    'extra_markets_daily_credits' => (int) env('SPORTS_DATA_EXTRA_DAILY_CREDITS', 1000),
+
     // Règle de fraîcheur (P3-04) : au-delà, la cote n'est plus proposée. Doit dépasser l'intervalle de synchro.
     'max_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_ODDS_AGE', 300),
 
