@@ -6,7 +6,6 @@ import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Icon } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
 import { sportIcon } from '../../../shared/components/sportIcon';
-import { BetSlipPanel } from '../../betting/slip/BetSlipPanel';
 import { useEventMarkets, type CatalogueEvent } from '../api/catalogue';
 import { formatKickoff, isLiveStatus, liveLabel } from '../format';
 import { MarketOdds } from '../components/OddsButtons';
@@ -26,8 +25,6 @@ export function MatchPage() {
         <Link to="/sports" className="back-link"><Icon name="chevron" size={16} />Tous les matchs</Link>
         <MatchContent query={query} />
       </div>
-
-      <BetSlipPanel />
     </div>
   );
 }
