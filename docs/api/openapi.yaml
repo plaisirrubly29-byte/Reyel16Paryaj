@@ -2041,9 +2041,9 @@ components:
             type: object
             properties:
               id: { type: string }
-              key: { type: string, enum: [h2h, double_chance, totals, btts] }
+              key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even] }
               name: { type: string, example: Résultat du match (1X2) }
-              line: { type: [string, "null"], example: "2.5", description: Ligne du plus/moins ; null pour les autres marchés }
+              line: { type: [string, "null"], example: "2.5", description: "Ligne du plus/moins ou du handicap (celle de l'équipe à domicile, ex. \"-0.5\") ; null pour les autres marchés, dont ceux à plusieurs lignes (ligne dans la clé de la sélection)" }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
               bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou match en direct (paris en direct désactivés, betting.allow_live), affichée mais non pariable" }
@@ -2053,8 +2053,8 @@ components:
                   type: object
                   properties:
                     id: { type: string }
-                    key: { type: string, enum: [home, draw, away, home_draw, home_away, draw_away, over, under, yes, no] }
-                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
+                    key: { type: string, example: home_draw, description: "home, draw, away ; home_draw, home_away, draw_away ; over, under ; yes, no ; odd, even ; score exact \"2-1\" ; à plusieurs lignes : \"over_2.5\", \"home_-1.5\", \"away_under_0.5\"" }
+                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non ; 1 (-0.5) / 2 (+0.5) ; 1 +1.5 ; Impair / Pair" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
     BetTicket:
@@ -2086,7 +2086,7 @@ components:
               market:
                 type: object
                 properties:
-                  key: { type: string, enum: [h2h, double_chance, totals, btts] }
+                  key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even] }
                   name: { type: string, example: Nombre de buts }
                   line: { type: [string, "null"], example: "2.5" }
               selection:

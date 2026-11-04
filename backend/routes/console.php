@@ -34,6 +34,14 @@ Schedule::command('sports-data:live')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Marchés supplémentaires des matchs de football proches (double chance, handicap, buts par équipe…), match par match,
+// plafonnés en crédits par jour (SPORTS_DATA_EXTRA_DAILY_CREDITS). Désactivé par défaut (SPORTS_DATA_EXTRA).
+Schedule::command('sports-data:extra-markets')
+    ->cron((string) config('sports_data.extra_markets_cron'))
+    ->when(fn () => (bool) config('sports_data.extra_markets_enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))
