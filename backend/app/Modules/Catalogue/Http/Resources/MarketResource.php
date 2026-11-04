@@ -64,8 +64,9 @@ class MarketResource extends JsonResource
     }
 
     /**
-     * Libellé court d'une issue : 1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non ; handicap 1 (-0.5) / 2 (+0.5) ;
-     * buts par équipe 1 +1.5 / 2 -0.5 ; Impair / Pair. $line est la ligne du marché (null hors plus/moins et handicap).
+     * Libellé court d'une issue, seul texte du bouton de cote sur la page du match : 1, X, 2 ; 1X, 12, X2 ; > 2.5 / < 2.5 ;
+     * Oui / Non ; handicap 1 (-0.5) / 2 (+0.5) ; buts par équipe 1 > 1.5 / 2 < 0.5 ; Impair / Pair ; score exact 2-1 (clé).
+     * $line est la ligne du marché (null hors plus/moins et handicap).
      */
     public static function selectionLabel(string $key, ?string $line): string
     {
@@ -80,14 +81,14 @@ class MarketResource extends JsonResource
             $key === 'home_draw' => '1X',
             $key === 'home_away' => '12',
             $key === 'draw_away' => 'X2',
-            $key === 'over' => "+{$line}",
-            $key === 'under' => "-{$line}",
+            $key === 'over' => "> {$line}",
+            $key === 'under' => "< {$line}",
             $key === 'yes' => 'Oui',
             $key === 'no' => 'Non',
             $key === 'odd' => 'Impair',
             $key === 'even' => 'Pair',
-            (bool) preg_match('/^(over|under)_(.+)$/', $key, $m) => ($m[1] === 'over' ? '+' : '-').$m[2],
-            (bool) preg_match('/^(home|away)_(over|under)_(.+)$/', $key, $m) => $team($m[1]).' '.($m[2] === 'over' ? '+' : '-').$m[3],
+            (bool) preg_match('/^(over|under)_(.+)$/', $key, $m) => ($m[1] === 'over' ? '> ' : '< ').$m[2],
+            (bool) preg_match('/^(home|away)_(over|under)_(.+)$/', $key, $m) => $team($m[1]).($m[2] === 'over' ? ' > ' : ' < ').$m[3],
             (bool) preg_match('/^(home|away)_([+-]?[\d.]+)$/', $key, $m) => "{$team($m[1])} ({$m[2]})",
             default => $key,
         };

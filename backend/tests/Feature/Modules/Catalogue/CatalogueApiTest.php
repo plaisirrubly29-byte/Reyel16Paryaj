@@ -145,7 +145,7 @@ class CatalogueApiTest extends TestCase
             [['home_draw', '1X', 'Arsenal ou nul', '1.27'], ['home_away', '12', 'Arsenal ou Chelsea', '1.30'], ['draw_away', 'X2', 'Nul ou Chelsea', '1.66']],
             $selections($markets[1]),
         );
-        $this->assertSame([['over', '+2.5', 'Plus de 2.5', '1.80'], ['under', '-2.5', 'Moins de 2.5', '2.00']], $selections($markets[2]));
+        $this->assertSame([['over', '> 2.5', 'Plus de 2.5', '1.80'], ['under', '< 2.5', 'Moins de 2.5', '2.00']], $selections($markets[2]));
         $this->assertSame([['yes', 'Oui', 'Oui', '1.70'], ['no', 'Non', 'Non', '2.05']], $selections($markets[3]));
     }
 
@@ -172,8 +172,8 @@ class CatalogueApiTest extends TestCase
         $this->getJson("/api/v1/events/{$event->id}/markets")
             ->assertOk()
             ->assertJsonPath('data.markets.1.name', 'Total de points')
-            ->assertJsonPath('data.markets.1.selections.0.label', '+215.5')
-            ->assertJsonPath('data.markets.1.selections.1.label', '-215.5');
+            ->assertJsonPath('data.markets.1.selections.0.label', '> 215.5')
+            ->assertJsonPath('data.markets.1.selections.1.label', '< 215.5');
     }
 
     public function test_an_event_with_only_totals_displayable_is_not_listed(): void

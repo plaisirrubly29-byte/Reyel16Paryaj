@@ -1132,8 +1132,9 @@ a.match-line-teams:hover { color: var(--brand); }
 .odds-btn-bar .odds-label, .odds-btn-wide .odds-name {
   display: flex; align-items: center; flex: 1; min-width: 0; padding: 0 0.85rem; font-size: 1.2rem; font-weight: 700; text-align: left;
 }
-/* Noms longs (double chance : « Arsenal ou Chelsea ») : retour à la ligne plutôt que coupés. */
-.odds-btn-wide .odds-name { font-size: 1.02rem; line-height: 1.2; padding-top: 0.35rem; padding-bottom: 0.35rem; overflow-wrap: anywhere; }
+/* Libellés courts (1, X2, > 2.5) ; un nom long (buteur) revient à la ligne plutôt que d'être coupé. */
+.odds-btn-wide .odds-name { font-size: 1.15rem; line-height: 1.2; padding-top: 0.35rem; padding-bottom: 0.35rem; overflow-wrap: anywhere; }
+.market-odds.short-labels .odds-btn-wide .odds-name { white-space: nowrap; overflow-wrap: normal; }
 .odds-btn-bar .odds-value, .odds-btn-wide .odds-value {
   display: flex; align-items: center; justify-content: center; min-width: 5.2rem; padding: 0 0.9rem;
   background: var(--odds); color: #fff; font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums;
@@ -1468,8 +1469,11 @@ a.match-line-teams:hover { color: var(--brand); }
   .odds-btn-bar { min-height: 3rem; }
   .odds-btn-bar .odds-label { padding: 0 0.5rem; font-size: 1rem; }
   .odds-btn-bar .odds-value { min-width: 0; flex: 1 1 auto; padding: 0 0.4rem; font-size: 1rem; }
-  /* Page d'un match : 1X2 sur une colonne pour garder les noms d'équipe lisibles. */
-  .market-odds.cols-3 { grid-template-columns: 1fr; }
+  /* Page d'un match : libellés courts (1, X, 2) sur une ligne ; noms longs (buteurs) sur une colonne. */
+  .market-odds.cols-3.long-names { grid-template-columns: 1fr; }
+  .market-odds.short-labels { gap: 0.35rem; }
+  .market-odds.short-labels .odds-btn-wide .odds-name { padding: 0 0.5rem; font-size: 1rem; }
+  .market-odds.short-labels .odds-btn-wide .odds-value { min-width: 3.4rem; flex: 0 0 auto; padding: 0 0.45rem; font-size: 1rem; }
   .match-header { padding: 1.1rem 0.9rem; }
   .match-header-teams { flex-direction: column; gap: 0.2rem; }
   .match-header-vs { display: none; }
