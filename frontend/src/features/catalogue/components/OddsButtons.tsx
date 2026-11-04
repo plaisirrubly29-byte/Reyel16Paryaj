@@ -10,7 +10,7 @@ type Props = {
   selectionSearch?: string;
   /**
    * card : libellé au-dessus de la cote (cartes « Top matchs ») ; bar : libellé à gauche, cote à droite dans un bloc
-   * foncé, barre de probabilité dessous (liste des matchs) ; wide : nom de la sélection à gauche (page du match).
+   * foncé, barre de probabilité dessous (liste des matchs) ; wide : libellé court à gauche, cote à droite (page du match).
    */
   variant?: 'card' | 'bar' | 'wide';
 };
@@ -34,18 +34,24 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
   const visibleSelections = matchingSelections(market, selectionSearch);
   const wide = variant === 'wide';
   const withBar = variant !== 'card';
+  // Libellés courts seulement s'ils distinguent chaque sélection (sinon, ex. « Oui » pour chaque buteur : le nom).
+  const shortLabels = new Set(market.selections.map((s) => s.label)).size === market.selections.length;
 
   return (
     <div
-      className={wide ? `market-odds cols-${marketColumns(market, visibleSelections.length)}` : `match-odds match-odds-${variant}`}
+      className={wide
+        ? `market-odds cols-${marketColumns(market, visibleSelections.length)} ${shortLabels ? 'short-labels' : 'long-names'}`
+        : `match-odds match-odds-${variant}`}
       role="group"
       aria-label={wide ? `${marketTitle(market)} : ${match}` : `Cotes ${match}`}
     >
       {visibleSelections.map((s) => {
         const selected = slip.has(s.id);
         const favorite = s.id === favoriteId;
-        // « Oui » / « Non » : libellé et nom identiques, dits une seule fois.
-        const name = wide || s.label === s.name ? `${s.name} à ${s.odds}` : `${s.label} ${s.name} à ${s.odds}`;
+        // Le bouton n'affiche que le libellé court (1, X, 2, 1X, > 2.5…) ; le nom complet reste dans le nom accessible
+        // et l'infobulle. « Oui » / « Non » : libellé et nom identiques, dits une seule fois.
+        const text = wide && !shortLabels ? s.name : s.label;
+        const name = text === s.name ? `${s.name} à ${s.odds}` : `${s.label} ${s.name} à ${s.odds}`;
         return (
           <button
             key={s.id}
@@ -53,7 +59,7 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
             className={`odds-btn odds-btn-${variant}${selected ? ' selected' : ''}${favorite ? ' favorite' : ''}`}
             aria-pressed={selected}
             disabled={locked}
-            title={locked ? reason : undefined}
+            title={locked ? reason : s.name}
             aria-label={`${name}${locked ? ` (${reason.toLowerCase()})` : ''}`}
             onClick={() => slip.toggle({
               selectionId: s.id,
@@ -68,7 +74,7 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
               startsAt: event.starts_at,
             })}
           >
-            {wide ? <span className="odds-name">{s.name}</span> : <span className="odds-label">{s.label}</span>}
+            <span className={wide ? 'odds-name' : 'odds-label'}>{text}</span>
             <span className="odds-value">{s.odds}</span>
             {withBar && (
               <span className="odds-prob" aria-hidden="true">

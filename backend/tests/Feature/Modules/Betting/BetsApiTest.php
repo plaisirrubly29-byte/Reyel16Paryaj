@@ -44,7 +44,7 @@ class BetsApiTest extends TestCase
             ->assertJsonPath('data.selections.0.selection', ['key' => 'home', 'label' => '1', 'name' => 'Home'])
             ->assertJsonPath('data.selections.0.odds', '2.05')
             ->assertJsonPath('data.selections.1.market.name', 'Nombre de buts')
-            ->assertJsonPath('data.selections.1.selection.label', '+2.5')
+            ->assertJsonPath('data.selections.1.selection.label', '> 2.5')
             ->assertJsonPath('data.selections.1.odds', '1.90')
             ->assertJsonMissingPath('data.rules_snapshot')
             ->assertJsonMissingPath('data.wallet_id');

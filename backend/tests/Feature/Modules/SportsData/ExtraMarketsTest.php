@@ -105,14 +105,14 @@ class ExtraMarketsTest extends TestCase
 
         $this->assertSame('Nombre de buts (autres lignes)', $markets['alternate_totals']['name']);
         $this->assertSame([
-            ['over_1.5', '+1.5', 'Plus de 1.5', '1.25'], ['under_1.5', '-1.5', 'Moins de 1.5', '3.80'],
-            ['over_3.5', '+3.5', 'Plus de 3.5', '2.60'], ['under_3.5', '-3.5', 'Moins de 3.5', '1.48'],
+            ['over_1.5', '> 1.5', 'Plus de 1.5', '1.25'], ['under_1.5', '< 1.5', 'Moins de 1.5', '3.80'],
+            ['over_3.5', '> 3.5', 'Plus de 3.5', '2.60'], ['under_3.5', '< 3.5', 'Moins de 3.5', '1.48'],
         ], $rows('alternate_totals'));
 
         $this->assertSame('Buts par équipe', $markets['team_totals']['name']);
         $this->assertSame([
-            ['home_over_1.5', '1 +1.5', 'Arsenal : plus de 1.5', '1.60'], ['home_under_1.5', '1 -1.5', 'Arsenal : moins de 1.5', '2.25'],
-            ['away_over_0.5', '2 +0.5', 'Chelsea : plus de 0.5', '1.85'], ['away_under_0.5', '2 -0.5', 'Chelsea : moins de 0.5', '1.95'],
+            ['home_over_1.5', '1 > 1.5', 'Arsenal : plus de 1.5', '1.60'], ['home_under_1.5', '1 < 1.5', 'Arsenal : moins de 1.5', '2.25'],
+            ['away_over_0.5', '2 > 0.5', 'Chelsea : plus de 0.5', '1.85'], ['away_under_0.5', '2 < 0.5', 'Chelsea : moins de 0.5', '1.95'],
         ], $rows('team_totals'));
 
         $this->assertSame('Nombre de buts pair ou impair', $markets['odd_even']['name']);
