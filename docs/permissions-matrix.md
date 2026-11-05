@@ -25,6 +25,8 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Paramètres (limites, règles, fournisseur) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 |
 | Limites jeu responsable | 👁 | ❌ | ❌ | ❌ | ✅ |
+| KYC — consulter les pièces, valider un dossier (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
+| KYC — refuser un dossier (motif) | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Audit & exports | 👁 | ❌ | 👁 | ❌ | 👁 |
 | Gérer les rôles des autres | ✅ (jamais les siens) | ❌ | ❌ | ❌ | ❌ |
 
@@ -41,6 +43,8 @@ un test par ligne du tableau. Chaque route de la ligne est appelée par un admin
 
 - Les permissions de `config/permissions.php` (et celles appliquées en base) sont comparées à ce tableau, rôle par rôle.
 - Toute route `/api/v1/admin/*` doit appartenir à une ligne : une nouvelle route sans ligne fait échouer les tests.
+- KYC (V2-C03) : le Support examine et valide les dossiers (pièce d'identité et selfie, chaque ouverture auditée)
+  sans avoir `users.view_personal_data` ; seuls la Conformité et le Super Admin refusent un dossier.
 - 👁 Support (D-07, I2) : email et téléphone masqués, ni profil ni rôles dans la fiche utilisateur ; coordonnées
   complètes pour les rôles qui ont `users.view_personal_data`.
 - 2️⃣ : le demandeur ne valide jamais sa propre demande (`self_approval_forbidden`) ; « jamais les siens » pour les rôles

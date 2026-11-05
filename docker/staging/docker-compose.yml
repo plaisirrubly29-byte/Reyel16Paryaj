@@ -15,6 +15,9 @@ x-backend: &backend
   environment:
     DB_HOST: postgres
     REDIS_HOST: redis
+  # Documents KYC chiffrés (V2-C03) : hors de l'image, conservés entre deux déploiements ; à sauvegarder avec la base.
+  volumes:
+    - kyc_documents:/var/www/backend/storage/app/kyc
   restart: unless-stopped
   depends_on:
     postgres:
@@ -88,5 +91,6 @@ services:
 volumes:
   pgdata:
   redisdata:
+  kyc_documents:
   caddy_data:
   caddy_config:

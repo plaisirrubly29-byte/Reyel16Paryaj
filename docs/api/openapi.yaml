@@ -268,6 +268,56 @@ paths:
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/kyc:
+    get:
+      tags: [Auth]
+      summary: Vérification d'identité du joueur connecté (statut, dernier dossier)
+      description: |
+        V2-C03. status : none (aucun dossier), pending (en revue), approved, rejected (le joueur peut envoyer un
+        nouveau dossier). rejection_reason : motif du dernier refus, à montrer au joueur. deposit_threshold : cumul
+        des dépôts autorisés sans identité vérifiée ; tout retrait exige un KYC validé.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/KycStatus" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Auth]
+      summary: Envoyer un dossier KYC (pièce d'identité + selfie)
+      description: |
+        V2-C03. multipart/form-data. Fichiers de 5 Mo au plus : pièce en jpg, jpeg, png, webp ou pdf ; selfie en jpg,
+        jpeg, png ou webp. Verso exigé pour cin et driving_licence (422 kyc_back_required), ignoré pour passport.
+        Fichiers chiffrés par le serveur, visibles seulement des administrateurs kyc.view (chaque ouverture auditée).
+        Pas de clé d'idempotence : un second envoi est refusé tant qu'un dossier est en attente. Limite : 10 envois
+        par heure et par joueur (429).
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document_type, front, selfie]
+              properties:
+                document_type: { type: string, enum: [cin, passport, driving_licence, nif] }
+                front: { type: string, format: binary, description: Recto de la pièce (page photo du passeport) }
+                back: { type: string, format: binary, description: "Verso : exigé pour cin et driving_licence" }
+                selfie: { type: string, format: binary }
+      responses:
+        "201":
+          description: Dossier envoyé, en attente de revue
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/KycStatus" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: kyc_already_pending ; kyc_already_approved
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: validation_failed ; kyc_back_required ; kyc_not_for_admins
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { description: Trop d'envois }
   /me/sessions:
     get:
       tags: [Auth]
@@ -1036,6 +1086,9 @@ paths:
         ou est payé auprès de l'opérateur, puis l'opération est inscrite au ledger (écriture deposit ou withdrawal).
         Compte administrateur : 422 not_a_player. Retrait supérieur au solde : 422 insufficient_funds ; solde gelé :
         423 wallet_frozen. Audit : wallet.deposited / wallet.withdrawn.
+        KYC (V2-C03) : 422 kyc_required pour tout retrait sans identité vérifiée (details.kyc_status), et pour un dépôt
+        qui porterait le cumul des dépôts au-delà de kyc.deposit_threshold_minor (details.threshold_minor,
+        details.deposited_minor).
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -1058,7 +1111,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
-          description: "`validation_failed`, `not_a_player` ou `insufficient_funds`"
+          description: "`validation_failed`, `not_a_player`, `insufficient_funds` ou `kyc_required`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`wallet_frozen`"
@@ -1166,6 +1219,113 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminResponsibleGaming" } } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/kyc:
+    get:
+      tags: [Admin]
+      summary: Dossiers KYC (permission kyc.view)
+      description: |
+        V2-C03. Filtres status (pending : plus ancien d'abord, file de revue ; sinon plus récent d'abord) et user_id.
+        Permission kyc.view : Super Admin, Conformité, Support.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminKycSubmission" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/kyc/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'un dossier KYC, avec la liste de ses fichiers (permission kyc.view)
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminKycSubmission" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/kyc/{id}/files/{file}:
+    get:
+      tags: [Admin]
+      summary: Pièce ou selfie déchiffré (permission kyc.view, ouverture auditée)
+      description: |
+        V2-C03. Contenu brut (Content-Type du fichier), Cache-Control no-store. Chaque ouverture est auditée
+        (kyc.document_viewed). À afficher dans l'écran de revue, jamais à enregistrer.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: file, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fichier
+          content:
+            image/*: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/kyc/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider un dossier KYC (permission kyc.approve, motif requis, audité)
+      description: |
+        V2-C03. Super Admin, Conformité, Support. Le compte passe en kyc_status approved. Audit kyc.approved.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Dossier validé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminKycSubmission" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: kyc_not_pending (dossier déjà traité)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/kyc/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser un dossier KYC (permission kyc.reject, motif requis, montré au joueur)
+      description: |
+        V2-C03. Super Admin et Conformité. Le compte passe en kyc_status rejected ; le motif est montré au joueur (GET /me/kyc), qui peut envoyer un nouveau dossier. Audit kyc.rejected.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Dossier refusé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminKycSubmission" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: kyc_not_pending (dossier déjà traité)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/users/{id}/responsible-gaming/reopen:
     post:
       tags: [Admin]
@@ -1472,6 +1632,10 @@ paths:
                         allow_live: { type: boolean }
                         max_event_liability_minor: { type: integer, minimum: 1, description: "Perte maximale sur un match (V2-D05)" }
                         max_market_liability_minor: { type: integer, minimum: 1, description: "Perte maximale sur un marché, <= max_event_liability_minor" }
+                    kyc:
+                      type: object
+                      properties:
+                        deposit_threshold_minor: { type: integer, minimum: 0, description: "Dépôts libres jusqu'à ce cumul (V2-C03) ; 0 = KYC avant tout dépôt" }
                     wallet:
                       type: object
                       properties:
@@ -1870,6 +2034,52 @@ components:
       type: array
       description: Une valeur par jour, du plus ancien au plus récent.
       items: { type: object, properties: { date: { type: string, format: date }, value: { type: integer } } }
+    KycStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [none, pending, approved, rejected] }
+        verified_at: { type: [string, "null"], format: date-time }
+        deposit_threshold: { $ref: "#/components/schemas/Money" }
+        latest_submission:
+          type: [object, "null"]
+          properties:
+            id: { type: string }
+            document_type: { type: string, enum: [cin, passport, driving_licence, nif] }
+            status: { type: string, enum: [pending, approved, rejected] }
+            submitted_at: { type: string, format: date-time }
+            decided_at: { type: [string, "null"], format: date-time }
+            rejection_reason: { type: [string, "null"], description: Motif du refus ; null sinon }
+    AdminKycSubmission:
+      type: object
+      properties:
+        id: { type: string }
+        user:
+          type: object
+          description: Identité déclarée à l'inscription, à comparer avec la pièce.
+          properties:
+            id: { type: string }
+            name: { type: string }
+            first_name: { type: [string, "null"] }
+            last_name: { type: [string, "null"] }
+            birth_date: { type: [string, "null"], format: date }
+            country: { type: [string, "null"] }
+            kyc_status: { type: string, enum: [none, pending, approved, rejected] }
+        document_type: { type: string, enum: [cin, passport, driving_licence, nif] }
+        status: { type: string, enum: [pending, approved, rejected] }
+        files:
+          type: array
+          description: Détail uniquement. Contenu par GET /admin/kyc/{id}/files/{file}.
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              kind: { type: string, enum: [front, back, selfie] }
+              mime_type: { type: string }
+              size_bytes: { type: integer }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decided_at: { type: [string, "null"], format: date-time }
+        decision_reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
     AdminUser:
       type: object
       properties:
@@ -1883,6 +2093,7 @@ components:
         created_at: { type: string, format: date-time }
         last_login_at: { type: [string, "null"], format: date-time }
         max_stake_minor: { type: [integer, "null"], description: "Mise maximale par ticket posée par un administrateur (V2-D05) ; null = limite générale" }
+        kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "Vérification d'identité (V2-C03)" }
         roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
         mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
         profile: { type: object, description: "Avec users.view_personal_data uniquement" }
@@ -1955,6 +2166,7 @@ components:
         phone: { type: string, example: "34123456", description: "Identifiant de connexion, 8 chiffres." }
         email: { type: [string, "null"], format: email }
         status: { type: string, enum: [active, suspended, excluded, closed] }
+        kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "Vérification d'identité (V2-C03) ; détail par GET /me/kyc" }
         roles:
           type: array
           items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
