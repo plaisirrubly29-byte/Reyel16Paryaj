@@ -45,6 +45,7 @@ class AdminResponsibleGamingController extends Controller
         return response()->json(['data' => [
             'user' => ['id' => (string) $user->id, 'status' => $user->status->value],
             'limits' => ResponsibleGamingPresenter::limits($overview['limits']),
+            'deposit_limits' => ResponsibleGamingPresenter::limits($overview['deposit_limits']),
             'pause' => ResponsibleGamingPresenter::pause($overview['pause']),
             'restrictions' => $overview['restrictions']->map(fn (ResponsibleGamingRestriction $r) => [
                 'id' => (string) $r->id,

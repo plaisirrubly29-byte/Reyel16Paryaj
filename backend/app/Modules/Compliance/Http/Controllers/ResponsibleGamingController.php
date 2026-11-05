@@ -3,6 +3,7 @@
 namespace App\Modules\Compliance\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Compliance\Enums\LimitKind;
 use App\Modules\Compliance\Enums\LimitPeriod;
 use App\Modules\Compliance\Enums\RestrictionType;
 use App\Modules\Compliance\Http\Resources\ResponsibleGamingPresenter;
@@ -12,7 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
-/** Jeu responsable côté joueur (P7-02) : limites de mise, pause, auto-exclusion. */
+/** Jeu responsable côté joueur (P7-02) : limites de mise et de dépôt (V2-B06), pause, auto-exclusion. */
 class ResponsibleGamingController extends Controller
 {
     public function __construct(private readonly ResponsibleGamingService $responsibleGaming) {}
@@ -24,13 +25,23 @@ class ResponsibleGamingController extends Controller
 
     public function updateLimit(Request $request, string $period): JsonResponse
     {
+        return $this->changeLimit($request, $period, LimitKind::Stake);
+    }
+
+    public function updateDepositLimit(Request $request, string $period): JsonResponse
+    {
+        return $this->changeLimit($request, $period, LimitKind::Deposit);
+    }
+
+    private function changeLimit(Request $request, string $period, LimitKind $kind): JsonResponse
+    {
         $data = validator(['period' => $period] + $request->all(), [
             'period' => ['required', Rule::enum(LimitPeriod::class)],
             // null : supprimer la limite (après le délai de réflexion).
             'amount_minor' => ['present', 'nullable', 'integer', 'min:1', 'max:'.config('compliance.limits.max_amount_minor')],
         ])->validate();
 
-        $this->responsibleGaming->setLimit($request->user(), LimitPeriod::from($data['period']), $data['amount_minor']);
+        $this->responsibleGaming->setLimit($request->user(), LimitPeriod::from($data['period']), $data['amount_minor'], $kind);
 
         return $this->state($request);
     }
@@ -74,6 +85,7 @@ class ResponsibleGamingController extends Controller
 
         return response()->json(['data' => [
             'limits' => ResponsibleGamingPresenter::limits($status['limits']),
+            'deposit_limits' => ResponsibleGamingPresenter::limits($status['deposit_limits']),
             'pause' => ResponsibleGamingPresenter::pause($status['pause']),
             'options' => [
                 'pause_durations' => array_keys(RestrictionType::Pause->durations()),
