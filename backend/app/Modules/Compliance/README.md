@@ -9,6 +9,7 @@
 - Contrôles d’âge/éligibilité si requis.
 - Jeu responsable (P7-02) : limites de mise, pause, auto-exclusion ; contrôle avant chaque pari.
 - Limites de dépôt (V2-B06) : même règle que les limites de mise ; contrôle avant chaque dépôt.
+- Limites de pertes nettes, rappel de durée de session, historique des dépenses (V2-E06).
 - Journal des événements de jeu responsable.
 
 ## Dépendances
@@ -18,11 +19,15 @@
   Betting appelle Compliance, jamais l'inverse.
 - Wallet fournit les dépôts du joueur via le contrat `Contracts\DepositHistory` (même principe) ; le dépôt enregistré
   par l'admin (module Admin) appelle `assertCanDeposit()`, comme le feront les dépôts MonCash (V2-B02).
+- Wallet fournit aussi la perte nette (`Contracts\LossHistory`) et les totaux par jour (`Contracts\SpendingHistory`),
+  lus dans le ledger par `LedgerPlayHistory`.
 
 ## Tables
 
 - `betting_limits` : une limite par joueur et par période glissante (day, week, month), hausse ou suppression en attente
 - `deposit_limits` : limites de dépôt, mêmes colonnes (modèle `DepositLimit`, qui étend `BettingLimit`)
+- `loss_limits` : limites de pertes, mêmes colonnes (modèle `LossLimit`)
+- `users.session_reminder_minutes` : intervalle du rappel de durée de session (null : désactivé)
 - `responsible_gaming_restrictions` : pauses et auto-exclusions
 - `responsible_play_events` : journal en ajout seul
 
@@ -30,8 +35,11 @@
 
 - `GET /api/v1/responsible-gaming` : limites, mises de la période, pause, options
 - `PUT /api/v1/responsible-gaming/limits/{period}`, `PUT /api/v1/responsible-gaming/deposit-limits/{period}`,
+  `PUT /api/v1/responsible-gaming/loss-limits/{period}`, `PUT /api/v1/responsible-gaming/session-reminder`,
   `POST /api/v1/responsible-gaming/pause`,
   `POST /api/v1/responsible-gaming/self-exclusion` (idempotentes)
+- `GET /api/v1/responsible-gaming/history` : dépôts, retraits, mises, gains, remboursements et résultat net, par jour
+  (30 jours) et par mois (12 mois), dans le fuseau d'affichage
 - Conformité (module Admin) : `GET /api/v1/admin/users/{id}/responsible-gaming` (responsible_gaming.view, consultation
   auditée) ; `POST /api/v1/admin/users/{id}/responsible-gaming/reopen` (responsible_gaming.manage, motif, après l'échéance)
 
@@ -47,6 +55,8 @@
   ses paris simultanés ne peuvent pas dépasser ensemble une limite.
 - `ResponsibleGamingService::assertCanDeposit()` fait de même dans la transaction du dépôt (422
   `deposit_limit_exceeded`, refus journalisé avec l'admin qui enregistrait le dépôt). Les retraits ne sont pas limités.
+- Limite de pertes : perte nette = mises moins gains et remboursements de la période glissante. `assertCanBet()`
+  compte le nouveau pari comme perdu (pire cas) : au-delà, 422 `loss_limit_exceeded`.
 
 ## Organisation
 

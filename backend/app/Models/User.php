@@ -30,6 +30,7 @@ use Illuminate\Support\Collection;
  * @property list<string>|null $mfa_recovery_codes
  * @property int|null $mfa_last_used_step
  * @property int|null $max_stake_minor mise maximale par ticket posée par un administrateur (V2-D05)
+ * @property int|null $session_reminder_minutes intervalle du rappel de durée de session, null : désactivé (V2-E06)
  */
 #[Fillable(['name', 'email', 'phone', 'password'])]
 #[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
@@ -65,6 +66,7 @@ class User extends Authenticatable
             'mfa_recovery_codes' => 'encrypted:array',
             'mfa_last_used_step' => 'integer',
             'max_stake_minor' => 'integer',
+            'session_reminder_minutes' => 'integer',
         ];
     }
 

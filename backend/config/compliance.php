@@ -22,6 +22,15 @@ return [
         'max_amount_minor' => 1_000_000_000_00,
     ],
 
+    // Rappel de durée de session proposé au joueur (V2-E06), en minutes ; désactivé par défaut.
+    'session_reminder_minutes' => [15, 30, 60],
+
+    // Historique des dépenses du joueur (V2-E06) : jours et mois affichés, dans le fuseau d'affichage.
+    'history' => [
+        'days' => 30,
+        'months' => 12,
+    ],
+
     // Pause : irrévocable avant son terme ; le joueur peut se connecter mais pas parier.
     'pause_durations' => [
         '24h' => '24 hours',

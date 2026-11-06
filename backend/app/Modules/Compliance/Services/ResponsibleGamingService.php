@@ -4,6 +4,8 @@ namespace App\Modules\Compliance\Services;
 
 use App\Models\User;
 use App\Modules\Compliance\Contracts\DepositHistory;
+use App\Modules\Compliance\Contracts\LossHistory;
+use App\Modules\Compliance\Contracts\SpendingHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\Compliance\Enums\LimitKind;
 use App\Modules\Compliance\Enums\LimitPeriod;
@@ -22,7 +24,8 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * Jeu responsable côté joueur (P7-02, D-09) : limites de mise, pause, auto-exclusion, contrôle avant chaque pari ;
- * limites de dépôt, contrôlées avant chaque dépôt (V2-B06).
+ * limites de dépôt, contrôlées avant chaque dépôt (V2-B06) ; limites de pertes nettes, contrôlées avant chaque pari,
+ * rappel de durée de session et historique des dépenses (V2-E06).
  *
  * Règles (les plus protectrices tant que l'avis juridique J-8 n'est pas rendu) :
  * - une limite se baisse tout de suite ; une hausse ou une suppression attend le délai de réflexion ;
@@ -34,27 +37,32 @@ class ResponsibleGamingService
     public function __construct(
         private readonly StakeHistory $stakes,
         private readonly DepositHistory $deposits,
+        private readonly LossHistory $losses,
+        private readonly SpendingHistory $spending,
         private readonly AccountStatusService $accounts,
     ) {}
 
     /**
-     * État du joueur : limites de mise et de dépôt (montant, mises ou dépôts de la période, reste, changement
-     * en attente) et pause.
+     * État du joueur : limites de mise, de dépôt et de pertes (montant, utilisé sur la période, reste, changement
+     * en attente), pause et rappel de durée de session.
      *
-     * @return array{limits: array<string, array<string, mixed>>, deposit_limits: array<string, array<string, mixed>>, pause: ?ResponsibleGamingRestriction}
+     * @return array{limits: array<string, array<string, mixed>>, deposit_limits: array<string, array<string, mixed>>, loss_limits: array<string, array<string, mixed>>, pause: ?ResponsibleGamingRestriction, session_reminder_minutes: ?int}
      */
     public function status(User $user): array
     {
         return [
             'limits' => $this->limitsStatus($user, LimitKind::Stake),
             'deposit_limits' => $this->limitsStatus($user, LimitKind::Deposit),
+            'loss_limits' => $this->limitsStatus($user, LimitKind::Loss),
             'pause' => $this->activePause($user),
+            'session_reminder_minutes' => $user->session_reminder_minutes,
         ];
     }
 
     /**
-     * Fixe la limite de mise (ou de dépôt, selon $kind) d'une période. Baisse (ou première limite) : immédiate, et annule une hausse en attente.
-     * Hausse ou suppression ($amountMinor null) : appliquée après le délai de réflexion.
+     * Fixe la limite d'une période (de mise, de dépôt ou de pertes, selon $kind). Baisse (ou première limite) :
+     * immédiate, et annule une hausse en attente. Hausse ou suppression ($amountMinor null) : appliquée après le délai
+     * de réflexion.
      */
     public function setLimit(User $user, LimitPeriod $period, ?int $amountMinor, LimitKind $kind = LimitKind::Stake): BettingLimit
     {
@@ -185,6 +193,76 @@ class ResponsibleGamingService
                     ['period' => $period->value, 'limit_minor' => $limit->amount_minor, 'remaining_minor' => max(0, $limit->amount_minor - $used)]);
             }
         }
+
+        // Limites de pertes (V2-E06) : le pari est compté comme perdu, c'est le pire cas pour le joueur.
+        foreach (LimitPeriod::cases() as $period) {
+            $limit = $this->applyDueChange($this->limitFor($user, $period, LimitKind::Loss));
+            if ($limit?->amount_minor === null) {
+                continue;
+            }
+
+            $lost = $this->losses->lostSince($user, now()->subMinutes($period->minutes()));
+            if ($lost + $stakeMinor > $limit->amount_minor) {
+                throw new ResponsibleGamingException(ResponsiblePlayEventType::BetRefusedLossLimit, 'loss_limit_exceeded',
+                    __('Si ce pari est perdu, vous dépasserez votre limite de pertes.'),
+                    ['period' => $period->value, 'limit_minor' => $limit->amount_minor, 'remaining_minor' => max(0, $limit->amount_minor - $lost)]);
+            }
+        }
+    }
+
+    /**
+     * Intervalle du rappel de durée de session ($minutes null : désactivé). Ce n'est pas une restriction :
+     * le changement s'applique tout de suite, dans les deux sens, et il est journalisé.
+     */
+    public function setSessionReminder(User $user, ?int $minutes): void
+    {
+        $from = $user->session_reminder_minutes;
+        if ($from === $minutes) {
+            return;
+        }
+
+        DB::transaction(function () use ($user, $from, $minutes) {
+            $user->forceFill(['session_reminder_minutes' => $minutes])->save();
+            $this->record($user, ResponsiblePlayEventType::SessionReminderChanged, ['from_minutes' => $from, 'to_minutes' => $minutes]);
+        });
+    }
+
+    /**
+     * Historique des dépenses : les derniers jours puis les derniers mois (config compliance.history), du plus récent
+     * au plus ancien, jours sans mouvement compris, dans le fuseau d'affichage.
+     *
+     * @return array{timezone: string, days: list<array<string, int|string>>, months: list<array<string, int|string>>}
+     */
+    public function spendingHistory(User $user): array
+    {
+        $timezone = (string) config('app.display_timezone');
+        $today = CarbonImmutable::now($timezone)->startOfDay();
+        $firstDay = $today->subDays((int) config('compliance.history.days') - 1);
+        $firstMonth = $today->startOfMonth()->subMonthsNoOverflow((int) config('compliance.history.months') - 1);
+
+        $daily = $this->spending->dailyTotals($user, $firstDay->min($firstMonth)->utc(), $timezone);
+        $empty = ['deposits' => 0, 'withdrawals' => 0, 'stakes' => 0, 'payouts' => 0, 'refunds' => 0];
+        // Résultat de jeu : positif si le joueur a gagné plus qu'il n'a misé.
+        $row = fn (array $totals) => $totals + ['net' => $totals['payouts'] + $totals['refunds'] - $totals['stakes']];
+
+        $days = [];
+        for ($day = $today; $day->gte($firstDay); $day = $day->subDay()) {
+            $days[] = ['date' => $day->toDateString()] + $row($daily[$day->toDateString()] ?? $empty);
+        }
+
+        $byMonth = [];
+        foreach ($daily as $date => $totals) {
+            foreach ($totals as $column => $amount) {
+                $byMonth[substr($date, 0, 7)][$column] = ($byMonth[substr($date, 0, 7)][$column] ?? 0) + $amount;
+            }
+        }
+
+        $months = [];
+        for ($month = $today->startOfMonth(); $month->gte($firstMonth); $month = $month->subMonthNoOverflow()) {
+            $months[] = ['month' => $month->format('Y-m')] + $row(($byMonth[$month->format('Y-m')] ?? []) + $empty);
+        }
+
+        return ['timezone' => $timezone, 'days' => $days, 'months' => $months];
     }
 
     /**
@@ -294,9 +372,11 @@ class ResponsibleGamingService
         foreach (LimitPeriod::cases() as $period) {
             $limit = $this->applyDueChange($this->limitFor($user, $period, $kind));
             $since = now()->subMinutes($period->minutes());
-            $used = $kind === LimitKind::Stake
-                ? $this->stakes->stakedSince($user, $since)
-                : $this->deposits->depositedSince($user, $since);
+            $used = match ($kind) {
+                LimitKind::Stake => $this->stakes->stakedSince($user, $since),
+                LimitKind::Deposit => $this->deposits->depositedSince($user, $since),
+                LimitKind::Loss => $this->losses->lostSince($user, $since),
+            };
 
             $limits[$period->value] = [
                 'amount_minor' => $limit?->amount_minor,
