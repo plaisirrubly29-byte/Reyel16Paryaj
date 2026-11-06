@@ -1,6 +1,7 @@
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
+import { useLotteryDraws } from '../../lottery/api/lottery';
 import { useSports } from '../api/catalogue';
 
 /**
@@ -9,6 +10,7 @@ import { useSports } from '../api/catalogue';
  */
 export function SportsSidebar() {
   const sports = useSports();
+  const lottery = useLotteryDraws().data ?? [];
   const [params] = useSearchParams();
   const { pathname } = useLocation();
   const activeSport = params.get('sport');
@@ -34,6 +36,12 @@ export function SportsSidebar() {
             <span>{s.name}</span>
           </Link>
         ))}
+        {lottery.length > 0 && (
+          <Link to="/borlette" className={pathname === '/borlette' ? 'active' : undefined} title={`Borlette (${lottery.length} tirages)`}>
+            <span className="sport-rail-icon" aria-hidden="true"><Icon name="lottery" size={26} /></span>
+            <span>Borlette</span>
+          </Link>
+        )}
       </nav>
 
       <nav className="side-menu" aria-label="Compétitions">

@@ -941,6 +941,7 @@ p { margin: 0; }
 }
 .hero-sport:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.32); }
 .hero-sport-icon { display: grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: 50%; background: linear-gradient(135deg, #2f63ff, #0b2a9e); }
+.hero-sport-lottery .hero-sport-icon { background: linear-gradient(135deg, #ff5a6b, #b10c24); }
 .hero-sport-count {
   min-width: 1.45rem; padding: 0 0.4rem; border-radius: 999px; background: rgba(255, 255, 255, 0.14);
   font-size: 0.72rem; font-weight: 700; line-height: 1.45rem; text-align: center; font-variant-numeric: tabular-nums;
@@ -1889,3 +1890,91 @@ a.match-line-teams:hover { color: var(--brand); }
 }
 /* En-tête chargé (sports, live, mes paris, recherche) : le montant du solde ne s'affiche qu'en grand écran. */
 @media (max-width: 1199px) { .header-wallet-amount { display: none; } }
+
+/* ===== Borlette (/borlette) : tirages, boules publiées, fiche ===== */
+.sport-tabs .sport-tab-link {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1.3rem; min-height: 2.9rem;
+  border-radius: 999px; color: #fff; font-size: 1.15rem; font-weight: 500; transition: background-color 0.15s;
+}
+.sport-tabs .sport-tab-link:hover { background: rgba(255, 255, 255, 0.15); }
+.competitions-sports .competitions-sport-link {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.6rem 0.7rem; border-radius: 8px;
+  color: var(--text); font-weight: 600;
+}
+.competitions-sports .competitions-sport-link span:first-of-type { flex: 1; }
+.competitions-sports .competitions-sport-link:hover { background: var(--bg, #f3f5f9); color: var(--accent); }
+
+.lottery-hero {
+  display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; border-radius: var(--radius);
+  background: linear-gradient(120deg, var(--navy), var(--brand)); color: #fff;
+}
+.lottery-hero h1 { margin: 0 0 0.2rem; font-size: 1.6rem; }
+.lottery-hero p { color: rgba(255, 255, 255, 0.85); }
+.lottery-hero-icon { display: grid; place-items: center; flex: 0 0 auto; width: 3.4rem; height: 3.4rem; border-radius: 50%; background: var(--accent); }
+
+.lottery-draws { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.lottery-draw {
+  display: flex; flex-direction: column; gap: 0.6rem; width: 100%; height: 100%; padding: 1rem; text-align: left;
+  border: 2px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text);
+  font: inherit; cursor: pointer; box-shadow: var(--shadow-sm); transition: border-color 0.15s, box-shadow 0.15s;
+}
+.lottery-draw:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.lottery-draw.active { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(19, 64, 216, 0.15); }
+.lottery-draw-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.lottery-draw-name { font-size: 1.05rem; }
+.lottery-draw-time { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.lottery-draw-next { display: flex; flex-direction: column; color: var(--muted); font-size: 0.85rem; }
+.lottery-draw-countdown { color: var(--accent); font-weight: 700; }
+.lottery-draw-result { display: flex; flex-direction: column; gap: 0.35rem; }
+.lottery-draw-date, .lottery-history-date { color: var(--muted); font-size: 0.8rem; font-weight: 600; text-transform: capitalize; }
+.lottery-draw-none { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+
+.lottery-balls { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; }
+.lottery-balls-list { display: flex; gap: 0.4rem; list-style: none; margin: 0; padding: 0; }
+.lottery-ball {
+  display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #3a64f0, var(--odds)); color: #fff; font-weight: 800; font-size: 1.05rem;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+.lottery-ball.first { background: radial-gradient(circle at 30% 30%, #ff4d61, var(--accent)); }
+.lottery-pick3 { color: var(--muted); font-size: 0.85rem; }
+.lottery-pick3 strong { color: var(--text); letter-spacing: 0.05em; }
+
+.lottery-detail { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); align-items: start; }
+@media (max-width: 900px) { .lottery-detail { grid-template-columns: minmax(0, 1fr); } }
+.lottery-history, .lottery-slip { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow-sm); }
+.lottery-history h2, .lottery-slip h2 { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.75rem; }
+.lottery-history-list { list-style: none; margin: 0; padding: 0; }
+.lottery-history-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-top: 1px solid var(--border); }
+.lottery-history-list li:first-child { border-top: 0; }
+.lottery-empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+
+.lottery-slip { display: flex; flex-direction: column; gap: 0.9rem; }
+.lottery-slip-head h2 { margin-bottom: 0.2rem; }
+.lottery-slip-closes { color: var(--muted); font-size: 0.85rem; }
+.lottery-form { display: flex; flex-direction: column; gap: 0.7rem; }
+.lottery-games { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.lottery-games button {
+  padding: 0.4rem 0.8rem; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface);
+  color: var(--text); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+}
+.lottery-games button.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+.lottery-help { color: var(--muted); font-size: 0.82rem; }
+.lottery-inputs, .lottery-stake-row { display: flex; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+.lottery-number, .lottery-stake, .lottery-option { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.lottery-number input, .lottery-stake input, .lottery-option select {
+  min-height: 2.6rem; padding: 0.4rem 0.6rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 1.1rem;
+}
+.lottery-number input { width: 5.5rem; text-align: center; font-weight: 800; letter-spacing: 0.15em; }
+.lottery-stake input { width: 7rem; }
+.lottery-option select { font-size: 0.95rem; }
+.lottery-error { color: var(--danger); font-size: 0.85rem; font-weight: 600; }
+.lottery-plays { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.lottery-plays li { display: grid; grid-template-columns: 4.5rem 1fr auto auto; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.lottery-play-game { color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.lottery-play-numbers { font-weight: 800; letter-spacing: 0.05em; }
+.lottery-play-remove { display: grid; place-items: center; padding: 0.25rem; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+.lottery-play-remove:hover { color: var(--danger); background: var(--accent-soft); }
+.lottery-total { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
+.lottery-soon { color: var(--muted); font-size: 0.85rem; text-align: center; }

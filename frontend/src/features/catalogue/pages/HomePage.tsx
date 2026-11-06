@@ -2,14 +2,19 @@ import { Link } from 'react-router-dom';
 import { BRAND_LOGO_URL } from '../../../app/layouts/BrandLogo';
 import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
+import { useLotteryDraws } from '../../lottery/api/lottery';
 import { useSports } from '../api/catalogue';
 import { BettingBoard } from '../components/BettingBoard';
 import { TopMatches } from '../components/TopMatches';
 
-/** Accueil : bandeau (devise, logo et pastilles des sports proposés), top matchs, puis matchs à venir ou en direct, avec le coupon à droite. */
+/**
+ * Accueil : bandeau (devise, logo et pastilles des sports proposés, puis la borlette si elle est ouverte),
+ * top matchs, puis matchs à venir ou en direct, avec le coupon à droite.
+ */
 export function HomePage() {
-  // Seuls les sports qui ont des matchs sont annoncés.
+  // Seuls les sports qui ont des matchs sont annoncés ; la borlette, seulement si l'API publie des tirages.
   const sports = useSports().data ?? [];
+  const draws = useLotteryDraws().data ?? [];
 
   return (
     <>
@@ -29,7 +34,7 @@ export function HomePage() {
             </div>
             <img className="hero-logo" src={BRAND_LOGO_URL} alt="" width={151} height={190} />
           </div>
-          {sports.length > 0 && (
+          {(sports.length > 0 || draws.length > 0) && (
             <nav className="hero-sports" aria-label="Sports disponibles">
               {sports.map((s) => (
                 <Link key={s.slug} to={`/sports?sport=${encodeURIComponent(s.slug)}`} className="hero-sport">
@@ -38,6 +43,13 @@ export function HomePage() {
                   <span className="hero-sport-count">{s.events_count}<span className="sr-only"> matchs</span></span>
                 </Link>
               ))}
+              {draws.length > 0 && (
+                <Link to="/borlette" className="hero-sport hero-sport-lottery">
+                  <span className="hero-sport-icon" aria-hidden="true"><Icon name="lottery" size={16} /></span>
+                  Borlette
+                  <span className="hero-sport-count">{draws.length}<span className="sr-only"> tirages</span></span>
+                </Link>
+              )}
             </nav>
           )}
         </section>
