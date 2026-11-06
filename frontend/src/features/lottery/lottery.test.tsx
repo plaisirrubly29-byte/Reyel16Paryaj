@@ -64,6 +64,16 @@ describe('borlette dans la navigation', () => {
     await screen.findAllByRole('button', { name: /Football/ });
     expect(screen.queryByRole('link', { name: /Borlette/ })).not.toBeInTheDocument();
   });
+
+  it("a sa pastille dans le bandeau d'accueil, après les sports", async () => {
+    backend();
+    renderApp('/');
+
+    const hero = await screen.findByRole('navigation', { name: 'Sports disponibles' });
+    const lottery = await within(hero).findByRole('link', { name: 'Borlette 2 tirages' });
+    expect(lottery).toHaveAttribute('href', '/borlette');
+    expect(within(hero).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/sports?sport=soccer', '/borlette']);
+  });
 });
 
 describe('page Borlette', () => {
