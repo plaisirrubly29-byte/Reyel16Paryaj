@@ -12,11 +12,11 @@ return [
     // La borlette figure dans les exclusions par défaut de docs/architecture.md.
     'enabled' => (bool) env('LOTTERY_ENABLED', false),
 
-    // "fake" (développement, tests). Le vrai fournisseur sera ajouté d'après la documentation de son API.
+    // "fake" (développement, tests) ou "unitysoftconnect" (API Borlette UnitySoftConnect, clé dans LOTTERY_API_KEY).
     'provider' => env('LOTTERY_PROVIDER', 'fake'),
 
     'api' => [
-        'url' => env('LOTTERY_API_URL'),
+        'url' => env('LOTTERY_API_URL', 'https://unityscgroup.com/api/v1/borlette'),
         'key' => env('LOTTERY_API_KEY'),
         'timeout' => (int) env('LOTTERY_API_TIMEOUT', 20),
     ],
