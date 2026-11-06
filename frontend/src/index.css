@@ -1548,6 +1548,50 @@ a.match-line-teams:hover { color: var(--brand); }
   }
   .betslip .betslip-body { max-height: 55vh; min-height: 0; }
 
+  /* Menu « Jeux » : panneau qui monte au-dessus de la barre d'onglets, tuiles 2 × 2 colorées par jeu */
+  .games-backdrop { position: fixed; inset: 0; z-index: 34; background: rgba(6, 13, 43, 0.5); animation: games-fade 0.18s ease-out; }
+  .games-sheet {
+    position: fixed; left: 0; right: 0; bottom: calc(60px + env(safe-area-inset-bottom)); z-index: 36;
+    display: flex; flex-direction: column; gap: 0.85rem; padding: 0.9rem 1rem 1.1rem; border-radius: 20px 20px 0 0;
+    background: var(--surface); box-shadow: 0 -12px 32px rgba(6, 13, 43, 0.25); animation: games-rise 0.22s ease-out;
+  }
+  .games-sheet-head { display: flex; align-items: center; justify-content: space-between; }
+  .games-sheet-head strong { font-size: 1.05rem; font-weight: 800; color: var(--navy); }
+  .games-close {
+    display: grid; place-items: center; width: 2.1rem; height: 2.1rem; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--surface-2); color: var(--navy);
+  }
+  .games-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+  .game-tile {
+    --game: 19, 64, 216;
+    position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem;
+    min-height: 7.4rem; padding: 0.85rem; border-radius: 16px; color: #fff; text-decoration: none;
+    background:
+      radial-gradient(120% 90% at 100% 0%, rgba(var(--game), 0.75), transparent 65%),
+      linear-gradient(160deg, #0c1846, #070e30);
+    box-shadow: 0 6px 16px rgba(6, 13, 43, 0.2);
+  }
+  a.game-tile:active { transform: scale(0.98); }
+  .game-sport { --game: 37, 99, 255; }
+  .game-borlette { --game: 227, 23, 47; }
+  .game-virtual { --game: 140, 82, 255; }
+  .game-casino { --game: 245, 179, 1; }
+  .game-icon {
+    display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin-bottom: auto; border-radius: 13px;
+    background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .game-label { margin-top: 0.6rem; font-size: 1.02rem; font-weight: 800; }
+  .game-hint { font-size: 0.72rem; color: rgba(255, 255, 255, 0.68); line-height: 1.25; }
+  .game-tile.is-soon { cursor: default; }
+  .game-tile.is-soon .game-icon, .game-tile.is-soon .game-label, .game-tile.is-soon .game-hint { opacity: 0.55; }
+  .game-soon {
+    position: absolute; top: 0.7rem; right: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16); font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  @keyframes games-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes games-fade { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .games-sheet, .games-backdrop { animation: none; } }
+
   /* Championnats : icône seule dans l'en-tête, panneau sur toute la largeur, sports en pastilles défilantes */
   .competitions-menu { position: static; }
   .competitions-toggle { width: 2.6rem; height: 2.6rem; padding: 0; justify-content: center; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: #fff; }

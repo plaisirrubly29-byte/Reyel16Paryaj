@@ -11,6 +11,7 @@ import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
 import { CookieBanner } from '../../features/legal/components/CookieBanner';
 import { BrandLogo } from './BrandLogo';
+import { GamesTab } from './GamesMenu';
 import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
@@ -149,10 +150,11 @@ function PublicShell() {
         </button>
       )}
 
-      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. */}
+      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. Pas d'onglet « Accueil » : le site
+          s'ouvre sur l'accueil et le logo y ramène ; à sa place, le menu des jeux. */}
       {mobile && (
       <nav className="tab-bar" aria-label="Navigation mobile">
-        <NavLink to="/" end><span className="tab-icon"><Icon name="home" /></span>Accueil</NavLink>
+        <GamesTab />
         <NavLink to="/sports"><span className="tab-icon"><Icon name="ball" /></span>Sports</NavLink>
         <button
           type="button"
