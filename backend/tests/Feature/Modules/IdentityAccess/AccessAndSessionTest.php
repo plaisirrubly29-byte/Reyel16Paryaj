@@ -36,6 +36,8 @@ class AccessAndSessionTest extends TestCase
         'GET api/v1/competitions',
         'GET api/v1/events',
         'GET api/v1/events/{id}/markets',
+        // Webhooks des prestataires de paiement (V2-B01) : sans compte, la signature du prestataire fait foi.
+        'POST api/v1/payments/webhooks/{provider}',
     ];
 
     /** Cookie de session (valeur chiffrée telle que reçue par le navigateur). */
