@@ -156,6 +156,9 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Catalogue public : 120 requêtes/min par IP (lecture seule, sans authentification).
+        // Webhooks des prestataires de paiement (V2-B01), par IP : large, un prestataire envoie par rafales.
+        RateLimiter::for('payments-webhook', fn (Request $request) => Limit::perMinute(300)->by('payments-webhook:'.$request->ip()));
+
         RateLimiter::for('catalogue', fn (Request $request) => Limit::perMinute(120)->by('catalogue:'.$request->ip()));
     }
 }

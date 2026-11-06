@@ -4,6 +4,7 @@ use App\Modules\Admin\Http\Controllers\AdminDashboardController;
 use App\Modules\Admin\Http\Controllers\AdminEventController;
 use App\Modules\Admin\Http\Controllers\AdminLedgerController;
 use App\Modules\Admin\Http\Controllers\AdminMarketController;
+use App\Modules\Admin\Http\Controllers\AdminPaymentController;
 use App\Modules\Admin\Http\Controllers\AdminResponsibleGamingController;
 use App\Modules\Admin\Http\Controllers\AdminSettingsController;
 use App\Modules\Admin\Http\Controllers\AdminSupervisionController;
@@ -64,6 +65,9 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->whereNumber('ticket')->middleware('permission:tickets.view');
     Route::get('/ledger', [AdminLedgerController::class, 'index'])->middleware('permission:ledger.view');
     Route::get('/finance/reconciliation', [AdminLedgerController::class, 'reconciliation'])->middleware('permission:ledger.view');
+    // Journal des transactions des prestataires de paiement et des webhooks reçus (V2-B01).
+    Route::get('/payments', [AdminPaymentController::class, 'index'])->middleware('permission:ledger.view');
+    Route::get('/payments/{payment}', [AdminPaymentController::class, 'show'])->whereNumber('payment')->middleware('permission:ledger.view');
     Route::get('/finance/corrections', [FinanceCorrectionController::class, 'index'])->middleware('permission:ledger.view');
     Route::get('/finance/corrections/{correction}', [FinanceCorrectionController::class, 'show'])->whereNumber('correction')->middleware('permission:ledger.view');
     Route::post('/finance/corrections', [FinanceCorrectionController::class, 'store'])->middleware(['permission:finance.correct', 'idempotent']);
