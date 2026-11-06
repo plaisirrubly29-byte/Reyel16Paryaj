@@ -134,7 +134,10 @@ describe("page d'accueil : matchs", () => {
     catalogue();
     renderApp('/');
 
-    expect(await screen.findByText('Football · Basketball')).toBeInTheDocument();
+    const hero = await screen.findByRole('navigation', { name: 'Sports disponibles' });
+    expect(within(hero).getAllByRole('link').map((a) => a.getAttribute('href')))
+      .toEqual(['/sports?sport=soccer', '/sports?sport=basketball']);
+    expect(within(hero).getByRole('link', { name: /^Basketball \d+ matchs$/ })).toBeInTheDocument();
     const footer = screen.getByRole('navigation', { name: 'Paris sportifs' });
     expect(within(footer).getByRole('link', { name: 'Basketball' })).toHaveAttribute('href', '/sports?sport=basketball');
     expect(within(footer).queryByRole('link', { name: 'Baseball' })).toBeNull();
