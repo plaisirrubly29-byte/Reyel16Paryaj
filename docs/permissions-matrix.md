@@ -25,6 +25,7 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Paramètres (limites, règles, fournisseur) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 |
 | Limites jeu responsable | 👁 | ❌ | ❌ | ❌ | ✅ |
+| Alertes AML — consulter / classer ou signaler (motif) | 👁 | ❌ | 👁 | ❌ | ✅ |
 | Audit & exports | 👁 | ❌ | 👁 | ❌ | 👁 |
 | Gérer les rôles des autres | ✅ (jamais les siens) | ❌ | ❌ | ❌ | ❌ |
 
