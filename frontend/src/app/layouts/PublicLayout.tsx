@@ -6,6 +6,7 @@ import { MoneyText } from '../../shared/components/MoneyText';
 import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlipContext';
 import { BetSlipPanel, SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
 import { CompetitionsMenu } from '../../features/catalogue/components/CompetitionsMenu';
+import { useLotteryAvailable } from '../../features/lottery/api/lottery';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
 import { CookieBanner } from '../../features/legal/components/CookieBanner';
@@ -68,6 +69,7 @@ function PublicShell() {
   const { pathname } = useLocation();
   const mobile = useMediaQuery(SLIP_COLLAPSE_QUERY);
   const [params] = useSearchParams();
+  const lotteryAvailable = useLotteryAvailable();
   const liveActive = params.get('tab') === 'live' && (pathname === '/' || pathname === '/sports');
   const sportsActive = !liveActive && (pathname === '/' || pathname.startsWith('/sports') || pathname.startsWith('/events'));
 
@@ -97,6 +99,7 @@ function PublicShell() {
             <Link to="/?tab=live" className={liveActive ? 'active' : undefined} aria-current={liveActive ? 'page' : undefined}>
               <span className="nav-live-dot" aria-hidden="true" />Live
             </Link>
+            {lotteryAvailable && <NavLink to="/borlette"><Icon name="lottery" size={20} />Borlette</NavLink>}
             {user && <NavLink to="/bets"><Icon name="tickets" size={20} />Mes paris</NavLink>}
             {user?.is_admin && <NavLink to="/admin"><Icon name="shield" size={20} />Administration</NavLink>}
           </nav>

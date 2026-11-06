@@ -1,4 +1,5 @@
 import { BRAND_LOGO_URL } from '../../../app/layouts/BrandLogo';
+import { useLotteryDraws } from '../../lottery/api/lottery';
 import { useSports } from '../api/catalogue';
 import { BettingBoard } from '../components/BettingBoard';
 import { TopMatches } from '../components/TopMatches';
@@ -7,6 +8,8 @@ import { TopMatches } from '../components/TopMatches';
 export function HomePage() {
   // Seuls les sports qui ont des matchs sont annoncés.
   const sports = useSports().data ?? [];
+  const lottery = useLotteryDraws().data ?? [];
+  const games = [...sports.map((s) => s.name), ...(lottery.length > 0 ? ['Borlette'] : [])];
 
   return (
     <>
@@ -15,7 +18,7 @@ export function HomePage() {
       <BettingBoard title="Tous les matchs" perPage={50} paginate>
         <section className="hero" aria-label="Bienvenue">
           <div className="hero-text">
-            <p className="hero-kicker">{sports.length > 0 ? sports.map((s) => s.name).join(' · ') : 'Paris sportifs'}</p>
+            <p className="hero-kicker">{games.length > 0 ? games.join(' · ') : 'Paris sportifs'}</p>
             <p className="hero-title">Parye sou espò ou renmen</p>
             <p className="hero-motto"><span>Pi fasil</span><span>Pi rapid</span><span>Pi sekirite</span></p>
             <p className="hero-sub">Cotes mises à jour toute la journée.</p>
