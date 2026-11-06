@@ -7,6 +7,8 @@ use App\Modules\Admin\Services\PlatformSettings;
 use App\Modules\Betting\Services\TicketStakeHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
+use App\Modules\Lottery\Contracts\LotteryProvider;
+use App\Modules\Lottery\Providers\FakeLotteryProvider;
 use App\Modules\Monitoring\Services\QueueHeartbeat;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
@@ -41,6 +43,12 @@ class AppServiceProvider extends ServiceProvider
                 (int) config('sports_data.min_remaining_requests'),
             ),
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
+        });
+
+        // Fournisseur des tirages de borlette choisi par LOTTERY_PROVIDER (config/lottery.php).
+        $this->app->singleton(LotteryProvider::class, fn () => match (config('lottery.provider')) {
+            'fake' => new FakeLotteryProvider,
+            default => throw new InvalidArgumentException('LOTTERY_PROVIDER inconnu : '.config('lottery.provider')),
         });
 
         // Paramètres versionnés (P6-08) : une instance par processus, qui retient les valeurs par défaut de config/.
