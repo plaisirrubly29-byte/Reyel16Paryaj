@@ -26,6 +26,7 @@ return [
     ],
 
     // Sports synchronisés (clés du fournisseur), ex. "soccer_epl,basketball_nba". Liste V1 : décision D-03 (P0-03).
+    // Motifs acceptés ("*", "tennis_*") ; les compétitions que la liste ne désigne plus sont retirées du catalogue.
     'sports' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_SPORTS', 'soccer_epl'))))),
 
     // Noms affichés des compétitions (le fournisseur n'a que des codes : "EPL", "NBA"…).
