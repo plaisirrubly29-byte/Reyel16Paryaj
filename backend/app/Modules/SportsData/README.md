@@ -82,6 +82,11 @@ compte automatiquement).
   (`SPORTS_DATA_QUOTA_RESET_DAY`, ramené au dernier jour des mois courts).
 - **Budget par synchro** = ⌊(restants − `SPORTS_DATA_MIN_REMAINING`) / synchros restantes⌋, les synchros restantes
   étant comptées à partir de `SPORTS_DATA_SYNC_CRON` jusqu'à la remise à zéro. Une compétition coûte marchés × régions.
+- **Sélection** (`SPORTS_DATA_SPORTS`) : clés exactes, motifs (`tennis_*` : chaque tournoi de tennis a sa clé,
+  `soccer_*`…) ou `*`. Un motif ne retient que les compétitions actives de la liste gratuite `/sports`, hors
+  « vainqueur final ». À chaque synchro planifiée (sans `--competition`), les compétitions déjà enregistrées que la
+  liste ne désigne plus sont désactivées (`is_active`) : elles quittent le catalogue, le direct et les marchés
+  supplémentaires ; leurs résultats restent importés tant qu'un pari les attend. Remises dans la liste, elles reviennent.
 - **`sports-data:sync`** (si `SPORTS_DATA_BUDGET=true`) :
   1. saute les compétitions hors saison ou inconnues d'après la liste gratuite `/sports` (cache 6 h ; si la liste
      est indisponible, rien n'est sauté pour ce motif) ;
