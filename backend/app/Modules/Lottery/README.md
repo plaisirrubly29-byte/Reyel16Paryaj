@@ -10,7 +10,7 @@ paiement des gains, plafonds par boule, jeu responsable) est géré dans la plat
 
 | Étape | Contenu | État |
 |---|---|---|
-| 1 | Tirages, résultats, synchro, routes publiques en lecture | Fait (faux fournisseur) ; vrai fournisseur en attente de sa documentation |
+| 1 | Tirages, résultats, synchro, routes publiques en lecture | Fait (faux fournisseur et API Borlette UnitySoftConnect) |
 | 2 | Tickets de borlette (boule, mariage, loto 3/4/5), ledger, plafonds par boule, règlement | À faire |
 
 La borlette figure dans les exclusions par défaut de `docs/architecture.md` : tout est coupé tant que
@@ -28,11 +28,22 @@ La borlette figure dans les exclusions par défaut de `docs/architecture.md` : t
 | `LOTTERY_PROVIDER` | Implémentation | Usage |
 |---|---|---|
 | `fake` | `Providers/FakeLotteryProvider` | Développement et tests : 4 tirages (Floride et New York, midi et soir), numéros déterministes, panne et résultats imposés simulables. **Refusé en production** par `lottery:sync`. |
-| _à venir_ | adaptateur du vrai fournisseur | Implémente `Contracts/LotteryProvider` d'après la documentation de son API |
+| `unitysoftconnect` | `Providers/UnitySoftConnectLotteryProvider` | [API Borlette UnitySoftConnect](https://unityscgroup.com/pages/api-bolet.php) (`LOTTERY_API_URL`, clé Bearer dans `LOTTERY_API_KEY`) |
 
 L'adaptateur traduit la réponse du fournisseur en trois lots. Si le fournisseur ne donne que les numéros bruts, la règle
-de calcul vit dans l'adaptateur. Convention utilisée par le faux fournisseur, **à confirmer** : 1er lot = deux derniers
-chiffres du pick 3, 2e et 3e lots = deux premiers et deux derniers chiffres du pick 4.
+de calcul vit dans l'adaptateur.
+
+### API Borlette UnitySoftConnect
+
+- `GET /draws` → tirages : clé = `code` (ex. `NYM`), heure = `close_time` (fin des ventes, heure d'Haïti), jours
+  `0 = dimanche … 6` convertis en ISO.
+- `GET /results?from=&to=&page=&limit=100` → résultats paginés. Chaque tirage donne trois numéros
+  (`["125", "07", "41"]`) : lots = `games.bolet` (`25`, `07`, `41`), pick 3 = `125`, pick 4 = `0741`. Un résultat dont
+  les lots ne correspondent pas aux numéros est écarté (`lottery.invalid_result`).
+- Erreurs : 401/403 → `unauthorized` ; 429 (quota du mois) et 5xx → `unavailable` ; réponse non conforme →
+  `invalid_response`. La clé n'apparaît jamais dans les journaux.
+- Une correction côté fournisseur (`updated_at`) n'écrase pas le résultat importé : elle apparaît en
+  `lottery.result_conflict`.
 
 ## Synchronisation (`lottery:sync`)
 

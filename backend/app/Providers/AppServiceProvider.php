@@ -9,6 +9,7 @@ use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
 use App\Modules\Lottery\Contracts\LotteryProvider;
 use App\Modules\Lottery\Providers\FakeLotteryProvider;
+use App\Modules\Lottery\Providers\UnitySoftConnectLotteryProvider;
 use App\Modules\Monitoring\Services\QueueHeartbeat;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
@@ -46,8 +47,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Fournisseur des tirages de borlette choisi par LOTTERY_PROVIDER (config/lottery.php).
-        $this->app->singleton(LotteryProvider::class, fn () => match (config('lottery.provider')) {
+        $this->app->singleton(LotteryProvider::class, fn ($app) => match (config('lottery.provider')) {
             'fake' => new FakeLotteryProvider,
+            'unitysoftconnect' => new UnitySoftConnectLotteryProvider($app->make(HttpFactory::class), config('lottery.api')),
             default => throw new InvalidArgumentException('LOTTERY_PROVIDER inconnu : '.config('lottery.provider')),
         });
 
