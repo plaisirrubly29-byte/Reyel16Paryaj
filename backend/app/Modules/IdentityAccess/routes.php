@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\IdentityAccess\Http\Controllers\AuthController;
+use App\Modules\IdentityAccess\Http\Controllers\KycController;
 use App\Modules\IdentityAccess\Http\Controllers\MfaController;
 use App\Modules\IdentityAccess\Http\Controllers\PasswordResetController;
 use App\Modules\IdentityAccess\Http\Controllers\RoleAssignmentController;
@@ -41,6 +42,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::delete('/', [SessionController::class, 'destroyOthers']);
         Route::delete('/{session}', [SessionController::class, 'destroy']);
     });
+
+    // Vérification d'identité (V2-C03) : statut et envoi d'un dossier (multipart). Pas de clé d'idempotence : un second
+    // envoi est refusé tant qu'un dossier est en attente (kyc_already_pending).
+    Route::get('/me/kyc', [KycController::class, 'show']);
+    Route::post('/me/kyc', [KycController::class, 'store'])->middleware('throttle:kyc');
 
     Route::middleware(['mfa', 'permission:roles.manage', 'idempotent'])->prefix('admin/users/{user}')->group(function () {
         Route::put('/roles', [RoleAssignmentController::class, 'update']);

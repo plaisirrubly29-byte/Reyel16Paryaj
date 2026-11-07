@@ -2,6 +2,7 @@
 
 use App\Modules\Admin\Http\Controllers\AdminDashboardController;
 use App\Modules\Admin\Http\Controllers\AdminEventController;
+use App\Modules\Admin\Http\Controllers\AdminKycController;
 use App\Modules\Admin\Http\Controllers\AdminLedgerController;
 use App\Modules\Admin\Http\Controllers\AdminMarketController;
 use App\Modules\Admin\Http\Controllers\AdminResponsibleGamingController;
@@ -40,6 +41,13 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     // Jeu responsable d'un joueur (P7-02) : consultation auditée ; réouverture d'une auto-exclusion échue (motif).
     Route::get('/users/{user}/responsible-gaming', [AdminResponsibleGamingController::class, 'show'])->middleware('permission:responsible_gaming.view');
     Route::post('/users/{user}/responsible-gaming/reopen', [AdminResponsibleGamingController::class, 'reopen'])->middleware(['permission:responsible_gaming.manage', 'idempotent']);
+
+    // KYC (V2-C03) : file des dossiers, pièces déchiffrées (auditées), validation ou refus avec motif.
+    Route::get('/kyc', [AdminKycController::class, 'index'])->middleware('permission:kyc.view');
+    Route::get('/kyc/{submission}', [AdminKycController::class, 'show'])->middleware('permission:kyc.view')->whereNumber('submission');
+    Route::get('/kyc/{submission}/files/{file}', [AdminKycController::class, 'file'])->middleware('permission:kyc.view')->whereNumber(['submission', 'file']);
+    Route::post('/kyc/{submission}/approve', [AdminKycController::class, 'approve'])->middleware(['permission:kyc.approve', 'idempotent'])->whereNumber('submission');
+    Route::post('/kyc/{submission}/reject', [AdminKycController::class, 'reject'])->middleware(['permission:kyc.reject', 'idempotent'])->whereNumber('submission');
 
     // Événements et marchés (P6-02) : origine et fraîcheur ; suspendre / rouvrir un marché avec motif.
     Route::get('/events', [AdminEventController::class, 'index'])->middleware('permission:events.view');

@@ -4,6 +4,7 @@ namespace Tests\Feature\Modules\Admin;
 
 use App\Models\User;
 use App\Modules\Audit\Models\AuditLog;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
@@ -29,7 +30,9 @@ class AdminWalletApiTest extends TestCase
 
         $this->seed(PermissionSeeder::class);
         $this->superAdmin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
+        // Identité vérifiée : ces tests portent sur le solde ; le contrôle KYC des retraits et dépôts est dans KycTest.
         $this->player = User::factory()->create();
+        $this->player->forceFill(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()])->save();
     }
 
     /** @param array<string, mixed> $body */

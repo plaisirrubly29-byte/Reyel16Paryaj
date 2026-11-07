@@ -148,6 +148,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('bets', fn (Request $request) => Limit::perMinute(config('betting.max_bets_per_minute'))
             ->by('bets:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
 
+        // Envoi d'un dossier KYC (V2-C03), par joueur : jusqu’à 3 fichiers de 5 Mo à chiffrer, pas de rafale.
+        RateLimiter::for('kyc', fn (Request $request) => Limit::perHour(10)
+            ->by('kyc:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
         // MFA, par compte : sans plafond long, 5 essais/min laissent 7 200 essais par jour (revue P8-02, M2).
         RateLimiter::for('mfa', function (Request $request) {
             $id = $request->user()?->getAuthIdentifier() ?? $request->ip();
