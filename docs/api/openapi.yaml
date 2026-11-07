@@ -505,7 +505,8 @@ paths:
             multiple_not_allowed ; stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée
             par un administrateur pour ce joueur, V2-D05) ; currency_mismatch ; insufficient_funds ;
             jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
-            limit_minor, remaining_minor) ; risk_limit_exceeded (V2-D05 : le pari ferait dépasser la perte maximale
+            limit_minor, remaining_minor) ; loss_limit_exceeded (V2-E06 : si le pari est perdu, la perte nette de la
+            période dépasserait la limite du joueur ; mêmes details) ; risk_limit_exceeded (V2-D05 : le pari ferait dépasser la perte maximale
             acceptée sur le match ou le marché ; details.scope event|market, details.event_id ; ni plafond ni
             exposition ne sont communiqués).
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -595,6 +596,126 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/deposit-limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de dépôt (journalisé)
+      description: |
+        Même règle que les limites de mise : une baisse (ou une première limite) s'applique tout de suite et annule une
+        hausse en attente ; une hausse ou une suppression (amount_minor null) attend le délai de réflexion. Chaque dépôt
+        est ensuite contrôlé sur les périodes glissantes : au-delà, 422 deposit_limit_exceeded.
+      x-task: V2-B06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 500000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/loss-limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de pertes (journalisé)
+      description: |
+        Perte nette de la période glissante = mises moins gains et remboursements (0 si le joueur est gagnant). Même
+        règle que les limites de mise : baisse immédiate, hausse ou suppression après le délai de réflexion. POST /bets
+        compte le nouveau pari comme perdu : au-delà, 422 loss_limit_exceeded.
+      x-task: V2-E06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 200000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/session-reminder:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Choisir l'intervalle du rappel de durée de session (journalisé)
+      description: |
+        L'écran affiche un rappel toutes les `minutes` depuis `session.started_at` (heure de la connexion). Désactivé par
+        défaut ; le changement s'applique tout de suite, dans les deux sens.
+      x-task: V2-E06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minutes]
+              properties:
+                minutes: { type: [integer, "null"], enum: [15, 30, 60, null], description: "null : rappel désactivé" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/history:
+    get:
+      tags: [ResponsibleGaming]
+      summary: Historique des dépenses du joueur connecté, par jour et par mois
+      description: |
+        Les 30 derniers jours puis les 12 derniers mois, du plus récent au plus ancien, périodes sans mouvement
+        comprises. Découpage dans le fuseau d'affichage (America/Port-au-Prince). net = gains + remboursements - mises
+        (positif si le joueur a gagné plus qu'il n'a misé).
+      x-task: V2-E06
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      timezone: { type: string, example: America/Port-au-Prince }
+                      days:
+                        type: array
+                        items:
+                          allOf:
+                            - { type: object, properties: { date: { type: string, format: date } } }
+                            - $ref: "#/components/schemas/SpendingTotals"
+                      months:
+                        type: array
+                        items:
+                          allOf:
+                            - { type: object, properties: { month: { type: string, example: "2026-11" } } }
+                            - $ref: "#/components/schemas/SpendingTotals"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /responsible-gaming/pause:
     post:
       tags: [ResponsibleGaming]
@@ -1103,7 +1224,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
-          description: "`validation_failed`, `not_a_player` ou `insufficient_funds`"
+          description: "`validation_failed`, `not_a_player`, `insufficient_funds` ou `deposit_limit_exceeded` (dépôt au-delà d'une limite de dépôt du joueur ; details : period, limit_minor, remaining_minor)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`wallet_frozen`"
@@ -1871,6 +1992,26 @@ components:
             day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
             week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
             month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        deposit_limits:
+          type: object
+          description: Limites de dépôt (V2-B06) ; used = dépôts de la période glissante
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        loss_limits:
+          type: object
+          description: Limites de pertes (V2-E06) ; used = perte nette de la période glissante
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        session:
+          type: object
+          description: Rappel de durée de session (V2-E06)
+          properties:
+            reminder_minutes: { type: [integer, "null"], example: 30, description: "null : désactivé" }
+            started_at: { type: [string, "null"], format: date-time, description: "Heure de la connexion ; null dans la vue de la Conformité" }
         pause:
           type: object
           properties:
@@ -1882,11 +2023,25 @@ components:
             pause_durations: { type: array, items: { type: string }, example: ["24h", "7d", "30d"] }
             exclusion_durations: { type: array, items: { type: string }, example: ["6m", "1y", "5y"] }
             limit_increase_delay_days: { type: integer, example: 7 }
+            session_reminder_minutes: { type: array, items: { type: integer }, example: [15, 30, 60] }
+    SpendingTotals:
+      type: object
+      description: Totaux d'une période (V2-E06), montants positifs sauf net
+      properties:
+        deposits: { $ref: "#/components/schemas/Money" }
+        withdrawals: { $ref: "#/components/schemas/Money" }
+        stakes: { $ref: "#/components/schemas/Money" }
+        payouts: { $ref: "#/components/schemas/Money" }
+        refunds: { $ref: "#/components/schemas/Money" }
+        net: { $ref: "#/components/schemas/Money" }
     AdminResponsibleGaming:
       type: object
       properties:
         user: { type: object, properties: { id: { type: string }, status: { type: string, enum: [active, suspended, excluded, closed] } } }
         limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/limits" }
+        deposit_limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/deposit_limits" }
+        loss_limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/loss_limits" }
+        session: { $ref: "#/components/schemas/ResponsibleGaming/properties/session" }
         pause: { $ref: "#/components/schemas/ResponsibleGaming/properties/pause" }
         restrictions:
           type: array

@@ -3,6 +3,9 @@
 namespace App\Modules\Compliance\Http\Resources;
 
 use App\Modules\Compliance\Models\ResponsibleGamingRestriction;
+use App\Modules\IdentityAccess\Http\Middleware\EnforceSessionLifetime;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 /** Format JSON commun au joueur et à la Conformité : limites (montants en Money) et pause. */
@@ -31,5 +34,21 @@ final class ResponsibleGamingPresenter
     public static function pause(?ResponsibleGamingRestriction $pause): array
     {
         return ['active' => $pause !== null, 'ends_at' => $pause?->ends_at->toIso8601String()];
+    }
+
+    /**
+     * Rappel de durée de session (V2-E06) : l'écran affiche un rappel toutes les reminder_minutes depuis started_at
+     * (heure de la connexion, posée par EnforceSessionLifetime ; null hors session, ex. vue de la Conformité).
+     *
+     * @return array{reminder_minutes: ?int, started_at: ?string}
+     */
+    public static function session(?int $reminderMinutes, ?Request $request = null): array
+    {
+        $startedAt = $request?->hasSession() ? $request->session()->get(EnforceSessionLifetime::STARTED_AT) : null;
+
+        return [
+            'reminder_minutes' => $reminderMinutes,
+            'started_at' => is_int($startedAt) ? CarbonImmutable::createFromTimestamp($startedAt)->toIso8601String() : null,
+        ];
     }
 }
