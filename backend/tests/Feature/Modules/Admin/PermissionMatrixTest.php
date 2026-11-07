@@ -57,18 +57,19 @@ class PermissionMatrixTest extends TestCase
             'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'settlement.run',
             'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
             'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
-            'audit.view', 'audit.export', 'roles.manage',
+            'aml.view', 'audit.view', 'audit.export', 'roles.manage',
         ],
         self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view'],
         self::FINANCE => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data',
-            'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'audit.view', 'audit.export',
+            'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'aml.view', 'audit.view', 'audit.export',
         ],
         // Support : utilisateurs en données minimales (pas users.view_personal_data).
         self::SUPPORT => ['dashboard.view', 'events.view', 'users.view', 'users.suspend', 'tickets.view'],
         self::COMPLIANCE => [
             'dashboard.view', 'events.view', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view',
-            'ledger.view', 'settings.view', 'responsible_gaming.view', 'responsible_gaming.manage', 'audit.view', 'audit.export',
+            'ledger.view', 'settings.view', 'responsible_gaming.view', 'responsible_gaming.manage', 'aml.view', 'aml.review',
+            'audit.view', 'audit.export',
         ],
     ];
 
@@ -102,6 +103,9 @@ class PermissionMatrixTest extends TestCase
         'Solde joueur — dépôt / retrait' => ['POST api/v1/admin/users/{user}/wallet/adjustments'],
         'Paramètres' => ['GET api/v1/admin/settings', 'GET api/v1/admin/settings/versions', 'GET api/v1/admin/system', 'PUT api/v1/admin/settings'],
         'Limites jeu responsable' => ['GET api/v1/admin/users/{user}/responsible-gaming', 'POST api/v1/admin/users/{user}/responsible-gaming/reopen'],
+        'Alertes AML — consulter / traiter' => [
+            'GET api/v1/admin/aml/alerts', 'GET api/v1/admin/aml/alerts/{alert}', 'POST api/v1/admin/aml/alerts/{alert}/review',
+        ],
         'Audit & exports' => ['GET api/v1/admin/audit-logs', 'POST api/v1/admin/audit-logs/export'],
         'Gérer les rôles des autres' => ['PUT api/v1/admin/users/{user}/roles', 'DELETE api/v1/admin/users/{user}/mfa'],
     ];
@@ -324,6 +328,16 @@ class PermissionMatrixTest extends TestCase
     {
         $this->assertAccess('GET', "users/{$this->player->id}/responsible-gaming", [self::SUPER_ADMIN, self::COMPLIANCE]);
         $this->assertAccess('POST', "users/{$this->player->id}/responsible-gaming/reopen", [self::COMPLIANCE]);
+    }
+
+    /** Règles, revue et audit : AmlAlertTest. */
+    public function test_row_aml_alerts_are_reviewed_by_compliance_and_read_only_for_super_admin_and_finance(): void
+    {
+        $readers = [self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE];
+
+        $this->assertAccess('GET', 'aml/alerts', $readers);
+        $this->assertAccess('GET', 'aml/alerts/'.self::MISSING, $readers);
+        $this->assertAccess('POST', 'aml/alerts/'.self::MISSING.'/review', [self::COMPLIANCE]);
     }
 
     public function test_row_audit_and_exports_are_reserved_to_super_admin_finance_and_compliance(): void

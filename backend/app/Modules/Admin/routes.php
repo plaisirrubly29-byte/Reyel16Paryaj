@@ -10,6 +10,7 @@ use App\Modules\Admin\Http\Controllers\AdminSupervisionController;
 use App\Modules\Admin\Http\Controllers\AdminTicketController;
 use App\Modules\Admin\Http\Controllers\AdminUserController;
 use App\Modules\Admin\Http\Controllers\AdminWalletController;
+use App\Modules\Admin\Http\Controllers\AmlAlertController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
 use App\Modules\Admin\Http\Controllers\ResultCorrectionController;
 use Illuminate\Support\Facades\Route;
@@ -71,6 +72,12 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
         ->whereNumber('correction')->middleware(['permission:finance.approve', 'idempotent']);
     Route::post('/finance/corrections/{correction}/reject', [FinanceCorrectionController::class, 'reject'])
         ->whereNumber('correction')->middleware(['permission:finance.approve', 'idempotent']);
+
+    // Alertes AML (V2-C04) : file de revue ; classer ou signaler avec motif, réservé à la Conformité.
+    Route::get('/aml/alerts', [AmlAlertController::class, 'index'])->middleware('permission:aml.view');
+    Route::get('/aml/alerts/{alert}', [AmlAlertController::class, 'show'])->whereNumber('alert')->middleware('permission:aml.view');
+    Route::post('/aml/alerts/{alert}/review', [AmlAlertController::class, 'review'])
+        ->whereNumber('alert')->middleware(['permission:aml.review', 'idempotent']);
 
     // Paramètres de la plateforme versionnés (P6-08)
     Route::get('/settings', [AdminSettingsController::class, 'show'])->middleware('permission:settings.view');

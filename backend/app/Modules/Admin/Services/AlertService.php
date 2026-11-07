@@ -7,6 +7,8 @@ use App\Modules\Admin\Models\FinanceCorrection;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Betting\Enums\BetTicketStatus;
+use App\Modules\Compliance\Enums\AmlAlertStatus;
+use App\Modules\Compliance\Models\AmlAlert;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
@@ -59,6 +61,9 @@ class AlertService
         }
         if ($can('ledger.view')) {
             array_push($alerts, ...$this->financeAlerts());
+        }
+        if ($can('aml.view')) {
+            array_push($alerts, ...$this->amlAlerts());
         }
         if ($can('settings.view')) {
             array_push($alerts, ...$this->technicalAlerts());
@@ -171,6 +176,17 @@ class AlertService
         }
 
         return $alerts;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function amlAlerts(): array
+    {
+        $open = AmlAlert::query()->where('status', AmlAlertStatus::Open)->count();
+
+        return $open === 0 ? [] : [$this->alert('aml_alerts', 'warning', 'Conformité',
+            "{$open} alerte(s) AML à examiner",
+            'Gros dépôt, cumul de dépôts ou retrait sans jeu : à classer ou à signaler par la Conformité.',
+            '/admin/aml?status=open')];
     }
 
     /** @return list<array<string, mixed>> */

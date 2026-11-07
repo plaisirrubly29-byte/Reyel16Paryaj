@@ -39,6 +39,9 @@ enum AuditAction: string
     case ResultCorrectionApproved = 'result.correction_approved';
     case ResultCorrectionRejected = 'result.correction_rejected';
 
+    // Compliance — alerte AML classée ou signalée par la Conformité (V2-C04)
+    case AmlAlertReviewed = 'aml.alert_reviewed';
+
     // Admin — paramètres de la plateforme versionnés (P6-08)
     case SettingsUpdated = 'settings.updated';
 

@@ -37,4 +37,23 @@ return [
         '5y' => '5 years',
     ],
 
+    // Règles AML (V2-C04) : une règle déclenchée crée une alerte pour la Conformité, sans rien bloquer.
+    // Seuils PROVISOIRES, prudents, en attendant l'avis juridique (D-01, question J-6).
+    'aml' => [
+        // Un dépôt d'au moins ce montant.
+        'large_deposit_minor' => 50_000_00,
+
+        // Les dépôts des derniers jours atteignent ce cumul (une alerte au franchissement du seuil).
+        'cumulative_deposits' => [
+            'threshold_minor' => 150_000_00,
+            'days' => 7,
+        ],
+
+        // Un retrait alors que les dépôts des dernières heures ont été misés à moins de ce pourcentage.
+        'withdrawal_without_play' => [
+            'hours' => 72,
+            'min_stake_percent' => 10,
+        ],
+    ],
+
 ];
