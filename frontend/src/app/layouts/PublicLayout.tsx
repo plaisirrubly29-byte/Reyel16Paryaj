@@ -7,6 +7,7 @@ import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlip
 import { BetSlipPanel, SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
 import { CompetitionsMenu } from '../../features/catalogue/components/CompetitionsMenu';
 import { useLotteryAvailable } from '../../features/lottery/api/lottery';
+import { virtualGamesEnabled } from '../../features/virtual/api/virtualGames';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
 import { CookieBanner } from '../../features/legal/components/CookieBanner';
@@ -101,6 +102,10 @@ function PublicShell() {
               <span className="nav-live-dot" aria-hidden="true" />Live
             </Link>
             {lotteryAvailable && <NavLink to="/borlette"><Icon name="lottery" size={20} />Borlette</NavLink>}
+            {virtualGamesEnabled() && (
+              // Libellé court : la barre est déjà pleine sur ordinateur une fois connecté (Mes paris, Administration).
+              <NavLink to="/jeux-virtuels" aria-label="Jeux virtuels" title="Jeux virtuels"><Icon name="gamepad" size={20} />Virtuels</NavLink>
+            )}
             {user && <NavLink to="/bets"><Icon name="tickets" size={20} />Mes paris</NavLink>}
             {user?.is_admin && <NavLink to="/admin"><Icon name="shield" size={20} />Administration</NavLink>}
           </nav>

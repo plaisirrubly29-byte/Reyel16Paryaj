@@ -2022,3 +2022,107 @@ a.match-line-teams:hover { color: var(--brand); }
 .lottery-play-remove:hover { color: var(--danger); background: var(--accent-soft); }
 .lottery-total { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
 .lottery-soon { color: var(--muted); font-size: 0.85rem; text-align: center; }
+
+/* Jeux virtuels (V2-D08) : accueil (choix du jeu, épreuves, résultats) et page d'une épreuve */
+.virtual-hero {
+  display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; border-radius: var(--radius);
+  background: linear-gradient(120deg, var(--navy), #5b2bd6); color: #fff;
+}
+.virtual-hero h1 { margin: 0 0 0.2rem; font-size: 1.6rem; }
+.virtual-hero p { color: rgba(255, 255, 255, 0.85); }
+.virtual-hero-icon { display: grid; place-items: center; flex: 0 0 auto; width: 3.4rem; height: 3.4rem; border-radius: 50%; background: #8c52ff; }
+.virtual-games { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.virtual-game {
+  display: flex; align-items: center; gap: 0.85rem; padding: 0.9rem 1rem; border: 2px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.virtual-game:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.virtual-game.active { border-color: #8c52ff; box-shadow: 0 0 0 3px rgba(140, 82, 255, 0.18); }
+.virtual-game-icon { display: grid; place-items: center; flex: 0 0 auto; width: 2.8rem; height: 2.8rem; border-radius: 12px; color: #fff; background: linear-gradient(135deg, #2f63ff, #0b2a9e); }
+.virtual-game-courses .virtual-game-icon { background: linear-gradient(135deg, #a77bff, #5b2bd6); }
+.virtual-game-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.virtual-game-text strong { font-size: 1.05rem; }
+.virtual-game-text span { color: var(--muted); font-size: 0.85rem; line-height: 1.3; }
+.virtual-section { display: flex; flex-direction: column; gap: 0.75rem; }
+.virtual-section h2 { font-size: 1.25rem; font-weight: 800; color: var(--navy); }
+.virtual-empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+.virtual-rounds, .virtual-events, .virtual-results { list-style: none; margin: 0; padding: 0; }
+.virtual-rounds { display: flex; flex-direction: column; gap: 0.9rem; }
+.virtual-round { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+.virtual-round-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.75rem; padding: 0.7rem 1rem; background: var(--surface-3); }
+.virtual-round-time { display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.virtual-round-name { color: var(--muted); font-size: 0.9rem; font-weight: 600; }
+.virtual-state { margin-left: auto; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.virtual-state.is-open { background: var(--success-soft); color: var(--success); }
+.virtual-state.is-closed { background: #fff8ee; color: var(--warning); }
+.virtual-state.is-running { background: var(--accent-soft); color: var(--accent); }
+.virtual-state.is-finished { background: var(--surface-2); color: var(--muted); }
+.virtual-events li + li { border-top: 1px solid var(--border); }
+.virtual-event { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text); }
+.virtual-event:hover { background: var(--surface-2); }
+.virtual-event > svg { flex: 0 0 auto; color: var(--muted); }
+.virtual-event-title { flex: 1; min-width: 0; font-weight: 700; }
+.virtual-event-odds { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; }
+.virtual-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--odds); border-radius: 4px; overflow: hidden; font-size: 0.85rem; }
+.virtual-chip-label { padding: 0.2rem 0.45rem; font-weight: 700; }
+.virtual-chip .odds-value { padding: 0.2rem 0.45rem; background: var(--odds); color: #fff; }
+.virtual-results { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.virtual-results li + li { border-top: 1px solid var(--border); }
+.virtual-result { display: flex; align-items: center; gap: 0.9rem; padding: 0.65rem 1rem; color: var(--text); }
+.virtual-result:hover { background: var(--surface-2); }
+.virtual-result-time { flex: 0 0 auto; color: var(--muted); font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.virtual-result-match { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem 0.6rem; flex: 1; min-width: 0; font-weight: 600; }
+.virtual-score { padding: 0.1rem 0.55rem; border-radius: 6px; background: var(--navy); color: #fff; font-variant-numeric: tabular-nums; }
+.virtual-podium { display: inline-flex; gap: 0.3rem; margin-left: auto; }
+.virtual-podium-place {
+  display: grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--surface-3);
+  font-size: 0.85rem; font-weight: 800;
+}
+.virtual-podium-place.place-1 { background: var(--gold); color: #3b2a00; }
+
+.virtual-countdown { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.virtual-countdown.is-open { color: var(--success); }
+.virtual-countdown.is-closed { color: var(--warning); }
+.virtual-countdown.is-running { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--accent); }
+.virtual-countdown.is-finished { color: var(--muted); }
+.virtual-clock { font-size: 1.35rem; }
+.virtual-stage {
+  display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.25rem; border-radius: var(--radius);
+  background: linear-gradient(135deg, #0d3b1f, #14592f); color: #fff;
+}
+.virtual-stage-note { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.75); }
+.virtual-stage-text { font-weight: 600; }
+.virtual-runners { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.virtual-runners li { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 8px; background: rgba(255, 255, 255, 0.1); }
+.virtual-runner-place { font-size: 0.8rem; font-weight: 800; color: var(--gold); }
+.virtual-runner-number { display: grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: #fff; color: var(--navy); font-weight: 800; font-size: 0.85rem; }
+.virtual-runner-name { font-weight: 600; }
+.virtual-detail { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); align-items: start; }
+@media (max-width: 900px) { .virtual-detail { grid-template-columns: minmax(0, 1fr); } }
+.virtual-coupon {
+  display: flex; flex-direction: column; gap: 0.9rem; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow-sm);
+}
+.virtual-coupon h2 { display: flex; align-items: center; gap: 0.4rem; }
+.virtual-coupon .lottery-stake input { width: 100%; }
+.virtual-coupon .lottery-total small { color: var(--muted); font-weight: 500; }
+.virtual-pick { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.75rem; border-radius: 8px; background: var(--surface-2); }
+.virtual-pick > div { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.virtual-pick-market, .virtual-pick-event { color: var(--muted); font-size: 0.8rem; }
+.virtual-pick-odds { padding: 0.2rem 0.55rem; border-radius: 4px; background: var(--odds); color: #fff; }
+@media (max-width: 560px) {
+  .virtual-hero { padding: 1rem; }
+  .virtual-hero h1 { font-size: 1.35rem; }
+  .virtual-hero p { font-size: 0.9rem; }
+  .virtual-hero-icon { width: 2.8rem; height: 2.8rem; }
+  .virtual-games { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .virtual-game { padding: 0.65rem; gap: 0.55rem; }
+  .virtual-game-icon { width: 2.3rem; height: 2.3rem; border-radius: 10px; }
+  .virtual-game-text strong { font-size: 0.92rem; line-height: 1.2; }
+  .virtual-game-text span { display: none; }
+  .virtual-detail .market-odds.long-names { grid-template-columns: minmax(0, 1fr); }
+  .virtual-event { flex-wrap: wrap; }
+  .virtual-event-title { flex-basis: calc(100% - 2rem); }
+  .virtual-event-odds { justify-content: flex-start; }
+}

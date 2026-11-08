@@ -2,6 +2,7 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
 import { useLotteryDraws } from '../../lottery/api/lottery';
+import { virtualGamesEnabled } from '../../virtual/api/virtualGames';
 import { useSports } from '../api/catalogue';
 
 /**
@@ -40,6 +41,12 @@ export function SportsSidebar() {
           <Link to="/borlette" className={pathname === '/borlette' ? 'active' : undefined} title={`Borlette (${lottery.length} tirages)`}>
             <span className="sport-rail-icon" aria-hidden="true"><Icon name="lottery" size={26} /></span>
             <span>Borlette</span>
+          </Link>
+        )}
+        {virtualGamesEnabled() && (
+          <Link to="/jeux-virtuels" className={pathname.startsWith('/jeux-virtuels') ? 'active' : undefined} title="Jeux virtuels">
+            <span className="sport-rail-icon" aria-hidden="true"><Icon name="gamepad" size={26} /></span>
+            <span>Virtuels</span>
           </Link>
         )}
       </nav>
