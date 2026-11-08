@@ -6,6 +6,7 @@ import { HomePage } from '../features/catalogue/pages/HomePage';
 import { MatchPage } from '../features/catalogue/pages/MatchPage';
 import { MyBetsPage } from '../features/betting/pages/MyBetsPage';
 import { SportsPage } from '../features/catalogue/pages/SportsPage';
+import { LotteryPage } from '../features/lottery/pages/LotteryPage';
 import { RequireAuth } from '../features/auth/components/RequireAuth';
 import { AccountPage } from '../features/auth/pages/AccountPage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
@@ -57,6 +58,7 @@ export const routes = [
       { index: true, element: <HomePage /> },
       { path: 'sports', element: <SportsPage /> },
       { path: 'events/:id', element: <MatchPage /> },
+      { path: 'borlette', element: <LotteryPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },

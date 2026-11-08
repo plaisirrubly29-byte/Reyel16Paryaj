@@ -33,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/Modules/IdentityAccess/Console',
         __DIR__.'/../app/Modules/Monitoring/Console',
         __DIR__.'/../app/Modules/Payments/Console',
+        __DIR__.'/../app/Modules/Lottery/Console',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Identifiant de corrélation X-Request-Id (P1-04) : en tête, pour figurer dans tous les logs de la requête.

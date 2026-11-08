@@ -66,3 +66,10 @@ Schedule::command('monitoring:check')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+// Tirages de borlette et résultats publiés (module Lottery), seulement quand LOTTERY_ENABLED=true.
+Schedule::command('lottery:sync')
+    ->cron((string) config('lottery.sync_cron'))
+    ->when(fn () => (bool) config('lottery.enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();
