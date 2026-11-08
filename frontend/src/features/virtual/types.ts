@@ -1,8 +1,8 @@
 /**
- * Jeux virtuels (V2-D08, décision D-11) : types d'affichage. Ce n'est PAS encore le contrat de l'API : il sera écrit
- * d'abord dans docs/api/openapi.yaml une fois le prestataire retenu. Ces types décrivent seulement ce que les écrans
- * ont besoin de recevoir du serveur (épreuves, marchés, cotes, heure du serveur, résultats).
+ * Jeux virtuels (V2-D08, décision D-11) : ce que les écrans reçoivent du serveur. Le contrat définitif sera écrit dans
+ * docs/api/openapi.yaml avec le prestataire retenu ; ces types en sont la proposition côté frontend.
  */
+import type { Money } from '../../shared/api/client';
 
 export type VirtualGameKey = 'football' | 'courses';
 
@@ -31,13 +31,18 @@ export type VirtualResult =
   | { kind: 'football'; home: number; away: number }
   | { kind: 'courses'; podium: VirtualRunner[] };
 
+/** État en direct pendant l'épreuve : minute et score du match, ou avancement de la course (0 à 100). */
+export type VirtualLive =
+  | { kind: 'football'; minute: number; home: number; away: number }
+  | { kind: 'courses'; progress: number };
+
 /** Une épreuve : un match de football virtuel ou une course. */
 export type VirtualEvent = {
   id: string;
   game: VirtualGameKey;
   /** « Ligue virtuelle · Journée 12 », « Course 48 ». */
   name: string;
-  /** Football : les deux équipes ; courses : vide. */
+  /** Football : les deux équipes ; courses : null. */
   home_team: string | null;
   away_team: string | null;
   runners: VirtualRunner[];
@@ -46,6 +51,7 @@ export type VirtualEvent = {
   ends_at: string;
   status: VirtualEventStatus;
   markets: VirtualMarket[];
+  live: VirtualLive | null;
   result: VirtualResult | null;
 };
 
@@ -53,4 +59,23 @@ export type VirtualEvent = {
  * Réponse d'une liste ou d'une épreuve. `server_time` sert au compte à rebours : il est calé sur l'horloge du serveur,
  * pas sur celle du téléphone (souvent décalée).
  */
-export type VirtualResponse<T> = { data: T; meta: { server_time: string; demo: boolean } };
+export type VirtualResponse<T> = { data: T; meta: { server_time: string } };
+
+export type VirtualBetStatus = 'pending' | 'won' | 'lost';
+
+/** Pari simple sur une épreuve virtuelle, tel que le serveur l'enregistre puis le règle. */
+export type VirtualBet = {
+  id: string;
+  reference: string;
+  event: { id: string; game: VirtualGameKey; name: string; title: string; starts_at: string };
+  market: { key: string; name: string };
+  selection: { id: string; label: string; name: string };
+  odds: string;
+  stake: Money;
+  potential_payout: Money;
+  status: VirtualBetStatus;
+  /** Gain versé une fois réglé (0 si perdu) ; null tant que l'épreuve n'est pas terminée. */
+  payout: Money | null;
+  placed_at: string;
+  settled_at: string | null;
+};

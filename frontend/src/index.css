@@ -2091,8 +2091,18 @@ a.match-line-teams:hover { color: var(--brand); }
   display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.25rem; border-radius: var(--radius);
   background: linear-gradient(135deg, #0d3b1f, #14592f); color: #fff;
 }
-.virtual-stage-note { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.75); }
-.virtual-stage-text { font-weight: 600; }
+.virtual-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.virtual-stage-status { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 1rem; }
+.virtual-stage-note { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; font-weight: 600; color: rgba(255, 255, 255, 0.65); }
+.virtual-progress { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.virtual-progress > span { display: block; height: 100%; background: var(--gold); transition: width 0.9s linear; }
+.virtual-scoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0.75rem; padding: 0.5rem 0; font-weight: 700; }
+.virtual-scoreboard span:first-child { text-align: right; }
+.virtual-scoreboard strong { padding: 0.3rem 0.9rem; border-radius: 8px; background: rgba(0, 0, 0, 0.3); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.virtual-live { flex: 0 0 auto; padding: 0.15rem 0.5rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.virtual-section-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.virtual-see-all { color: var(--brand); font-weight: 700; font-size: 0.9rem; }
+@media (prefers-reduced-motion: reduce) { .virtual-progress > span { transition: none; } }
 .virtual-runners { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .virtual-runners li { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 8px; background: rgba(255, 255, 255, 0.1); }
 .virtual-runner-place { font-size: 0.8rem; font-weight: 800; color: var(--gold); }

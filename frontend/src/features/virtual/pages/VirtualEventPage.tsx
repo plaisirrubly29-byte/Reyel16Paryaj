@@ -4,14 +4,13 @@ import { SportsSidebar } from '../../catalogue/components/SportsSidebar';
 import { Icon } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
 import { bettingOpen, useServerNow, useVirtualEvent, virtualGame } from '../api/virtualGames';
-import { DemoNotice } from '../components/DemoNotice';
 import { VirtualCoupon, type VirtualPick } from '../components/VirtualCoupon';
 import { formatClock, formatStartTime } from '../format';
 import type { VirtualEvent } from '../types';
 
 /**
- * Page d'une épreuve virtuelle : en-tête avec compte à rebours (heure du serveur), zone du flux du prestataire
- * (pour l'instant mode sans vidéo : tableau de score ou partants), marchés et coupon. Le résultat s'affiche à la fin.
+ * Page d'une épreuve virtuelle : en-tête avec compte à rebours (heure du serveur), direct (vue sans vidéo : minute et
+ * score, ou avancement de la course, en attendant le flux du prestataire), marchés et coupon. Résultat à la fin.
  */
 export function VirtualEventPage() {
   const { id = '' } = useParams();
@@ -39,10 +38,7 @@ export function VirtualEventPage() {
             <Link to="/jeux-virtuels" className="btn btn-secondary btn-sm">Voir les jeux virtuels</Link>
           </div>
         ) : (
-          <>
-            <DemoNotice />
-            <EventContent key={event.id} event={event} serverNow={serverNow} />
-          </>
+          <EventContent key={event.id} event={event} serverNow={serverNow} />
         )}
       </div>
     </div>
@@ -69,6 +65,7 @@ function Countdown({ event, serverNow }: { event: VirtualEvent; serverNow: numbe
 function EventContent({ event, serverNow }: { event: VirtualEvent; serverNow: number }) {
   const [pick, setPick] = useState<VirtualPick | null>(null);
   const open = bettingOpen(event, serverNow);
+  const score = event.result?.kind === 'football' ? event.result : event.live?.kind === 'football' ? event.live : null;
 
   return (
     <>
@@ -79,8 +76,8 @@ function EventContent({ event, serverNow }: { event: VirtualEvent; serverNow: nu
         {event.game === 'football' ? (
           <h1 id="virtual-event-title" className="match-header-teams">
             <span className="match-header-team">{event.home_team}</span>
-            {event.result?.kind === 'football'
-              ? <span className="match-header-score" aria-label={`Score : ${event.result.home} à ${event.result.away}`}>{event.result.home} - {event.result.away}</span>
+            {score
+              ? <span className="match-header-score" aria-label={`Score : ${score.home} à ${score.away}`}>{score.home} - {score.away}</span>
               : <span className="match-header-vs" aria-hidden="true">-</span>}
             <span className="sr-only"> contre </span>
             <span className="match-header-team">{event.away_team}</span>
@@ -91,8 +88,23 @@ function EventContent({ event, serverNow }: { event: VirtualEvent; serverNow: nu
         <Countdown event={event} serverNow={serverNow} />
       </section>
 
-      <section className="virtual-stage" aria-label="Épreuve">
-        <p className="virtual-stage-note"><Icon name="eye" size={16} /> Vidéo du prestataire à venir · affichage sans vidéo</p>
+      <section className="virtual-stage" aria-label="Direct">
+        <div className="virtual-stage-head">
+          <strong className="virtual-stage-status">
+            {event.live?.kind === 'football' && <><span className="nav-live-dot" aria-hidden="true" /> En direct · {event.live.minute}&apos;</>}
+            {event.live?.kind === 'courses' && <><span className="nav-live-dot" aria-hidden="true" /> Course en cours · {event.live.progress} %</>}
+            {!event.live && (event.result
+              ? (event.game === 'football' ? 'Match terminé' : 'Arrivée')
+              : (event.game === 'football' ? `Coup d'envoi à ${formatStartTime(event.starts_at)}` : `Départ à ${formatStartTime(event.starts_at)}`))}
+          </strong>
+          <span className="virtual-stage-note"><Icon name="eye" size={14} /> Vue simplifiée</span>
+        </div>
+        {event.live && (
+          <div className="virtual-progress" role="progressbar" aria-label="Avancement" aria-valuemin={0} aria-valuemax={100}
+            aria-valuenow={event.live.kind === 'football' ? Math.round((event.live.minute / 90) * 100) : event.live.progress}>
+            <span style={{ width: `${event.live.kind === 'football' ? (event.live.minute / 90) * 100 : event.live.progress}%` }} />
+          </div>
+        )}
         {event.game === 'courses' && (
           <ol className="virtual-runners" aria-label={event.result?.kind === 'courses' ? 'Arrivée' : 'Partants'}>
             {(event.result?.kind === 'courses' ? event.result.podium : event.runners).map((r, i) => (
@@ -105,9 +117,11 @@ function EventContent({ event, serverNow }: { event: VirtualEvent; serverNow: nu
           </ol>
         )}
         {event.game === 'football' && (
-          <p className="virtual-stage-text">
-            {event.result ? 'Match terminé.' : open ? 'Les mises sont ouvertes jusqu’au compte à rebours.' : 'Le match va commencer.'}
-          </p>
+          <div className="virtual-scoreboard" aria-hidden="true">
+            <span>{event.home_team}</span>
+            <strong>{score ? `${score.home} - ${score.away}` : formatStartTime(event.starts_at)}</strong>
+            <span>{event.away_team}</span>
+          </div>
         )}
       </section>
 

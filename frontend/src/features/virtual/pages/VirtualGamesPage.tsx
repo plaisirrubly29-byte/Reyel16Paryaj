@@ -3,7 +3,7 @@ import { SportsSidebar } from '../../catalogue/components/SportsSidebar';
 import { Icon, type IconName } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
 import { useServerNow, useVirtualEvents, useVirtualResults, virtualGame, VIRTUAL_GAMES } from '../api/virtualGames';
-import { DemoNotice } from '../components/DemoNotice';
+import { VirtualBets } from '../components/VirtualBets';
 import { eventState, eventTitle, formatStartTime, resultLabel } from '../format';
 import type { VirtualEvent, VirtualGameKey } from '../types';
 
@@ -44,11 +44,9 @@ export function VirtualGamesPage() {
           <span className="virtual-hero-icon" aria-hidden="true"><Icon name="gamepad" size={30} /></span>
           <div>
             <h1 id="virtual-title">Jeux virtuels</h1>
-            <p>Football et courses simulés, une épreuve toutes les quelques minutes, à toute heure.</p>
+            <p>Football et courses virtuels : une épreuve toutes les quelques minutes, à toute heure.</p>
           </div>
         </section>
-
-        <DemoNotice />
 
         <div className="virtual-games" role="group" aria-label="Jeu">
           {VIRTUAL_GAMES.map((g) => (
@@ -69,6 +67,7 @@ export function VirtualGamesPage() {
         </div>
 
         <UpcomingEvents game={game.key} />
+        <VirtualBets limit={3} />
         <LatestResults game={game.key} />
       </div>
     </div>
@@ -103,6 +102,11 @@ function UpcomingEvents({ game }: { game: VirtualGameKey }) {
                     <li key={e.id}>
                       <Link to={`/jeux-virtuels/${e.id}`} className="virtual-event">
                         <span className="virtual-event-title">{e.game === 'football' ? eventTitle(e) : `${e.runners.length} partants · favoris`}</span>
+                        {e.live?.kind === 'football' && (
+                          <span className="virtual-live" aria-label={`En direct, ${e.live.minute}e minute, ${e.live.home} à ${e.live.away}`}>
+                            {e.live.minute}&apos; · {e.live.home} - {e.live.away}
+                          </span>
+                        )}
                         <span className="virtual-event-odds" aria-label={e.game === 'football' ? 'Cotes 1, X, 2' : 'Favoris'}>
                           {(e.game === 'football' ? e.markets[0]?.selections ?? [] : favourites(e)).map((s) => (
                             <span key={s.id} className="virtual-chip">

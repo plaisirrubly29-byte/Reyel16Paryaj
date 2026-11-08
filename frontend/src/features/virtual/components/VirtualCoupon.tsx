@@ -1,10 +1,16 @@
 import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { useMe } from '../../auth/api/auth';
+import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
+import { Alert } from '../../../shared/components/Alert';
+import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Icon } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
-import type { VirtualEvent, VirtualMarket, VirtualSelection } from '../types';
+import { usePlaceVirtualBet } from '../api/virtualGames';
 import { eventTitle } from '../format';
+import type { VirtualEvent, VirtualMarket, VirtualSelection } from '../types';
 
-/** Devise de la plateforme (décision Phase 0) ; le serveur restera maître du montant débité et du gain. */
+/** Devise de la plateforme (décision Phase 0). */
 const CURRENCY = 'HTG';
 
 export type VirtualPick = { market: VirtualMarket; selection: VirtualSelection };
@@ -17,21 +23,31 @@ type Props = {
 };
 
 /**
- * Coupon d'une épreuve virtuelle : un choix (pari simple) et la mise. Le gain affiché est indicatif (mise × cote) ;
- * le vrai montant viendra du serveur. Démo : l'envoi est désactivé. Avec l'API, l'envoi portera une clé
- * d'idempotence (newIdempotencyKey), comme les paris sportifs et la borlette.
+ * Coupon d'une épreuve virtuelle : un choix (pari simple) et la mise. Le serveur revérifie tout (mises ouvertes,
+ * cote, mise minimale) et renvoie la référence du pari ; le gain potentiel affiché avant l'envoi est mise × cote.
  */
 export function VirtualCoupon({ event, pick, open, onClear }: Props) {
+  const me = useMe();
+  const location = useLocation();
+  const place = usePlaceVirtualBet();
   const [stake, setStake] = useState('');
-  const amount = Number(stake) || 0;
-  const gainMinor = pick ? Math.round(amount * 100 * Number(pick.selection.odds)) : 0;
+  const stakeMinor = parseStakeMinor(stake);
+  const gainMinor = pick && stakeMinor ? Math.round(Number(stakeMinor) * Number(pick.selection.odds)) : 0;
+
+  function submit() {
+    if (!pick || !stakeMinor) return;
+    place.mutate(
+      { event_id: event.id, selection_id: pick.selection.id, stake_minor: Number(stakeMinor) },
+      { onSuccess: () => { onClear(); setStake(''); } },
+    );
+  }
 
   return (
     <section className="virtual-coupon" aria-labelledby="virtual-coupon-title">
       <h2 id="virtual-coupon-title"><Icon name="coupon" size={20} /> Coupon</h2>
 
       {!pick ? (
-        <p className="virtual-empty">Touchez une cote pour l&apos;ajouter au coupon.</p>
+        <p className="virtual-empty">{open ? 'Touchez une cote pour l\'ajouter au coupon.' : 'Mises fermées pour cette épreuve.'}</p>
       ) : (
         <div className="virtual-pick">
           <div>
@@ -48,20 +64,44 @@ export function VirtualCoupon({ event, pick, open, onClear }: Props) {
 
       <label className="lottery-stake">
         <span>Mise ({CURRENCY})</span>
-        <input inputMode="numeric" autoComplete="off" placeholder="50" value={stake} onChange={(e) => setStake(e.target.value.replace(/\D/g, ''))} />
+        <input
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="50"
+          value={stake}
+          onChange={(e) => { setStake(sanitizeStake(e.target.value)); place.reset(); }}
+        />
       </label>
 
       <div className="lottery-total">
-        <span>Gain potentiel <small>(indicatif)</small></span>
+        <span>Gain potentiel</span>
         <strong><MoneyText value={{ minor: gainMinor, currency: CURRENCY }} /></strong>
       </div>
 
-      <button type="button" className="btn btn-primary btn-block" disabled>Placer le pari</button>
-      <p className="lottery-soon">
-        {open
-          ? 'Démonstration : les paris sur les jeux virtuels ne sont pas encore ouverts.'
-          : 'Mises fermées pour cette épreuve.'}
-      </p>
+      {place.isSuccess && (
+        <Alert tone="success" title="Pari accepté">
+          <p>
+            Référence <strong>{place.data.reference}</strong> · {place.data.selection.name} à {place.data.odds}.
+            {' '}Résultat à la fin de l&apos;épreuve.
+          </p>
+        </Alert>
+      )}
+      <ErrorAlert error={place.error} />
+
+      {!me.data ? (
+        <Link to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} className="btn btn-primary btn-block">
+          Se connecter pour parier
+        </Link>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-primary btn-block"
+          disabled={!pick || !stakeMinor || !open || place.isPending}
+          onClick={submit}
+        >
+          {place.isPending ? 'Envoi…' : 'Placer le pari'}
+        </button>
+      )}
     </section>
   );
 }
