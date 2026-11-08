@@ -177,6 +177,7 @@ class TheOddsApiProvider implements SportsDataProvider
                             name: (string) $o['name'],
                             odds: SelectionData::oddsFromProvider($o['price']),
                             point: isset($o['point']) ? (string) $o['point'] : null,
+                            description: isset($o['description']) ? (string) $o['description'] : null,
                         ), $market['outcomes'] ?? []),
                     );
                 } catch (InvalidArgumentException $e) {

@@ -6,7 +6,6 @@ import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Icon } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
 import { sportIcon } from '../../../shared/components/sportIcon';
-import { BetSlipPanel } from '../../betting/slip/BetSlipPanel';
 import { useEventMarkets, type CatalogueEvent } from '../api/catalogue';
 import { formatKickoff, isLiveStatus, liveLabel } from '../format';
 import { MarketOdds } from '../components/OddsButtons';
@@ -26,8 +25,6 @@ export function MatchPage() {
         <Link to="/sports" className="back-link"><Icon name="chevron" size={16} />Tous les matchs</Link>
         <MatchContent query={query} />
       </div>
-
-      <BetSlipPanel />
     </div>
   );
 }
@@ -54,7 +51,7 @@ function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) 
 
   const event = query.data;
   const presentCategories = new Set(event.markets.map(marketCategory));
-  const categories = (['Résultat', 'Buts', 'Score exact', 'Joueurs', 'Autres'] as const)
+  const categories = (['Résultat', 'Buts', 'Handicap', 'Score exact', 'Joueurs', 'Autres'] as const)
     .filter((item) => presentCategories.has(item));
   const visibleMarkets = event.markets.filter((market) =>
     (category === 'Tous' || marketCategory(market) === category)

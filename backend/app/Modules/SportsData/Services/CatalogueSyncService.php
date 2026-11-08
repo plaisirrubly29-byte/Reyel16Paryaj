@@ -63,11 +63,17 @@ class CatalogueSyncService
 
     /**
      * Marchés synchronisés, dans l'ordre. Le 1X2 (h2h) est obligatoire : invalide, il fait rejeter l'événement.
-     * Les autres sont facultatifs (invalides, ils sont ignorés) : double chance (1X, 12, X2),
-     * totals (plus/moins de N buts ou points), btts (les deux équipes marquent : oui / non) et correct_score
-     * (score exact). Double chance, btts et score exact ne viennent que de syncEventMarkets() chez The Odds API.
+     * Les autres sont facultatifs (invalides, ils sont ignorés) : double chance (1X, 12, X2), draw_no_bet (remboursé
+     * si nul), totals (plus/moins de N buts ou points), btts (les deux équipes marquent : oui / non), correct_score
+     * (score exact), spreads (handicap), odd_even (total pair ou impair) et les marchés à plusieurs lignes
+     * (alternate_totals, alternate_spreads, team_totals, alternate_team_totals), dont la ligne est dans la clé de
+     * chaque sélection ("over_2.5", "home_-1.5", "away_under_0.5"). Tous se règlent sur le score final.
+     * Hors 1X2, plus/moins et handicap, ils ne viennent que de syncEventMarkets() chez The Odds API.
      */
-    private const MARKETS = ['h2h', 'double_chance', 'totals', 'btts', 'correct_score'];
+    private const MARKETS = [
+        'h2h', 'double_chance', 'draw_no_bet', 'totals', 'alternate_totals', 'btts', 'correct_score',
+        'spreads', 'alternate_spreads', 'team_totals', 'alternate_team_totals', 'odd_even',
+    ];
 
     /** Clés de sélection du marché 1X2 (h2h). */
     private const DRAW_NAMES = ['draw', 'tie', 'nul', 'match nul'];
@@ -77,6 +83,9 @@ class CatalogueSyncService
 
     /** Clés de sélection du marché btts. */
     private const BTTS_NAMES = ['yes' => 'yes', 'oui' => 'yes', 'no' => 'no', 'non' => 'no'];
+
+    /** Clés de sélection du marché odd_even. */
+    private const ODD_EVEN_NAMES = ['odd' => 'odd', 'impair' => 'odd', 'even' => 'even', 'pair' => 'even'];
 
     /** Sélections de la double chance : paire d'issues (dans l'ordre domicile, nul, extérieur) => clé. */
     private const DOUBLE_CHANCE_KEYS = ['home+draw' => 'home_draw', 'home+away' => 'home_away', 'draw+away' => 'draw_away'];
@@ -195,19 +204,14 @@ class CatalogueSyncService
         $isNew ? $report->eventsCreated++ : $report->eventsUpdated++;
 
         foreach (self::MARKETS as $key) {
-            $market = $this->pickMarket($data, $key);
+            [$market, $selections, $line, $error] = $this->pickMarket($data, $key);
             if ($market === null) {
-                continue;
-            }
-
-            try {
-                [$selections, $line] = $this->selections($data, $market);
-            } catch (\InvalidArgumentException $e) {
-                if ($key === 'h2h') {
-                    throw $e;
+                if ($error !== null && $key === 'h2h') {
+                    throw $error;
                 }
-
-                Log::warning('sports_data.market_rejected', ['id' => $data->externalId, 'market' => $key, 'error' => $e->getMessage()]);
+                if ($error !== null) {
+                    Log::warning('sports_data.market_rejected', ['id' => $data->externalId, 'market' => $key, 'error' => $error->getMessage()]);
+                }
 
                 continue;
             }
@@ -259,16 +263,31 @@ class CatalogueSyncService
         return ['name' => $title, 'country' => null];
     }
 
-    /** Marché du bookmaker de référence (déjà filtré par le fournisseur s'il est configuré), sinon le premier. */
-    private function pickMarket(EventData $data, string $key): ?MarketData
+    /**
+     * Premier marché valide de cette clé (bookmaker de référence déjà filtré par le fournisseur s'il est configuré) :
+     * un bookmaker aux lignes non prises en charge (handicap en quart de but…) laisse la place au suivant.
+     *
+     * Renvoie le marché retenu, ses sélections et sa ligne, ou [null, [], null, dernière erreur] si aucun n'est valide.
+     *
+     * @return array{0: ?MarketData, 1: array<string, array{name: string, odds: string}>, 2: ?string, 3: ?\InvalidArgumentException}
+     */
+    private function pickMarket(EventData $data, string $key): array
     {
+        $error = null;
+
         foreach ($data->markets as $market) {
-            if ($market->key === $key && count($market->selections) >= 2) {
-                return $market;
+            if ($market->key !== $key || count($market->selections) < 2) {
+                continue;
+            }
+
+            try {
+                return [$market, ...$this->selections($data, $market), null];
+            } catch (\InvalidArgumentException $e) {
+                $error = $e;
             }
         }
 
-        return null;
+        return [null, [], null, $error];
     }
 
     /**
@@ -286,6 +305,12 @@ class CatalogueSyncService
             'totals' => $this->totalsSelections($source),
             'btts' => [$this->bttsSelections($source), null],
             'correct_score' => [$this->correctScoreSelections($data, $source), null],
+            'draw_no_bet' => [$this->drawNoBetSelections($data, $source), null],
+            'spreads' => $this->spreadsSelections($data, $source),
+            'alternate_spreads' => [$this->alternateSpreadsSelections($data, $source), null],
+            'alternate_totals' => [$this->alternateTotalsSelections($source), null],
+            'team_totals', 'alternate_team_totals' => [$this->teamTotalsSelections($data, $source), null],
+            'odd_even' => [$this->oddEvenSelections($source), null],
             default => throw new \InvalidArgumentException("Marché non pris en charge : {$source->key}"),
         };
     }
@@ -451,6 +476,212 @@ class CatalogueSyncService
             'over' => ['name' => "Plus de {$line}", 'odds' => $byKey['over']->odds],
             'under' => ['name' => "Moins de {$line}", 'odds' => $byKey['under']->odds],
         ], $line];
+    }
+
+    /**
+     * Remboursé si nul : une cote par équipe, le nul rembourse le pari.
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function drawNoBetSelections(EventData $data, MarketData $source): array
+    {
+        $odds = [];
+        foreach ($source->selections as $selection) {
+            $key = $this->outcome($data, $selection->name);
+            if ($key === 'draw' || isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection inattendue : {$selection->name}");
+            }
+            $odds[$key] = ['name' => $selection->name, 'odds' => $selection->odds];
+        }
+
+        if (! isset($odds['home'], $odds['away'])) {
+            throw new \InvalidArgumentException('Marché remboursé si nul incomplet.');
+        }
+
+        return ['home' => $odds['home'], 'away' => $odds['away']];
+    }
+
+    /**
+     * Handicap : une cote par équipe, lignes opposées (Arsenal -0.5 / Chelsea +0.5). La ligne du marché est celle
+     * de l'équipe à domicile. Lignes entières ou demi-buts seulement (un quart de but se règle à moitié).
+     *
+     * @return array{0: array<string, array{name: string, odds: string}>, 1: string}
+     */
+    private function spreadsSelections(EventData $data, MarketData $source): array
+    {
+        $odds = [];
+        $points = [];
+        foreach ($source->selections as $selection) {
+            $key = $this->outcome($data, $selection->name);
+            $point = $this->halfLine($selection->point, signed: true);
+            if ($key === 'draw' || $point === null || isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection inattendue : {$selection->name} {$selection->point}");
+            }
+            $points[$key] = $point;
+            $odds[$key] = ['name' => "{$selection->name} {$this->signed($point)}", 'odds' => $selection->odds];
+        }
+
+        if (! isset($odds['home'], $odds['away']) || bccomp(bcadd($points['home'], $points['away'], 2), '0', 2) !== 0) {
+            throw new \InvalidArgumentException('Marché handicap incomplet ou lignes non opposées.');
+        }
+
+        return [['home' => $odds['home'], 'away' => $odds['away']], $points['home']];
+    }
+
+    /**
+     * Handicap à plusieurs lignes : clé "home_-1.5", "away_+1.5" (ligne de l'équipe visée). Les lignes non prises en
+     * charge (quart de but) sont écartées ; au moins deux sélections.
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function alternateSpreadsSelections(EventData $data, MarketData $source): array
+    {
+        $rows = [];
+        foreach ($source->selections as $selection) {
+            $side = $this->outcome($data, $selection->name);
+            if ($side === 'draw') {
+                throw new \InvalidArgumentException("Sélection inattendue : {$selection->name}");
+            }
+            if (($point = $this->halfLine($selection->point, signed: true)) === null) {
+                continue;
+            }
+            $rows[] = [$side === 'home' ? 0 : 1, $point, "{$side}_{$this->signed($point)}",
+                ['name' => "{$selection->name} {$this->signed($point)}", 'odds' => $selection->odds]];
+        }
+
+        return $this->lineSelections($rows, 'handicap à plusieurs lignes');
+    }
+
+    /**
+     * Plus/moins à plusieurs lignes : clé "over_2.5", "under_2.5".
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function alternateTotalsSelections(MarketData $source): array
+    {
+        $rows = [];
+        foreach ($source->selections as $selection) {
+            $side = self::TOTALS_NAMES[mb_strtolower(trim($selection->name))]
+                ?? throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+            if (($point = $this->halfLine($selection->point, signed: false)) === null) {
+                continue;
+            }
+            $rows[] = [$point, $side === 'over' ? 0 : 1, "{$side}_{$point}",
+                ['name' => ($side === 'over' ? 'Plus de ' : 'Moins de ').$point, 'odds' => $selection->odds]];
+        }
+
+        return $this->lineSelections($rows, 'plus/moins à plusieurs lignes');
+    }
+
+    /**
+     * Buts (ou points) d'une équipe : clé "home_over_1.5", "away_under_0.5" ; l'équipe est dans la description.
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function teamTotalsSelections(EventData $data, MarketData $source): array
+    {
+        $rows = [];
+        foreach ($source->selections as $selection) {
+            $team = (string) $selection->description;
+            $side = $this->outcome($data, $team);
+            $direction = self::TOTALS_NAMES[mb_strtolower(trim($selection->name))] ?? null;
+            if ($side === 'draw' || $direction === null) {
+                throw new \InvalidArgumentException("Sélection inconnue : {$team} {$selection->name}");
+            }
+            if (($point = $this->halfLine($selection->point, signed: false)) === null) {
+                continue;
+            }
+            $rows[] = [$side === 'home' ? 0 : 1, $point, $direction === 'over' ? 0 : 1, "{$side}_{$direction}_{$point}",
+                ['name' => trim($team).($direction === 'over' ? ' : plus de ' : ' : moins de ').$point, 'odds' => $selection->odds]];
+        }
+
+        return $this->lineSelections($rows, 'buts par équipe');
+    }
+
+    /**
+     * Total pair ou impair : exactement un « Impair » et un « Pair ».
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function oddEvenSelections(MarketData $source): array
+    {
+        $odds = [];
+        foreach ($source->selections as $selection) {
+            $key = self::ODD_EVEN_NAMES[mb_strtolower(trim($selection->name))]
+                ?? throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+            if (isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection en double : {$selection->name}");
+            }
+            $odds[$key] = ['name' => $key === 'odd' ? 'Impair' : 'Pair', 'odds' => $selection->odds];
+        }
+
+        if (! isset($odds['odd'], $odds['even'])) {
+            throw new \InvalidArgumentException('Marché pair/impair incomplet.');
+        }
+
+        return ['odd' => $odds['odd'], 'even' => $odds['even']];
+    }
+
+    /**
+     * Sélections d'un marché à plusieurs lignes, triées (critères de tri en tête de chaque ligne, puis clé et
+     * sélection), sans doublon et au moins deux.
+     *
+     * @param  list<list<mixed>>  $rows
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function lineSelections(array $rows, string $label): array
+    {
+        usort($rows, function (array $a, array $b) {
+            foreach (array_keys(array_slice($a, 0, -2)) as $i) {
+                $order = is_string($a[$i]) ? bccomp($a[$i], $b[$i], 2) : $a[$i] <=> $b[$i];
+                if ($order !== 0) {
+                    return $order;
+                }
+            }
+
+            return 0;
+        });
+
+        $odds = [];
+        foreach ($rows as $row) {
+            [$key, $selection] = array_slice($row, -2);
+            if (isset($odds[$key])) {
+                throw new \InvalidArgumentException("Sélection en double : {$key}");
+            }
+            $odds[$key] = $selection;
+        }
+
+        if (count($odds) < 2) {
+            throw new \InvalidArgumentException("Marché {$label} incomplet.");
+        }
+
+        return $odds;
+    }
+
+    /**
+     * Ligne entière ou demi-but ("-1.50" → "-1.5", "+2" → "2") ; null si absente, invalide, en quart de but, ou
+     * négative pour un total.
+     */
+    private function halfLine(?string $point, bool $signed): ?string
+    {
+        if ($point === null || ! preg_match('/^[+-]?\d{1,3}(\.\d{1,2})?$/', $point)) {
+            return null;
+        }
+
+        $value = bcadd(ltrim($point, '+'), '0', 2);
+        if (! in_array(substr($value, -2), ['00', '50'], true) || (! $signed && bccomp($value, '0', 2) <= 0)) {
+            return null;
+        }
+
+        $value = rtrim(rtrim($value, '0'), '.');
+
+        return $value === '-0' ? '0' : $value;
+    }
+
+    /** "1.5" → "+1.5", "-1.5" → "-1.5", "0" → "0". */
+    private function signed(string $line): string
+    {
+        return bccomp($line, '0', 2) > 0 ? "+{$line}" : $line;
     }
 
     /** Ligne en chaîne décimale positive sans zéros inutiles ("2.50" → "2.5", "3.0" → "3") ; null si invalide. */
