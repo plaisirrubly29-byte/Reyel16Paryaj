@@ -7,6 +7,8 @@ import { Spinner } from '../../../shared/components/Spinner';
 import { formatKickoff } from '../../catalogue/format';
 import { TICKET_STATUS_LABELS, useBets, type BetTicket } from '../api/bets';
 import { BetCodeShare } from '../tickets/BetCodeShare';
+import { virtualGamesEnabled } from '../../virtual/api/virtualGames';
+import { VirtualBets } from '../../virtual/components/VirtualBets';
 
 /** MES PARIS : les tickets du joueur connecté, enregistrés par le serveur (page protégée par RequireAuth). */
 export function MyBetsPage() {
@@ -39,6 +41,8 @@ export function MyBetsPage() {
       )}
 
       <Pagination meta={bets.data?.meta} onPage={(next) => { setParams({ page: String(next) }); window.scrollTo({ top: 0 }); }} />
+
+      {virtualGamesEnabled() && <VirtualBets title="Jeux virtuels" />}
     </section>
   );
 }
