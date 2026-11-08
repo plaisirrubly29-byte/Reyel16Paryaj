@@ -36,6 +36,9 @@ class AccessAndSessionTest extends TestCase
         'GET api/v1/competitions',
         'GET api/v1/events',
         'GET api/v1/events/{id}/markets',
+        // Borlette : tirages et résultats publiés, en lecture seule (404 tant que LOTTERY_ENABLED=false).
+        'GET api/v1/lottery/draws',
+        'GET api/v1/lottery/results',
     ];
 
     /** Cookie de session (valeur chiffrée telle que reçue par le navigateur). */
