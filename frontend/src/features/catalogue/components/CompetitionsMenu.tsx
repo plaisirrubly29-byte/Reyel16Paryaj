@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
+import { useLotteryDraws } from '../../lottery/api/lottery';
 import { useSports } from '../api/catalogue';
 
 function normalize(value: string): string {
@@ -15,6 +16,7 @@ function normalize(value: string): string {
  */
 export function CompetitionsMenu() {
   const sports = useSports();
+  const lottery = useLotteryDraws().data ?? [];
   const { pathname, search } = useLocation();
   const [open, setOpen] = useState(false);
   const [sportSlug, setSportSlug] = useState<string | null>(null);
@@ -112,6 +114,15 @@ export function CompetitionsMenu() {
                     </button>
                   </li>
                 ))}
+                {lottery.length > 0 && (
+                  <li>
+                    <Link to="/borlette" className="competitions-sport-link">
+                      <Icon name="lottery" size={20} />
+                      <span>Borlette</span>
+                      <span className="competitions-count">{lottery.length}</span>
+                    </Link>
+                  </li>
+                )}
               </ul>
 
               {sport && (

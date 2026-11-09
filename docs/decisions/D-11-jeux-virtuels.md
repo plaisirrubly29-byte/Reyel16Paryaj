@@ -69,7 +69,10 @@ Reprises du prestataire retenu et validées par écrit. Rien n'est fixé avant.
 - **Frontend (Rubly)** : un accueil des jeux virtuels, l'écran d'une épreuve (widget ou flux du prestataire, coupon,
   compte à rebours fourni par le serveur), les résultats, et les paris virtuels dans « Mes paris ». Les montants
   et les cotes sont affichés tels que le serveur les renvoie.
-- **Tant que JV-1 et JV-5 n'ont pas de réponse**, le menu « Jeux virtuels » reste absent du site, même en Staging.
+- **Tant que JV-1 et JV-5 n'ont pas de réponse**, le menu « Jeux virtuels » reste absent du site public.
+  Option de build `VITE_VIRTUAL_GAMES` (désactivée par défaut). **Exception décidée par Rubly PLAISIR le 2026-11-08 :**
+  activée sur le Staging pour développer les écrans, avec un simulateur du prestataire côté navigateur
+  (`frontend/src/features/virtual/api/simulator.ts`) en attendant l'API et le prestataire.
 
 ## 7. Conditions pour passer à « Validée »
 
