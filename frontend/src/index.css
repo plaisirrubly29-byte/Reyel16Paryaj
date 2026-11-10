@@ -1462,6 +1462,25 @@ a.match-line-teams:hover { color: var(--brand); }
   .rg-card { padding: 1rem; }
 }
 
+/* Appareils connectés (V2-C06) */
+.devices { max-width: 860px; }
+.device-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.device { display: flex; align-items: center; gap: 0.9rem; padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
+.device:first-child { padding-top: 0; }
+.device:last-child { border-bottom: 0; padding-bottom: 0; }
+.device-icon { display: inline-grid; place-items: center; width: 2.8rem; height: 2.8rem; flex: none; border-radius: 12px; background: var(--surface-2); color: var(--navy); }
+.device.is-current .device-icon { background: var(--success-soft); color: var(--success); }
+.device-text { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.device-text strong { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; }
+.device-current { padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--success-soft); color: var(--success); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.device .btn { flex: none; }
+@media (max-width: 560px) {
+  /* Le texte prend toute la ligne à droite de l'icône : le bouton passe dessous, aligné sur le texte. */
+  .device { flex-wrap: wrap; }
+  .device-text { flex: 1 1 calc(100% - 3.7rem); }
+  .device .btn { margin-left: 3.7rem; }
+}
+
 /* Pied de page bleu nuit, liseré rouge */
 .site-footer { background: linear-gradient(180deg, var(--navy), #050b26); border-top: 4px solid var(--accent); color: rgba(255, 255, 255, 0.82); margin-top: 1.5rem; }
 .footer-inner {

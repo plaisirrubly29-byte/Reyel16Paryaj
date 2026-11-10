@@ -12,6 +12,7 @@ import { VirtualEventPage } from '../features/virtual/pages/VirtualEventPage';
 import { VirtualGamesPage } from '../features/virtual/pages/VirtualGamesPage';
 import { RequireAuth } from '../features/auth/components/RequireAuth';
 import { AccountPage } from '../features/auth/pages/AccountPage';
+import { DevicesPage } from '../features/auth/pages/DevicesPage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
@@ -87,6 +88,7 @@ export const routes = [
           { path: 'loyalty', element: <LoyaltyPage /> },
           { path: 'referral', element: <ReferralPage /> },
           { path: 'account', element: <AccountPage /> },
+          { path: 'devices', element: <DevicesPage /> },
           { path: 'responsible-gaming', element: <ResponsibleSettingsPage /> },
           { path: 'messages', element: <MessagesPage /> },
         ],
