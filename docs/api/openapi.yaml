@@ -16,6 +16,8 @@ tags:
   - name: System
   - name: Auth
   - name: Catalogue
+  - name: Lottery
+    description: Borlette — tirages et résultats publiés par le fournisseur (404 tant que LOTTERY_ENABLED=false)
   - name: Bets
   - name: Wallet
   - name: ResponsibleGaming
@@ -403,6 +405,49 @@ paths:
           description: OK
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
         "404": { description: Match inconnu ou plus proposé }
+
+  /lottery/draws:
+    get:
+      tags: [Lottery]
+      summary: Tirages de borlette actifs, avec le prochain tirage et le dernier résultat
+      description: |
+        Public. Tirages proposés par le fournisseur (ex. New York Midi, Floride Soir), triés par heure locale.
+        Répond 404 tant que la borlette n'est pas activée (LOTTERY_ENABLED=false).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LotteryDraw" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /lottery/results:
+    get:
+      tags: [Lottery]
+      summary: Résultats publiés des tirages, du plus récent au plus ancien
+      description: |
+        Public. Un résultat n'est publié qu'après l'heure du tirage et n'est jamais modifié par la synchronisation.
+        Répond 404 tant que la borlette n'est pas activée (LOTTERY_ENABLED=false).
+      parameters:
+        - { name: draw, in: query, description: Clé du tirage (voir /lottery/draws), schema: { type: string, example: ny_midday } }
+        - { name: date, in: query, description: Date locale du tirage, schema: { type: string, format: date } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PerPage" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LotteryResult" } }
+                  links: { type: object }
+                  meta: { type: object }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
 
   /bets:
     post:
@@ -2174,6 +2219,32 @@ components:
         from: { type: [integer, "null"] }
         to: { type: [integer, "null"] }
         path: { type: string }
+    LotteryDraw:
+      type: object
+      properties:
+        key: { type: string, example: ny_midday }
+        name: { type: string, example: New York Midi }
+        draw_time: { type: string, example: "14:30", description: Heure locale du tirage (HH:MM) dans `timezone` }
+        timezone: { type: string, example: America/New_York }
+        days: { type: [array, "null"], items: { type: integer, minimum: 1, maximum: 7 }, description: "Jours ISO (1 = lundi) ; null = tous les jours" }
+        next_draw_at: { type: [string, "null"], format: date-time, description: Prochain tirage (UTC) }
+        latest_result: { oneOf: [{ $ref: "#/components/schemas/LotteryResult" }, { type: "null" }] }
+    LotteryResult:
+      type: object
+      properties:
+        draw: { type: object, properties: { key: { type: string, example: ny_midday }, name: { type: string, example: New York Midi } } }
+        date: { type: string, format: date, description: Date locale du tirage }
+        drawn_at: { type: string, format: date-time, description: Heure du tirage (UTC) }
+        lots:
+          type: array
+          description: 1er, 2e et 3e lot, deux chiffres chacun (chaînes, zéro initial conservé)
+          minItems: 3
+          maxItems: 3
+          items: { type: string, pattern: "^[0-9]{2}$" }
+          example: ["07", "45", "12"]
+        pick3: { type: [string, "null"], pattern: "^[0-9]{3}$", example: "407" }
+        pick4: { type: [string, "null"], pattern: "^[0-9]{4}$", example: "4512" }
+        published_at: { type: [string, "null"], format: date-time, description: Publication chez le fournisseur }
     CatalogueEvent:
       type: object
       properties:
