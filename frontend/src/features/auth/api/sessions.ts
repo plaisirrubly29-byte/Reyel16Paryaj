@@ -12,7 +12,8 @@ export type DeviceSession = {
   current: boolean;
 };
 
-const KEY = ['me', 'sessions'] as const;
+// Pas sous la clé « me » : la déconnexion garde la session en cache et oublie tout le reste, dont cette liste.
+const KEY = ['sessions'] as const;
 
 /** Appareils connectés, celui en cours d'abord (ordre fourni par le serveur). */
 export function useSessions() {

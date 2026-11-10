@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { guest, mockApi, player, renderApp } from '../../test/renderApp';
+import { currentQueryClient, guest, mockApi, player, renderApp } from '../../test/renderApp';
 import type { DeviceSession } from './api/sessions';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -145,6 +145,26 @@ describe('appareils connectés', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'Gérer' }));
     expect(await screen.findByRole('heading', { name: 'Appareils connectés', level: 1 })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/devices');
+  });
+
+  it('oublie la liste des appareils à la déconnexion (appareil partagé)', async () => {
+    let connected = true;
+    mockApi({
+      ...base,
+      'GET /me': () => (connected ? { status: 200, body: { data: player } } : guest),
+      'GET /me/sessions': { status: 200, body: { data: [current, android] } },
+      'POST /auth/logout': () => { connected = false; return { status: 204 }; },
+    });
+    const router = renderApp('/devices');
+    await screen.findByText('Chrome sur Android');
+    const cached = () => currentQueryClient().getQueryCache().findAll().map((q) => q.queryKey.join('/'));
+    expect(cached()).toContain('sessions');
+
+    await router.navigate('/account');
+    await userEvent.click(await screen.findByRole('button', { name: 'Se déconnecter' }));
+
+    await waitFor(() => expect(currentQueryClient().getQueryData(['me'])).toBeNull());
+    expect(cached()).not.toContain('sessions');
   });
 
   it('renvoie un visiteur vers la connexion', async () => {
