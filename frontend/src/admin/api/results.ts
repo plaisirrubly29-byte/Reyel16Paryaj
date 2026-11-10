@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Envelope, type Paginated } from '../../shared/api/client';
+import type { AdminEvent } from './events';
 import type { TicketStatus } from './tickets';
 
 export type ResultStatus = 'final' | 'cancelled';
@@ -73,6 +74,25 @@ export const outcomeLabel = (o: Outcome) => (o.status === 'cancelled' ? 'Match a
 export const currentLabel = (c: ResultCorrection) => (c.current ? outcomeLabel(c.current) : 'Aucun résultat');
 
 export const sourceLabel = (source: string) => (source === 'manual' ? 'Administration' : `Fournisseur (${source})`);
+
+/** Premier résultat saisi à la main (V2-D04), et non correction d'un résultat déjà en vigueur. */
+export const isFirstResult = (c: Pick<ResultCorrection, 'kind'>) => c.kind === 'initial';
+
+/**
+ * Délai après le coup d'envoi avant qu'un premier résultat puisse être saisi à la main. Indicatif : sert à
+ * signaler les matchs à traiter ; le serveur décide (409 result_too_early, details.available_at).
+ */
+export const MANUAL_RESULT_DELAY_HOURS = 3;
+
+/**
+ * Match commencé depuis assez longtemps, sans résultat du fournisseur : à saisir à la main (V2-D04).
+ * Un match annulé ou reporté n'attend pas de score : il suit ses propres règles (D-05).
+ */
+export function awaitsManualResult(event: Pick<AdminEvent, 'starts_at' | 'status' | 'result_received_at'>, now = Date.now()): boolean {
+  return event.result_received_at === null
+    && event.status !== 'cancelled' && event.status !== 'postponed'
+    && now >= new Date(event.starts_at).getTime() + MANUAL_RESULT_DELAY_HOURS * 3_600_000;
+}
 
 export function useResultCorrections(filters: { status?: CorrectionStatus; page: number }) {
   return useQuery({
