@@ -108,7 +108,7 @@ describe('espace joueur', () => {
     expect(screen.getByRole('link', { name: 'Toutes mes transactions' })).toHaveAttribute('href', '/transactions');
   });
 
-  it('affiche les 9 rubriques du compte, celles à venir signalées', async () => {
+  it('affiche les 10 rubriques du compte, celles à venir signalées', async () => {
     mockApi({
       'GET /me': { status: 200, body: { data: player } },
       'GET /wallet': { status: 200, body: wallet },
@@ -118,7 +118,7 @@ describe('espace joueur', () => {
 
     const nav = await screen.findByRole('navigation', { name: 'Rubriques du compte' });
     expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
-      '/wallet', '/bets', '/coupons', '/transactions', '/loyalty', '/referral', '/account', '/responsible-gaming', '/messages',
+      '/wallet', '/bets', '/coupons', '/transactions', '/loyalty', '/referral', '/account', '/devices', '/responsible-gaming', '/messages',
     ]);
     expect(within(nav).getAllByText('Bientôt')).toHaveLength(3);
     expect(screen.getByRole('heading', { name: 'Points de fidélité', level: 1 })).toBeInTheDocument();

@@ -122,6 +122,9 @@ export function AccountPage() {
               <InfoRow icon="lock" label="Mot de passe">
                 <Link to="/forgot-password" className="profile-link">Réinitialiser</Link>
               </InfoRow>
+              <InfoRow icon="monitor" label="Appareils connectés">
+                <Link to="/devices" className="profile-link">Gérer</Link>
+              </InfoRow>
               {user.is_admin && (
                 <InfoRow icon="shield" label="Double authentification">
                   {user.mfa.enabled ? <span className="profile-ok">Activée</span> : <span className="profile-missing">Non activée</span>}

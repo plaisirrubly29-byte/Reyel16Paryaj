@@ -61,6 +61,7 @@ const PATHS = {
   gamepad: 'M7 8h10a4 4 0 0 1 4 4v2.5a2.5 2.5 0 0 1-4.4 1.6L15 14H9l-1.6 2.1A2.5 2.5 0 0 1 3 14.5V12a4 4 0 0 1 4-4zM7.5 10.5v3M6 12h3M15.5 11h.01M17.5 13h.01',
   dice: 'M6 3.5h12A2.5 2.5 0 0 1 20.5 6v12a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 18V6A2.5 2.5 0 0 1 6 3.5zM8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01',
   close: 'M6 6l12 12M18 6 6 18',
+  monitor: 'M4 5h16v11H4zM8.5 20h7M12 16v4',
 } as const;
 
 export type IconName = keyof typeof PATHS;
