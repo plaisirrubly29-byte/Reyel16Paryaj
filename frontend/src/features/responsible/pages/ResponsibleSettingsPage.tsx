@@ -10,8 +10,8 @@ import { Spinner } from '../../../shared/components/Spinner';
 import { TextField } from '../../../shared/components/TextField';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import {
-  durationLabel, PERIODS, useResponsibleGaming, usePause, useSelfExclude, useSetLimit,
-  type LimitPeriod, type ResponsibleGaming, type StakeLimit,
+  durationLabel, limitsOf, PERIODS, useResponsibleGaming, usePause, useSelfExclude, useSetLimit,
+  type LimitKind, type LimitPeriod, type ResponsibleGaming, type StakeLimit,
 } from '../api/responsibleGaming';
 
 /** « 9 novembre 2026 à 18:45 » (heure locale du joueur). */
@@ -23,8 +23,8 @@ function formatDateTime(iso: string): string {
 const refused = (err: unknown) => err instanceof ApiError && err.status !== 0;
 
 /**
- * Jeu responsable du joueur connecté (P7-02) : limites de mise, pause, auto-exclusion.
- * Le serveur applique ces règles (POST /bets) et calcule les mises de la période : l'écran les affiche tels quels.
+ * Jeu responsable du joueur connecté (P7-02) : limites de mise et de dépôt (V2-B06), pause, auto-exclusion.
+ * Le serveur applique ces règles (paris et dépôts) et calcule les montants de la période : l'écran les affiche tels quels.
  */
 export function ResponsibleSettingsPage() {
   const rg = useResponsibleGaming();
@@ -34,7 +34,7 @@ export function ResponsibleSettingsPage() {
       <header className="rg-head">
         <h1>Jeu responsable</h1>
         <p className="muted">
-          Fixez-vous des limites, faites une pause ou excluez-vous du jeu : ces réglages s'appliquent à tous vos paris.{' '}
+          Fixez-vous des limites de mise et de dépôt, faites une pause ou excluez-vous du jeu.{' '}
           <Link to="/jeu-responsable">Conseils et aide</Link>
         </p>
       </header>
@@ -48,7 +48,8 @@ export function ResponsibleSettingsPage() {
               <p>Vous ne pouvez pas parier jusqu'au {formatDateTime(rg.data.pause.ends_at)}. Votre solde et vos tickets restent accessibles.</p>
             </Alert>
           )}
-          <LimitsCard state={rg.data} />
+          <LimitsCard state={rg.data} kind="stake" />
+          <LimitsCard state={rg.data} kind="deposit" />
           <PauseCard state={rg.data} />
           <ExclusionCard durations={rg.data.options.exclusion_durations} />
         </>
@@ -72,27 +73,41 @@ function Card({ id, icon, title, intro, tone, children }: { id: string; icon: Ic
   );
 }
 
-function LimitsCard({ state }: { state: ResponsibleGaming }) {
+/** Textes propres à chaque type de limite ; la règle (baisse immédiate, hausse différée) est la même. */
+const KINDS: Record<LimitKind, { id: string; icon: IconName; title: string; subject: string; used: string; progress: string }> = {
+  stake: { id: 'rg-limits', icon: 'scale', title: 'Limites de mise', subject: 'Le total de vos mises', used: 'Misé', progress: 'Mises' },
+  deposit: { id: 'rg-deposit-limits', icon: 'deposit', title: 'Limites de dépôt', subject: 'Le total de vos dépôts', used: 'Déposé', progress: 'Dépôts' },
+};
+
+function LimitsCard({ state, kind }: { state: ResponsibleGaming; kind: LimitKind }) {
   const delay = state.options.limit_increase_delay_days;
+  const limits = limitsOf(state, kind);
+  const text = KINDS[kind];
+  // Serveur antérieur aux limites de dépôt (V2-B06) : la carte n'est pas proposée plutôt que vide.
+  if (!limits) return null;
 
   return (
     <Card
-      id="rg-limits"
-      icon="scale"
-      title="Limites de mise"
-      intro={`Le total de vos mises ne pourra pas dépasser ces montants. Une baisse s'applique tout de suite ; une hausse ou une suppression après ${delay} jours de réflexion.`}
+      id={text.id}
+      icon={text.icon}
+      title={text.title}
+      intro={`${text.subject} ne pourra pas dépasser ces montants. Une baisse s'applique tout de suite ; une hausse ou une suppression après ${delay} jours de réflexion.`}
     >
+      {kind === 'deposit' && (
+        <p className="muted small">Un dépôt qui ferait dépasser une de ces limites est refusé, en ligne comme en agence.</p>
+      )}
       <div className="rg-limits">
         {PERIODS.map(({ period, label }) => (
-          <LimitRow key={period} period={period} label={label} limit={state.limits[period]} />
+          <LimitRow key={period} kind={kind} period={period} label={label} limit={limits[period]} />
         ))}
       </div>
     </Card>
   );
 }
 
-function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string; limit: StakeLimit }) {
-  const setLimit = useSetLimit();
+function LimitRow({ kind, period, label, limit }: { kind: LimitKind; period: LimitPeriod; label: string; limit: StakeLimit }) {
+  const setLimit = useSetLimit(kind);
+  const text = KINDS[kind];
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [invalid, setInvalid] = useState(false);
@@ -103,7 +118,7 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
   function send(amountMinor: number | null) {
     setLimit.mutate({ period, amountMinor, idempotencyKey }, {
       onSuccess: (state) => {
-        const pending = state.limits[period].pending;
+        const pending = limitsOf(state, kind)?.[period].pending ?? null;
         // La date d'effet d'une hausse ou d'une suppression est affichée juste au-dessus (pending).
         setNotice(pending ? `${pending.amount ? 'Hausse' : 'Suppression'} enregistrée, après le délai de réflexion.` : 'Limite appliquée.');
         setEditing(false);
@@ -136,10 +151,10 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
       </div>
 
       {limit.amount && (
-        <progress className="rg-progress" value={limit.used.minor} max={limit.amount.minor} aria-label={`Mises ${label.toLowerCase()}`} />
+        <progress className="rg-progress" value={limit.used.minor} max={limit.amount.minor} aria-label={`${text.progress} ${label.toLowerCase()}`} />
       )}
       <p className="rg-usage">
-        Misé : <MoneyText value={limit.used} />
+        {text.used} : <MoneyText value={limit.used} />
         {limit.remaining && <> · Reste : <MoneyText value={limit.remaining} /></>}
       </p>
       {limit.pending && (
@@ -154,7 +169,7 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
       {editing ? (
         <form className="rg-limit-form" onSubmit={submit} noValidate>
           <TextField
-            label={`Nouvelle limite ${label.toLowerCase()} (HTG)`}
+            label={`Nouvelle limite ${kind === 'deposit' ? 'de dépôt ' : ''}${label.toLowerCase()} (HTG)`}
             inputMode="decimal"
             autoComplete="off"
             placeholder="Ex. 5000"

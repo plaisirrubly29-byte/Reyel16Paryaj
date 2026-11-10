@@ -14,9 +14,14 @@ export type StakeLimit = {
   pending: { amount: Money | null; effective_at: string } | null;
 };
 
-/** GET /responsible-gaming : état calculé par le serveur (mises de la période, reste, pause). */
+/** Limite de mise (P7-02) ou de dépôt (V2-B06) : même règle, baisse immédiate, hausse après le délai de réflexion. */
+export type LimitKind = 'stake' | 'deposit';
+
+/** GET /responsible-gaming : état calculé par le serveur (mises et dépôts de la période, reste, pause). */
 export type ResponsibleGaming = {
   limits: Record<LimitPeriod, StakeLimit>;
+  /** Limites de dépôt (V2-B06) ; `used` = dépôts de la période. Absentes d'un serveur antérieur à V2-B06. */
+  deposit_limits?: Record<LimitPeriod, StakeLimit>;
   pause: { active: boolean; ends_at: string | null };
   options: { pause_durations: string[]; exclusion_durations: string[]; limit_increase_delay_days: number };
 };
@@ -53,10 +58,16 @@ function useStateMutation<T>(request: (input: T) => Promise<Envelope<Responsible
   });
 }
 
-export function useSetLimit() {
+const LIMIT_PATHS: Record<LimitKind, string> = { stake: 'limits', deposit: 'deposit-limits' };
+
+/** Fixer, relever ou supprimer (amountMinor null) une limite de mise ou de dépôt. */
+export function useSetLimit(kind: LimitKind = 'stake') {
   return useStateMutation(({ period, amountMinor, idempotencyKey }: { period: LimitPeriod; amountMinor: number | null; idempotencyKey: string }) =>
-    api(`/responsible-gaming/limits/${period}`, { method: 'PUT', body: { amount_minor: amountMinor }, idempotencyKey }));
+    api(`/responsible-gaming/${LIMIT_PATHS[kind]}/${period}`, { method: 'PUT', body: { amount_minor: amountMinor }, idempotencyKey }));
 }
+
+/** Limites d'un type dans l'état du serveur ; undefined pour des limites de dépôt que le serveur ne gère pas encore. */
+export const limitsOf = (state: ResponsibleGaming, kind: LimitKind) => (kind === 'stake' ? state.limits : state.deposit_limits);
 
 export function usePause() {
   return useStateMutation(({ duration, idempotencyKey }: { duration: string; idempotencyKey: string }) =>
