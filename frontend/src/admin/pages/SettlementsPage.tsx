@@ -2,7 +2,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { DataTable, type Column } from '../../shared/components/DataTable';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Pagination } from '../../shared/components/Pagination';
-import { CORRECTION_STATUS_LABELS, currentLabel, outcomeLabel, sourceLabel, useResultCorrections, type CorrectionStatus, type ResultCorrection } from '../api/results';
+import {
+  CORRECTION_STATUS_LABELS, currentLabel, isFirstResult, MANUAL_RESULT_DELAY_HOURS, outcomeLabel, sourceLabel, useResultCorrections,
+  type CorrectionStatus, type ResultCorrection,
+} from '../api/results';
 import { PageHeader } from '../components/PageHeader';
 import { dateTime } from '../api/events';
 
@@ -25,7 +28,13 @@ const columns: Column<ResultCorrection>[] = [
       </div>
     ),
   },
-  { key: 'change', header: 'Correction', render: (c) => <span className="nowrap">{currentLabel(c)} → <strong>{outcomeLabel(c.proposed)}</strong></span> },
+  {
+    key: 'change',
+    header: 'Demande',
+    render: (c) => (isFirstResult(c)
+      ? <span className="nowrap">Premier résultat : <strong>{outcomeLabel(c.proposed)}</strong></span>
+      : <span className="nowrap">{currentLabel(c)} → <strong>{outcomeLabel(c.proposed)}</strong></span>),
+  },
   {
     key: 'by',
     header: 'Demandée par',
@@ -60,8 +69,8 @@ export function SettlementsPage() {
       <PageHeader
         title="Résultats & règlement"
         subtitle={status === 'pending' && total !== undefined
-          ? `${total} correction${total > 1 ? 's' : ''} de résultat en attente de validation.`
-          : 'Corrections de résultat : demande, validation par un second administrateur, réévaluation des tickets.'}
+          ? `${total} demande${total > 1 ? 's' : ''} de résultat en attente de validation.`
+          : 'Résultats saisis à la main et corrections : demande, validation par un second administrateur, règlement des tickets.'}
       />
 
       <div className="admin-card">
@@ -75,17 +84,19 @@ export function SettlementsPage() {
           </div>
         </div>
         <p className="muted small">
-          Pour demander une correction, ouvrez le match concerné dans <Link to="/admin/events">Événements & marchés</Link>.
+          Pour saisir un résultat que le fournisseur n'a pas publié, ou demander une correction, ouvrez le match dans{' '}
+          <Link to="/admin/events">Événements & marchés</Link> : un match commencé depuis plus de {MANUAL_RESULT_DELAY_HOURS} h sans résultat
+          y est signalé « Résultat manquant ».
         </p>
 
         <ErrorAlert error={corrections.error} onRetry={() => corrections.refetch()} />
         <DataTable
-          caption="Corrections de résultat"
+          caption="Demandes de résultat"
           columns={columns}
           rows={corrections.data?.data}
           rowKey={(c) => c.id}
           loading={corrections.isFetching}
-          empty={status === 'pending' ? 'Aucune correction en attente.' : 'Aucune demande de correction.'}
+          empty={status === 'pending' ? 'Aucune demande en attente.' : 'Aucune demande.'}
         />
         <Pagination meta={corrections.data?.meta} onPage={(p) => update({ page: String(p) })} />
       </div>
