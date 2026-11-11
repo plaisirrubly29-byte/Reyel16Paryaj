@@ -331,6 +331,63 @@ class CatalogueSyncTest extends TestCase
         $this->assertSame(3, Event::count());
     }
 
+    public function test_a_pattern_syncs_only_the_matching_active_competitions(): void
+    {
+        // « tennis_* » chez The Odds API : une clé par tournoi, qui change au fil de la saison.
+        config(['sports_data.sports' => ['basketball_*'], 'sports_data.budget_enabled' => false]);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions : basketball_nba')
+            ->doesntExpectOutputToContain('soccer_epl')
+            ->assertSuccessful();
+
+        $this->assertSame(['basketball_nba'], Competition::pluck('external_key')->all());
+    }
+
+    public function test_patterns_and_exact_keys_can_be_mixed(): void
+    {
+        // Le motif « soccer_* » ne prend pas le vainqueur final ; la clé exacte reste demandée telle quelle.
+        config(['sports_data.sports' => ['soccer_*', 'basketball_nba'], 'sports_data.budget_enabled' => false]);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions : basketball_nba, soccer_epl')
+            ->doesntExpectOutputToContain('soccer_fifa_world_cup_winner')
+            ->assertSuccessful();
+
+        $this->assertSame(3, Event::count());
+    }
+
+    public function test_a_competition_removed_from_the_list_leaves_the_catalogue_and_comes_back_when_listed_again(): void
+    {
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->artisan('sports-data:sync')->assertSuccessful();
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(3, 'data');
+
+        // Le basketball n'est plus voulu : retiré du catalogue dès la synchro suivante, sans appel pour lui.
+        config(['sports_data.sports' => ['soccer_epl']]);
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Compétitions retirées au catalogue (SPORTS_DATA_SPORTS) : basketball_nba')
+            ->assertSuccessful();
+
+        $this->assertFalse(Competition::where('external_key', 'basketball_nba')->value('is_active'));
+        $this->assertTrue(Competition::where('external_key', 'soccer_epl')->value('is_active'));
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(2, 'data');
+        $this->assertSame([], collect($this->getJson('/api/v1/sports')->json('data'))->where('slug', 'basketball')->all());
+
+        // Une synchro manuelle d'une compétition précise ne change pas la sélection.
+        $this->artisan('sports-data:sync', ['--competition' => ['basketball_nba']])->assertSuccessful();
+        $this->assertFalse(Competition::where('external_key', 'basketball_nba')->value('is_active'));
+
+        // De nouveau dans la liste (ici par motif) : de nouveau au catalogue.
+        config(['sports_data.sports' => ['soccer_epl', 'basketball_*']]);
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Compétitions activées au catalogue (SPORTS_DATA_SPORTS) : basketball_nba')
+            ->assertSuccessful();
+
+        $this->assertTrue(Competition::where('external_key', 'basketball_nba')->value('is_active'));
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(3, 'data');
+    }
+
     public function test_competition_name_and_country_come_from_the_provider_title_without_a_configured_label(): void
     {
         config(['sports_data.competition_labels' => []]);

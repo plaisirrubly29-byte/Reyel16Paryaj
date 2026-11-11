@@ -57,6 +57,9 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 ENV VITE_API_URL=/api/v1
+# Jeux virtuels (V2-D08, D-11) : masqués sauf si le build les demande (activés par deploy-staging.yml).
+ARG VITE_VIRTUAL_GAMES=false
+ENV VITE_VIRTUAL_GAMES=${VITE_VIRTUAL_GAMES}
 RUN npm run build
 
 # ---------------------------------------------------------------------------------------------------------------

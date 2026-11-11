@@ -28,6 +28,8 @@ test('deux paris simples placés depuis le même coupon', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: `1 ${first.home} à 2.00` }).first().click();
   await page.getByRole('button', { name: `1 ${second.home} à 2.00` }).first().click();
+  // Sur ordinateur, le panier est un panneau flottant ouvert par le bouton « Panier ».
+  await page.getByRole('button', { name: /^Panier/ }).click();
 
   const slip = page.getByRole('complementary', { name: 'Coupon' });
   const mode = slip.getByRole('group', { name: 'Type de pari' });

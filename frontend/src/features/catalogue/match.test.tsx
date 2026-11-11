@@ -28,8 +28,8 @@ const MATCH = {
     {
       id: 'm2', key: 'totals', name: 'Nombre de buts', line: '2.5', odds_version: 1, odds_updated_at: inHours(0), bettable: true,
       selections: [
-        { id: 's4', key: 'over', label: '+2.5', name: 'Plus de 2.5', odds: '1.80' },
-        { id: 's5', key: 'under', label: '-2.5', name: 'Moins de 2.5', odds: '2.00' },
+        { id: 's4', key: 'over', label: '> 2.5', name: 'Plus de 2.5', odds: '1.80' },
+        { id: 's5', key: 'under', label: '< 2.5', name: 'Moins de 2.5', odds: '2.00' },
       ],
     },
     {
@@ -68,28 +68,28 @@ describe("page d'un match", () => {
     const result = screen.getByRole('region', { name: 'Résultat du match (1X2)' });
     expect(within(result).getAllByRole('button')).toHaveLength(3);
     const goals = screen.getByRole('region', { name: 'Nombre de buts' });
-    expect(within(goals).getByRole('button', { name: 'Plus de 2.5 à 1.80' })).toHaveClass('favorite');
-    expect(within(goals).getByRole('button', { name: 'Moins de 2.5 à 2.00' })).toBeInTheDocument();
+    expect(within(goals).getByRole('button', { name: '> 2.5 Plus de 2.5 à 1.80' })).toHaveClass('favorite');
+    expect(within(goals).getByRole('button', { name: '< 2.5 Moins de 2.5 à 2.00' })).toBeInTheDocument();
   });
 
   it('ajoute un pari « Nombre de buts » au coupon avec le nom du marché', async () => {
     api();
     renderApp('/events/11');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Plus de 2.5 à 1.80' }));
+    await userEvent.click(await screen.findByRole('button', { name: '> 2.5 Plus de 2.5 à 1.80' }));
 
     const slip = screen.getByRole('complementary', { name: 'Coupon' });
-    expect(within(slip).getByText('+2.5 · Plus de 2.5')).toBeInTheDocument();
+    expect(within(slip).getByText('> 2.5 · Plus de 2.5')).toBeInTheDocument();
     expect(within(slip).getByText(/Nombre de buts ·/)).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem('r16p.betslip') ?? '[]')).toEqual([
       expect.objectContaining({ selectionId: 's4', marketId: 'm2', oddsVersion: 1, odds: '1.80', market: 'Nombre de buts' }),
     ]);
 
     // Un marché différent du même match peut être ajouté au coupon.
-    await userEvent.click(screen.getByRole('button', { name: 'Arsenal à 2.10' }));
+    await userEvent.click(screen.getByRole('button', { name: '1 Arsenal à 2.10' }));
     expect(within(slip).getByLabelText('2 sélections')).toBeInTheDocument();
     expect(within(slip).getByText('1 · Arsenal')).toBeInTheDocument();
-    expect(within(slip).getByText('+2.5 · Plus de 2.5')).toBeInTheDocument();
+    expect(within(slip).getByText('> 2.5 · Plus de 2.5')).toBeInTheDocument();
   });
 
   it('permet de miser sur un match en direct lorsque le marché est ouvert', async () => {
@@ -97,7 +97,7 @@ describe("page d'un match", () => {
     renderApp('/events/11');
 
     expect(await screen.findByText('EN DIRECT')).toBeInTheDocument();
-    const odds = screen.getByRole('button', { name: 'Arsenal à 2.10' });
+    const odds = screen.getByRole('button', { name: '1 Arsenal à 2.10' });
     expect(odds).toBeEnabled();
     await userEvent.click(odds);
 
@@ -122,7 +122,7 @@ describe("page d'un match", () => {
 
     await userEvent.clear(screen.getByRole('searchbox', { name: 'Rechercher un marché ou un joueur' }));
     await userEvent.click(screen.getByRole('button', { name: 'Score exact' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Arsenal 2-1 Chelsea à 8.50' }));
+    await userEvent.click(screen.getByRole('button', { name: '2-1 Arsenal 2-1 Chelsea à 8.50' }));
 
     const slip = screen.getByRole('complementary', { name: 'Coupon' });
     expect(within(slip).getByLabelText('2 sélections')).toBeInTheDocument();
@@ -136,8 +136,8 @@ describe("page d'un match", () => {
     renderApp('/events/11');
 
     expect(await screen.findByText('Cotes en cours de mise à jour')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Plus de 2.5 à 1.80 (cote en cours de mise à jour)' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Arsenal à 2.10' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '> 2.5 Plus de 2.5 à 1.80 (cote en cours de mise à jour)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '1 Arsenal à 2.10' })).toBeEnabled();
   });
 
   it("annonce un match qui n'est plus proposé", async () => {

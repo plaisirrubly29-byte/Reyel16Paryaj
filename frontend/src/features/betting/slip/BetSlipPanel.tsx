@@ -4,7 +4,6 @@ import { Alert } from '../../../shared/components/Alert';
 import { Icon } from '../../../shared/components/Icon';
 import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
-import { useMediaQuery } from '../../../shared/hooks/useMediaQuery';
 import { useMe } from '../../auth/api/auth';
 import { formatKickoff } from '../../catalogue/format';
 import { ApiError } from '../../../shared/api/client';
@@ -44,7 +43,8 @@ function sameEventIds(selections: SlipSelection[]): Set<string> {
 }
 
 /**
- * Coupon : colonne à droite sur ordinateur ; sur mobile, panneau ouvert depuis la barre d'onglets du bas.
+ * Coupon, rendu une fois pour tout le site (PublicLayout) et fermé par défaut : sur ordinateur, panneau à droite ouvert
+ * par le bouton flottant « Panier » ; sur mobile, panneau ouvert depuis la barre d'onglets du bas.
  *
  * - Simple : un ticket par sélection, chacun avec sa mise. Plusieurs simples partent l'un après l'autre (un POST /bets
  *   et une clé d'idempotence chacun) : certains peuvent être acceptés et d'autres refusés, le coupon le montre.
@@ -56,7 +56,6 @@ function sameEventIds(selections: SlipSelection[]): Set<string> {
 export function BetSlipPanel() {
   const slip = useBetSlip();
   const { data: user } = useMe();
-  const collapsible = useMediaQuery(SLIP_COLLAPSE_QUERY);
   const bodyId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const count = slip.selections.length;
@@ -193,7 +192,7 @@ export function BetSlipPanel() {
 
   return (
     <aside
-      className={`betslip${collapsible ? ' collapsible' : ''}${slip.panelOpen ? ' open' : ''}`}
+      className={`betslip${slip.panelOpen ? ' open' : ''}`}
       aria-label="Coupon"
       id="betslip"
     >
@@ -208,9 +207,7 @@ export function BetSlipPanel() {
               <Icon name="trash" size={22} />
             </button>
           )}
-          {collapsible && (
-            <button type="button" className="betslip-close" aria-label="Fermer le coupon" onClick={() => slip.setPanelOpen(false)}>×</button>
-          )}
+          <button type="button" className="betslip-close" aria-label="Fermer le coupon" onClick={() => slip.setPanelOpen(false)}>×</button>
         </span>
       </div>
       {/* Type de pari : simple (un ticket par sélection) ou multiple (un combiné, 2 sélections au moins). */}

@@ -25,7 +25,8 @@ use LogicException;
  * $fake->setResult('fake-1', '2', '1') publie un score final (completed: false = match en cours) ;
  * $fake->setStartsAt('fake-1', now()->subMinutes(30)) fait commencer un match (cotes en direct).
  * Les matchs de football ont un 1X2 (h2h) et un plus/moins 2.5 buts (totals) ; la NBA n'a que le h2h.
- * eventMarkets() ajoute un score exact (correct_score), absent de la liste events() comme chez The Odds API.
+ * eventMarkets() ajoute un score exact (correct_score) et, pour fake-1, remboursé si nul, handicap, autres lignes,
+ * buts par équipe et pair/impair, absents de la liste events() comme chez The Odds API.
  *
  * Matchs de scénario (tests de bout en bout, P8-01) : avec un dépôt (le cache de l'application, partagé entre les
  * processus), addScenarioMatch() ajoute un match de Premier League unique, puis finishScenarioMatch() le fait
@@ -41,6 +42,27 @@ class FakeSportsDataProvider implements SportsDataProvider
     private const CORRECT_SCORES = [
         'fake-1' => ['Arsenal:1|Chelsea:0' => '7.50', 'Arsenal:1|Chelsea:1' => '6.50', 'Arsenal:2|Chelsea:1' => '9.00', 'Arsenal:0|Chelsea:1' => '11.00'],
         'fake-2' => ['Liverpool:2|Everton:0' => '6.00', 'Liverpool:1|Everton:1' => '9.50'],
+    ];
+
+    /**
+     * Autres marchés de fake-1, seulement par eventMarkets() : clé => [nom, cote, ligne, équipe visée].
+     * Le handicap en quart de but (-0.25) n'est pas pris en charge : écarté par la synchro.
+     */
+    private const EXTRA_MARKETS = [
+        'draw_no_bet' => [['Arsenal', '1.55', null, null], ['Chelsea', '2.45', null, null]],
+        'spreads' => [['Arsenal', '1.95', '-0.5', null], ['Chelsea', '1.90', '0.5', null]],
+        'alternate_spreads' => [
+            ['Arsenal', '2.90', '-1.5', null], ['Chelsea', '1.40', '1.5', null],
+            ['Arsenal', '2.05', '-0.25', null], ['Arsenal', '1.30', '1', null], ['Chelsea', '3.30', '-1', null],
+        ],
+        'alternate_totals' => [
+            ['Over', '1.25', '1.5', null], ['Under', '3.80', '1.5', null], ['Over', '2.60', '3.5', null], ['Under', '1.48', '3.5', null],
+        ],
+        'team_totals' => [
+            ['Over', '1.60', '1.5', 'Arsenal'], ['Under', '2.25', '1.5', 'Arsenal'],
+            ['Over', '1.85', '0.5', 'Chelsea'], ['Under', '1.95', '0.5', 'Chelsea'],
+        ],
+        'odd_even' => [['Odd', '1.95', null, null], ['Even', '1.85', null, null]],
     ];
 
     /** Clé du dépôt des matchs de scénario. */
@@ -156,6 +178,12 @@ class FakeSportsDataProvider implements SportsDataProvider
         $available = [...$event->markets];
         if (isset(self::CORRECT_SCORES[$eventId])) {
             $available[] = $this->market($eventId, 'correct_score', self::CORRECT_SCORES[$eventId], $updatedAt);
+        }
+        if ($eventId === 'fake-1') {
+            foreach (self::EXTRA_MARKETS as $key => $outcomes) {
+                $available[] = new MarketData($key, 'fakebook', $updatedAt, array_map(
+                    fn (array $o) => new SelectionData($o[0], $o[1], $o[2], $o[3]), $outcomes));
+            }
         }
 
         return new EventData(

@@ -34,6 +34,14 @@ Schedule::command('sports-data:live')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Marchés supplémentaires des matchs de football proches (double chance, handicap, buts par équipe…), match par match,
+// plafonnés en crédits par jour (SPORTS_DATA_EXTRA_DAILY_CREDITS). Désactivé par défaut (SPORTS_DATA_EXTRA).
+Schedule::command('sports-data:extra-markets')
+    ->cron((string) config('sports_data.extra_markets_cron'))
+    ->when(fn () => (bool) config('sports_data.extra_markets_enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))
@@ -50,5 +58,12 @@ Schedule::command('settlement:run')
 // Monitoring de production (P9-02) : alertes poussées à l'astreinte (Telegram, e-mail) et signal de vie externe.
 Schedule::command('monitoring:check')
     ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Tirages de borlette et résultats publiés (module Lottery), seulement quand LOTTERY_ENABLED=true.
+Schedule::command('lottery:sync')
+    ->cron((string) config('lottery.sync_cron'))
+    ->when(fn () => (bool) config('lottery.enabled'))
     ->withoutOverlapping()
     ->onOneServer();

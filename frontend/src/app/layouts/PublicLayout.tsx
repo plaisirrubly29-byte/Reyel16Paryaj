@@ -4,11 +4,15 @@ import { useMe } from '../../features/auth/api/auth';
 import { useWallet } from '../../features/wallet/api/wallet';
 import { MoneyText } from '../../shared/components/MoneyText';
 import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlipContext';
-import { SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
+import { BetSlipPanel, SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
+import { CompetitionsMenu } from '../../features/catalogue/components/CompetitionsMenu';
+import { useLotteryAvailable } from '../../features/lottery/api/lottery';
+import { virtualGamesEnabled } from '../../features/virtual/api/virtualGames';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
 import { CookieBanner } from '../../features/legal/components/CookieBanner';
 import { BrandLogo } from './BrandLogo';
+import { GamesTab } from './GamesMenu';
 import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
@@ -67,13 +71,21 @@ function PublicShell() {
   const { pathname } = useLocation();
   const mobile = useMediaQuery(SLIP_COLLAPSE_QUERY);
   const [params] = useSearchParams();
+  const lotteryAvailable = useLotteryAvailable();
   const liveActive = params.get('tab') === 'live' && (pathname === '/' || pathname === '/sports');
   const sportsActive = !liveActive && (pathname === '/' || pathname.startsWith('/sports') || pathname.startsWith('/events'));
 
-  // Le panneau du coupon (mobile) se referme quand on change de page.
+  // Le panneau du coupon se referme quand on change de page, et avec Échap.
   useEffect(() => { slip.setPanelOpen(false); }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!slip.panelOpen) return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') slip.setPanelOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [slip.panelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = slip.selections.length;
+  const countLabel = `${count} sélection${count > 1 ? 's' : ''}`;
 
   return (
     <div className="shell">
@@ -89,9 +101,16 @@ function PublicShell() {
             <Link to="/?tab=live" className={liveActive ? 'active' : undefined} aria-current={liveActive ? 'page' : undefined}>
               <span className="nav-live-dot" aria-hidden="true" />Live
             </Link>
+            {lotteryAvailable && <NavLink to="/borlette"><Icon name="lottery" size={20} />Borlette</NavLink>}
+            {virtualGamesEnabled() && (
+              // Libellé court : la barre est déjà pleine sur ordinateur une fois connecté (Mes paris, Administration).
+              <NavLink to="/jeux-virtuels" aria-label="Jeux virtuels" title="Jeux virtuels"><Icon name="gamepad" size={20} />Virtuels</NavLink>
+            )}
             {user && <NavLink to="/bets"><Icon name="tickets" size={20} />Mes paris</NavLink>}
             {user?.is_admin && <NavLink to="/admin"><Icon name="shield" size={20} />Administration</NavLink>}
           </nav>
+
+          <CompetitionsMenu />
 
           <HeaderSearch />
 
@@ -120,10 +139,27 @@ function PublicShell() {
       <SiteFooter />
       <CookieBanner />
 
-      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. */}
+      {/* Panier : sur ordinateur, bouton flottant qui ouvre le panneau à droite ; sur mobile, onglet de la barre du bas. */}
+      <BetSlipPanel />
+      {!mobile && (
+        <button
+          type="button"
+          className={`slip-fab${count > 0 ? ' has-items' : ''}`}
+          aria-expanded={slip.panelOpen}
+          aria-controls="betslip"
+          onClick={() => slip.setPanelOpen(!slip.panelOpen)}
+        >
+          <Icon name="cart" size={24} />
+          <span>Panier</span>
+          <span key={count} className="slip-fab-count" aria-label={countLabel}>{count}</span>
+        </button>
+      )}
+
+      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. Pas d'onglet « Accueil » : le site
+          s'ouvre sur l'accueil et le logo y ramène ; à sa place, le menu des jeux. */}
       {mobile && (
       <nav className="tab-bar" aria-label="Navigation mobile">
-        <NavLink to="/" end><span className="tab-icon"><Icon name="home" /></span>Accueil</NavLink>
+        <GamesTab />
         <NavLink to="/sports"><span className="tab-icon"><Icon name="ball" /></span>Sports</NavLink>
         <button
           type="button"
@@ -133,7 +169,7 @@ function PublicShell() {
         >
           <span className="tab-icon"><Icon name="cart" /></span>
           Panier
-          {count > 0 && <span className="tab-badge" aria-label={`${count} sélection${count > 1 ? 's' : ''}`}>{count}</span>}
+          {count > 0 && <span className="tab-badge" aria-label={countLabel}>{count}</span>}
         </button>
         <NavLink to="/bets"><span className="tab-icon"><Icon name="tickets" /></span>Mes paris</NavLink>
         <NavLink to={user ? '/account' : '/login'}><span className="tab-icon"><Icon name="user" /></span>{user ? 'Compte' : 'Connexion'}</NavLink>

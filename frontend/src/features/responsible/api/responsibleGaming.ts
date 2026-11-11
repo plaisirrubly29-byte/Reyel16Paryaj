@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Envelope, type Money } from '../../../shared/api/client';
-import { ME_KEY } from '../../auth/api/auth';
+import { signOutLocally } from '../../auth/api/auth';
 
 /** Périodes glissantes des limites de mise : 24 dernières heures, 7 jours, 30 jours. */
 export type LimitPeriod = 'day' | 'week' | 'month';
@@ -79,8 +79,7 @@ export function useSelfExclude(onExcluded: (excludedUntil: string) => void | Pro
       })).data,
     onSuccess: async ({ excluded_until }) => {
       await onExcluded(excluded_until);
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
-      queryClient.setQueryData(ME_KEY, null);
+      signOutLocally(queryClient);
     },
   });
 }

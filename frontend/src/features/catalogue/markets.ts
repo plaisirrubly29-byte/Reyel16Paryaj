@@ -1,6 +1,6 @@
 import type { CatalogueMarket, CatalogueSelection } from './api/catalogue';
 
-export type MarketCategory = 'Résultat' | 'Buts' | 'Score exact' | 'Joueurs' | 'Autres';
+export type MarketCategory = 'Résultat' | 'Buts' | 'Handicap' | 'Score exact' | 'Joueurs' | 'Autres';
 
 function normalizeMarketText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -12,9 +12,18 @@ export function marketCategory(market: CatalogueMarket): MarketCategory {
 
   if (/exact.?score|score.?exact/.test(text)) return 'Score exact';
   if (/player|joueur|buteur|scoreur|marqueur|goalscorer|goal.?scorer/.test(text)) return 'Joueurs';
-  if (/goal|but|total|over.?under|btts|deux equipes marquent/.test(text)) return 'Buts';
-  if (/h2h|1x2|resultat|winner|vainqueur|double.?chance/.test(text)) return 'Résultat';
+  if (/spread|handicap/.test(text)) return 'Handicap';
+  if (/goal|but|total|over.?under|btts|deux equipes marquent|odd.?even|pair/.test(text)) return 'Buts';
+  if (/h2h|1x2|resultat|winner|vainqueur|double.?chance|draw.?no.?bet|rembourse/.test(text)) return 'Résultat';
   return 'Autres';
+}
+
+/**
+ * Colonnes d'un marché sur la page du match : les marchés à plusieurs lignes (plus/moins, handicap, buts par équipe)
+ * vont par paires (plus / moins de 2.5), les autres jusqu'à trois (1, X, 2).
+ */
+export function marketColumns(market: CatalogueMarket, count: number): number {
+  return /^(alternate_|team_totals)/.test(market.key) ? Math.min(count, 2) : Math.min(count, 3);
 }
 
 /**

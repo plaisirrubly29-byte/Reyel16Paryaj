@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
-import { BetSlipPanel } from '../../betting/slip/BetSlipPanel';
 import { LIST_MARKETS, type ListMarketKey } from '../api/catalogue';
 import { MatchList } from './MatchList';
 import { SportTabs } from './SportTabs';
@@ -18,9 +17,9 @@ type Props = {
 };
 
 /**
- * Mise en page des paris en trois colonnes : sports et compétitions | matchs | coupon.
+ * Mise en page des paris en deux colonnes : sports et compétitions | matchs (le coupon est un panneau flottant, PublicLayout).
  * Onglet (à venir / live), sport, compétition, type de pari, recherche et page restent dans l'URL.
- * Sous 1180 px la colonne des sports disparaît ; sous 960 px le coupon s'ouvre depuis la barre d'onglets du bas.
+ * Sous 1180 px la colonne des sports disparaît (menu « Championnats » de l'en-tête).
  */
 export function BettingBoard({ children, title = 'Tous les matchs', perPage, paginate = false }: Props) {
   const [params, setParams] = useSearchParams();
@@ -114,8 +113,6 @@ export function BettingBoard({ children, title = 'Tous les matchs', perPage, pag
           />
         </section>
       </div>
-
-      <BetSlipPanel />
     </div>
   );
 }
