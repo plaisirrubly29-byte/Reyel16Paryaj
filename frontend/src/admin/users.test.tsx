@@ -209,3 +209,48 @@ describe('fiche utilisateur', () => {
     expect(screen.queryByRole('button', { name: 'Créditer le solde' })).toBeNull();
   });
 });
+
+describe('dépôt refusé par une limite du joueur (V2-B06)', () => {
+  const refused = (remaining: number) => ({
+    status: 422,
+    body: { error: {
+      code: 'deposit_limit_exceeded',
+      message: 'Ce dépôt dépasse la limite de dépôt choisie par le joueur.',
+      details: { period: 'week', limit_minor: 5_000_00, remaining_minor: remaining },
+    } },
+  });
+
+  async function depositFor(response: ReturnType<typeof refused>) {
+    mockApi({
+      'GET /me': me(['users.view', 'ledger.view', 'wallet.adjust']),
+      'GET /admin/users/7': { status: 200, body: { data: account() } },
+      'GET /admin/users/7/wallet': { status: 200, body: { data: { user_id: '7', currency: 'HTG', balance: { minor: 0, currency: 'HTG' }, status: 'active' } } },
+      'POST /admin/users/7/wallet/adjustments': response,
+    });
+    renderApp('/admin/users/7');
+
+    await userEvent.type(await screen.findByLabelText('Montant'), '3000');
+    await userEvent.type(screen.getByLabelText('Motif (obligatoire)'), 'Dépôt reçu en agence');
+    await userEvent.click(screen.getByRole('button', { name: 'Créditer le solde' }));
+    return screen.findByRole('alert');
+  }
+
+  const NBSP = new RegExp(`[${String.fromCharCode(0xa0, 0x202f)}]`, 'g');
+  const text = (el: HTMLElement) => (el.textContent ?? '').replace(NBSP, ' ');
+
+  it('explique le refus et donne le montant encore accepté', async () => {
+    const alert = await depositFor(refused(1_200_00));
+
+    expect(text(alert)).toContain('Dépôt refusé : limite du joueur');
+    expect(text(alert)).toContain('(5 000,00 HTG sur 7 jours)');
+    expect(text(alert)).toContain("Rien n'a été enregistré.");
+    expect(text(alert)).toContain('Montant encore accepté sur la période : 1 200,00 HTG.');
+    expect(screen.queryByText(/Dépôt enregistré/)).toBeNull();
+  });
+
+  it('dit quand le joueur ne peut plus déposer sur la période', async () => {
+    const alert = await depositFor(refused(0));
+
+    expect(text(alert)).toContain('Le joueur ne peut plus déposer sur cette période.');
+  });
+});

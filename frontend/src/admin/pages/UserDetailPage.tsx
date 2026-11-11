@@ -7,6 +7,7 @@ import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { MoneyText } from '../../shared/components/MoneyText';
 import { Spinner } from '../../shared/components/Spinner';
 import { TextField } from '../../shared/components/TextField';
+import { formatMoney } from '../../shared/format/money';
 import { useMe } from '../../features/auth/api/auth';
 import { parseStakeMinor, sanitizeStake } from '../../features/betting/slip/stake';
 import { ROLE_LABELS, useAdjustUserWallet, useAdminUser, useAdminUserWallet, useChangeUserStatus, type AdminUser } from '../api/users';
@@ -167,6 +168,33 @@ function StatusPanel({ user }: { user: AdminUser }) {
   );
 }
 
+const DEPOSIT_PERIODS: Record<string, string> = { day: 'sur 24 heures', week: 'sur 7 jours', month: 'sur 30 jours' };
+
+/**
+ * Dépôt refusé par une limite de dépôt du joueur (V2-B06, 422 deposit_limit_exceeded) : rien n'est enregistré.
+ * Le montant encore acceptable aide l'agent à rendre ou à fractionner un dépôt déjà reçu.
+ */
+function DepositLimitRefusal({ error, currency }: { error: ApiError; currency: string }) {
+  const { period, limit_minor: limit, remaining_minor: remaining } = error.details as { period?: string; limit_minor?: number; remaining_minor?: number };
+
+  return (
+    <Alert tone="error" title="Dépôt refusé : limite du joueur">
+      <p>
+        Ce dépôt dépasse la limite de dépôt que le joueur s'est fixée
+        {typeof limit === 'number' && <> ({formatMoney({ minor: limit, currency })} {DEPOSIT_PERIODS[period ?? ''] ?? ''})</>}.
+        {' '}Rien n'a été enregistré.
+      </p>
+      {typeof remaining === 'number' && (
+        <p>
+          {remaining > 0
+            ? <>Montant encore accepté sur la période : <strong>{formatMoney({ minor: remaining, currency })}</strong>.</>
+            : 'Le joueur ne peut plus déposer sur cette période.'}
+        </p>
+      )}
+    </Alert>
+  );
+}
+
 /**
  * Solde du joueur (ledger.view) et dépôt / retrait reçu hors plateforme (wallet.adjust, Super Admin).
  * Le montant est saisi en gourdes ; le solde, le plafond et le solde suffisant sont vérifiés par l'API.
@@ -229,7 +257,9 @@ function WalletPanel({ user }: { user: AdminUser }) {
               {adjust.data.type === 'deposit' ? 'Dépôt enregistré.' : 'Retrait enregistré.'} Nouveau solde : <MoneyText value={adjust.data.balance_after} />
             </Alert>
           )}
-          {error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
+          {error?.code === 'deposit_limit_exceeded'
+            ? <DepositLimitRefusal error={error} currency={wallet.data?.currency ?? 'HTG'} />
+            : error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
           <div className="field">
             <label htmlFor="wallet-type">Opération</label>
