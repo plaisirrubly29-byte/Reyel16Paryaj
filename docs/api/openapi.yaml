@@ -448,6 +448,145 @@ paths:
                   meta: { type: object }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /lottery/games:
+    get:
+      tags: [Lottery]
+      summary: Jeux en vente, avec leurs options, mises min/max et barème des gains
+      description: |
+        V2-D09. Public. `sales_open` false et `games` vide tant que la vente est fermée : interrupteur
+        LOTTERY_SALES_ENABLED coupé, ou barème absent de config/lottery.php (décision D-12). Un jeu sans barème
+        n'est pas listé. Le gain d'une ligne = mise × multiplicateur du lot gagnant (arrondi au centime inférieur).
+        Répond 404 tant que la borlette n'est pas activée (LOTTERY_ENABLED=false).
+      x-task: V2-D09
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sales_open: { type: boolean }
+                      close_before_minutes: { type: integer, minimum: 0, description: "Fin des ventes, en minutes avant l'heure du tirage" }
+                      max_plays_per_ticket: { type: integer, minimum: 1 }
+                      games: { type: array, items: { $ref: "#/components/schemas/LotteryGame" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /lottery/tickets:
+    get:
+      tags: [Lottery]
+      summary: Fiches de borlette du joueur connecté (plus récentes d'abord)
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LotteryTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Lottery]
+      summary: Valider une fiche de borlette pour le prochain tirage ouvert (mise débitée)
+      description: |
+        V2-D09. Une fiche = un tirage, une date, 1 à max_plays_per_ticket lignes. Tout ou rien : une ligne refusée
+        refuse la fiche, rien n'est débité.
+
+        - **Tirage** : `draw` = clé du tirage. Sans `date`, la fiche vise la prochaine occurrence encore ouverte
+          (aujourd'hui, ou le prochain jour du tirage). Avec `date` (date locale du tirage), elle doit être cette
+          occurrence-là ; sinon 409 lottery_draw_closed (details.next_date) : le joueur ne joue jamais pour un autre
+          jour sans le savoir.
+        - **Fin des ventes** : heure du tirage − close_before_minutes (heure d'Haïti).
+        - **Lignes** : `numbers` en chaînes (« 07 » garde son zéro). bolet : 1 boule de 2 chiffres ; maryaj : 2 boules
+          de 2 chiffres différentes ; loto3 : 3 chiffres ; loto4 : 4 chiffres et option 1, 2 ou 3 ; loto5 : 5 chiffres
+          et option 1 ou 2. `option` null pour les autres jeux.
+        - **Mises** : chaque ligne entre min_stake et max_stake de son jeu ; devise du portefeuille.
+        - **Contrôles, dans la transaction et sous verrou** : jeu responsable (pause, limites de mise, comme un pari
+          sportif), solde, boules bloquées (422 lottery_number_blocked), plafond d'engagement par boule, tirage et
+          date (422 lottery_number_limit, details.remaining_stake = mise encore acceptée sur cette boule).
+        - **Ledger** : une écriture `stake` du total (related type lottery_ticket).
+
+        Clé d'idempotence obligatoire : un rejeu renvoie la même fiche (200) ; la même clé pour une autre fiche donne
+        409 idempotency_key_reused.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [draw, plays]
+              properties:
+                draw: { type: string, example: NYM }
+                date: { type: string, format: date, description: "Date locale du tirage visée (facultative, conseillée)" }
+                plays:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [game, numbers, stake]
+                    properties:
+                      game: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+                      option: { type: [integer, "null"], minimum: 1, maximum: 3 }
+                      numbers: { type: array, minItems: 1, maxItems: 2, items: { type: string, pattern: "^[0-9]{2,5}$" } }
+                      stake: { $ref: "#/components/schemas/Money" }
+            example:
+              draw: NYM
+              date: "2026-11-12"
+              plays:
+                - { game: bolet, option: null, numbers: ["25"], stake: { minor: 5000, currency: HTG } }
+                - { game: maryaj, option: null, numbers: ["25", "07"], stake: { minor: 2000, currency: HTG } }
+                - { game: loto4, option: 1, numbers: ["2507"], stake: { minor: 1000, currency: HTG } }
+      responses:
+        "200":
+          description: Rejeu d'une fiche déjà acceptée avec la même clé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
+        "201":
+          description: Fiche acceptée, mise débitée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: lottery_sales_closed (vente fermée ou barème absent) ; betting_paused (pause ou auto-exclusion)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: lottery_draw_closed (details.next_date, details.closes_at) ; idempotency_key_reused
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: |
+            validation_failed (details par ligne : plays.0.numbers…) ; lottery_draw_unknown ; insufficient_funds ;
+            stake_limit_exceeded (jeu responsable) ; lottery_number_blocked (details.play, details.numbers) ;
+            lottery_number_limit (details.play, details.numbers, details.remaining_stake) ; not_a_player
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /lottery/tickets/{id}:
+    get:
+      tags: [Lottery]
+      summary: Détail d'une fiche de borlette du joueur, avec le résultat du tirage une fois publié
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /bets:
     post:
@@ -1774,6 +1913,153 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/lottery/tickets:
+    get:
+      tags: [Admin]
+      summary: Fiches de borlette (permission tickets.view)
+      description: V2-D09. Tous les rôles administratifs. Joueur réduit à son identifiant et son nom. Plus récentes d'abord.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string } }
+        - { name: draw, in: query, schema: { type: string } }
+        - { name: date, in: query, description: Date locale du tirage, schema: { type: string, format: date } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: user_id, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminLotteryTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/lottery/exposure:
+    get:
+      tags: [Admin]
+      summary: Engagement par boule pour un tirage et une date (permission tickets.view)
+      description: |
+        V2-D09. Pour chaque combinaison jouée (jeu, option, numéros) des fiches en cours : mises cumulées et gain
+        maximal si elle sort (pire cas, au multiplicateur le plus élevé du jeu), comparé au plafond. Trié par gain
+        maximal décroissant ; 200 lignes au plus. Boules bloquées signalées.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: draw, in: query, required: true, schema: { type: string } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: game, in: query, schema: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      draw: { type: object, properties: { key: { type: string }, name: { type: string } } }
+                      date: { type: string, format: date }
+                      closes_at: { type: string, format: date-time }
+                      tickets_count: { type: integer }
+                      total_stake: { $ref: "#/components/schemas/Money" }
+                      numbers:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            game: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+                            option: { type: [integer, "null"] }
+                            numbers: { type: array, items: { type: string } }
+                            stake: { $ref: "#/components/schemas/Money" }
+                            max_payout: { $ref: "#/components/schemas/Money" }
+                            limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Plafond de gain de cette boule ; null = aucun }
+                            blocked: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/lottery/blocked-numbers:
+    get:
+      tags: [Admin]
+      summary: Boules bloquées en vigueur (permission tickets.view)
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: draw, in: query, schema: { type: string } }
+        - { name: date, in: query, description: "Blocages valables ce jour-là (y compris ceux de tous les jours)", schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/LotteryBlockedNumber" } } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: Bloquer une boule (permission markets.suspend, motif requis, audité)
+      description: |
+        V2-D09. Bloque la vente d'une boule de 2 chiffres (toutes les lignes qui la contiennent : bolet, maryaj, et
+        les lots de loto 4 / loto 5) ou d'un numéro de loto précis. draw null = tous les tirages ; date null = tous
+        les jours. Les fiches déjà vendues ne changent pas. Audit lottery.number_blocked.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [number, reason]
+              properties:
+                number: { type: string, pattern: "^[0-9]{2,5}$" }
+                draw: { type: [string, "null"] }
+                date: { type: [string, "null"], format: date }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Boule bloquée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryBlockedNumber" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: lottery_number_already_blocked (même numéro, tirage et date)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: validation_failed ; lottery_draw_unknown
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/lottery/blocked-numbers/{id}:
+    delete:
+      tags: [Admin]
+      summary: Débloquer une boule (permission markets.suspend, motif requis, audité)
+      description: V2-D09. Le blocage est clos (conservé dans l'historique), jamais effacé. Audit lottery.number_unblocked.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Blocage clos
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryBlockedNumber" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: lottery_block_already_lifted
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
 components:
   parameters:
     IdempotencyKey:
@@ -2090,6 +2376,75 @@ components:
         pick3: { type: [string, "null"], pattern: "^[0-9]{3}$", example: "407" }
         pick4: { type: [string, "null"], pattern: "^[0-9]{4}$", example: "4512" }
         published_at: { type: [string, "null"], format: date-time, description: Publication chez le fournisseur }
+    LotteryGame:
+      type: object
+      description: Jeu en vente et son barème (V2-D09, décision D-12).
+      properties:
+        key: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+        digits: { type: integer, description: Chiffres de chaque numéro }
+        count: { type: integer, description: "Numéros par ligne (maryaj : 2)" }
+        options: { type: array, items: { type: integer }, description: "Options proposées (loto4 : 1, 2, 3 ; loto5 : 1, 2) ; vide sinon" }
+        min_stake: { $ref: "#/components/schemas/Money" }
+        max_stake: { $ref: "#/components/schemas/Money" }
+        payouts:
+          type: array
+          description: "Multiplicateurs (chaînes, jamais de float). bolet : un par lot (lot 1, 2, 3) ; autres jeux : un seul (lot null)."
+          items:
+            type: object
+            properties:
+              lot: { type: [integer, "null"], minimum: 1, maximum: 3 }
+              multiplier: { type: string, example: "50" }
+    LotteryPlay:
+      type: object
+      properties:
+        game: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+        option: { type: [integer, "null"] }
+        numbers: { type: array, items: { type: string }, example: ["25"] }
+        stake: { $ref: "#/components/schemas/Money" }
+        max_payout: { $ref: "#/components/schemas/Money", description: Gain maximal de la ligne au barème figé à la vente }
+        status: { type: string, enum: [pending, won, lost, void] }
+        winning_lot: { type: [integer, "null"], description: "Bolet : lot gagnant (1, 2 ou 3) ; null sinon" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Gain de la ligne ; null tant que la fiche n'est pas réglée }
+    LotteryTicket:
+      type: object
+      description: Reçu immuable — lignes, mises et barème figés à la vente ; seuls le statut et les gains évoluent au règlement.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: B16-7KQ2M9XAPB, description: Référence à communiquer au support }
+        draw:
+          type: object
+          properties:
+            key: { type: string, example: NYM }
+            name: { type: string, example: New York Midi }
+            date: { type: string, format: date, description: Date locale du tirage }
+            draw_at: { type: string, format: date-time, description: Heure du tirage (UTC) }
+        status: { type: string, enum: [pending, won, lost, void], description: "won : au moins une ligne gagnante ; void : tirage annulé, mise remboursée" }
+        stake: { $ref: "#/components/schemas/Money" }
+        max_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Total versé ; null tant que la fiche n'est pas réglée }
+        plays: { type: array, items: { $ref: "#/components/schemas/LotteryPlay" } }
+        result: { oneOf: [{ $ref: "#/components/schemas/LotteryResult" }, { type: "null" }], description: Résultat du tirage une fois publié }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+    AdminLotteryTicket:
+      allOf:
+        - $ref: "#/components/schemas/LotteryTicket"
+        - type: object
+          properties:
+            user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+    LotteryBlockedNumber:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: string, example: "25" }
+        draw: { type: [object, "null"], properties: { key: { type: string }, name: { type: string } }, description: null = tous les tirages }
+        date: { type: [string, "null"], format: date, description: null = tous les jours }
+        reason: { type: string }
+        blocked_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        blocked_at: { type: string, format: date-time }
+        lifted_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        lifted_at: { type: [string, "null"], format: date-time }
+        lift_reason: { type: [string, "null"] }
     CatalogueEvent:
       type: object
       properties:
