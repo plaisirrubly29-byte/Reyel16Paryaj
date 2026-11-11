@@ -21,6 +21,8 @@ tags:
   - name: Bets
   - name: Wallet
   - name: ResponsibleGaming
+  - name: Complaints
+    description: Réclamations du joueur (V2-G04)
   - name: Admin
 
 paths:
@@ -698,6 +700,165 @@ paths:
                   links: { $ref: "#/components/schemas/PaginationLinks" }
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /complaints:
+    get:
+      tags: [Complaints]
+      summary: Réclamations du joueur connecté (plus récentes d'abord)
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, in_progress, investigation, resolved, closed] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK (sans messages ni historique ; détail par GET /complaints/{id})
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Complaint" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Complaints]
+      summary: Ouvrir une réclamation (numéro unique, pièces jointes facultatives)
+      description: |
+        V2-G04. multipart/form-data. Lien facultatif vers un ticket (bet_id) ou une écriture du portefeuille
+        (ledger_entry_id) **du joueur** : un identifiant d'un autre joueur ou inconnu donne 422 complaint_link_invalid,
+        sans révéler s'il existe. Au plus un des deux liens. Le lien vers un agent viendra avec V2-G01.
+        Pièces : 5 au plus, 5 Mo chacune, jpg, jpeg, png, webp ou pdf ; chiffrées par le serveur, visibles du joueur et
+        des administrateurs complaints.view (chaque ouverture par un administrateur est auditée).
+        Statut initial : new. Numéro lisible : REC-AAAA-NNNNNN (séquence par année).
+        Limite : 5 réclamations par heure et par joueur (429). Réservé aux joueurs (422 not_a_player pour un administrateur).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category, subject, description]
+              properties:
+                category: { type: string, enum: [bet, transaction, account, other] }
+                subject: { type: string, minLength: 5, maxLength: 120 }
+                description: { type: string, minLength: 20, maxLength: 5000 }
+                bet_id: { type: string, description: Ticket du joueur concerné }
+                ledger_entry_id: { type: string, description: Écriture du portefeuille du joueur concernée }
+                attachments[]:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Réclamation ouverte (status new)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422":
+          description: validation_failed ; complaint_link_invalid ; not_a_player
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /complaints/{id}:
+    get:
+      tags: [Complaints]
+      summary: Détail d'une réclamation du joueur, avec les réponses et l'historique des statuts
+      description: |
+        V2-G04. Notes internes de l'équipe jamais renvoyées. Les réponses de l'équipe sont signées « Service client »
+        (author.name), sans l'identité de l'administrateur. 404 pour la réclamation d'un autre joueur.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /complaints/{id}/messages:
+    post:
+      tags: [Complaints]
+      summary: Ajouter un message (et des pièces) à sa réclamation
+      description: |
+        V2-G04. multipart/form-data, mêmes règles de pièces qu'à l'ouverture. Refusé sur une réclamation closed
+        (409 complaint_closed : la rouvrir d'abord). Un message du joueur sur une réclamation resolved ne la rouvre pas.
+        Limite : 20 messages par heure et par joueur (429).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 5000 }
+                attachments[]:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Message ajouté ; renvoie la réclamation à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_closed
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /complaints/{id}/reopen:
+    post:
+      tags: [Complaints]
+      summary: Rouvrir sa réclamation resolved ou closed (motif requis)
+      description: |
+        V2-G04. La réclamation repasse en in_progress. Possible jusqu'à complaints.reopen_window_days (30 jours par
+        défaut) après le passage en resolved ; au-delà, 422 complaint_reopen_expired (ouvrir une nouvelle réclamation).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Réclamation rouverte (status in_progress)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_not_reopenable (statut ni resolved ni closed ; details.status)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: validation_failed ; complaint_reopen_expired
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /complaints/{id}/attachments/{attachment}:
+    get:
+      tags: [Complaints]
+      summary: Pièce jointe d'une réclamation du joueur (déchiffrée)
+      description: V2-G04. Contenu brut (Content-Type du fichier), Cache-Control no-store. Pièces des notes internes inaccessibles (404).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: attachment, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fichier
+          content:
+            image/*: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /admin/users/{id}/roles:
     put:
@@ -1774,6 +1935,167 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/complaints:
+    get:
+      tags: [Admin]
+      summary: File des réclamations (permission complaints.view)
+      description: |
+        V2-G04. Sans filtre status : réclamations ouvertes (new, in_progress, investigation), plus anciennes d'abord.
+        Avec status resolved ou closed : plus récentes d'abord. older_than_hours : ouvertes depuis au moins N heures
+        (dernière activité du joueur sans réponse de l'équipe, voir awaiting_staff).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, in_progress, investigation, resolved, closed] } }
+        - { name: category, in: query, schema: { type: string, enum: [bet, transaction, account, other] } }
+        - { name: user_id, in: query, schema: { type: string } }
+        - { name: assigned_to, in: query, schema: { type: string }, description: "Identifiant d'un administrateur, ou me, ou none" }
+        - { name: older_than_hours, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 40 }, description: Numéro de réclamation (REC-…) ou référence de ticket }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminComplaint" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/complaints/{id}:
+    get:
+      tags: [Admin]
+      summary: Fiche d'une réclamation — messages, notes internes et historique complet (permission complaints.view)
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/complaints/{id}/messages:
+    post:
+      tags: [Admin]
+      summary: Répondre au joueur ou ajouter une note interne (permission complaints.manage)
+      description: |
+        V2-G04. multipart/form-data, mêmes règles de pièces que le joueur. visibility player : réponse visible du joueur,
+        qui est notifié (V2-E04 quand il sera fait) ; une première réponse fait passer une réclamation new en
+        in_progress. visibility internal : note jamais montrée au joueur. Refusé sur closed (409 complaint_closed).
+        Audit complaint.replied ou complaint.note_added.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [body, visibility]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 5000 }
+                visibility: { type: string, enum: [player, internal] }
+                attachments[]:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Message ajouté ; renvoie la fiche à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_closed
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/complaints/{id}/status:
+    post:
+      tags: [Admin]
+      summary: Changer le statut (permission complaints.manage, motif requis, audité)
+      description: |
+        V2-G04. Transitions autorisées :
+        new → in_progress, investigation, resolved ; in_progress → investigation, resolved ;
+        investigation → in_progress, resolved ; resolved → closed ; resolved ou closed → in_progress (réouverture).
+        Toute autre transition : 409 complaint_invalid_transition (details.from, details.to, details.allowed).
+        Le motif d'un passage en resolved est montré au joueur (resolution) ; les autres restent internes.
+        Une réclamation resolved passe seule en closed après complaints.auto_close_days (7 jours par défaut) sans
+        réouverture. Audit complaint.status_changed.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [in_progress, investigation, resolved, closed] }
+                reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        "200":
+          description: Statut changé ; renvoie la fiche à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_invalid_transition
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/complaints/{id}/assignee:
+    put:
+      tags: [Admin]
+      summary: Attribuer la réclamation à un administrateur, ou la libérer (permission complaints.manage)
+      description: |
+        V2-G04. assignee_id null : réclamation libérée. L'administrateur choisi doit avoir complaints.manage
+        (422 complaint_assignee_invalid). Audit complaint.assigned.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [assignee_id], properties: { assignee_id: { type: [string, "null"] } } } } }
+      responses:
+        "200":
+          description: Attribution enregistrée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: validation_failed ; complaint_assignee_invalid
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/complaints/{id}/attachments/{attachment}:
+    get:
+      tags: [Admin]
+      summary: Pièce jointe déchiffrée (permission complaints.view, ouverture auditée)
+      description: V2-G04. Contenu brut (Content-Type du fichier), Cache-Control no-store. Audit complaint.attachment_viewed.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: attachment, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fichier
+          content:
+            image/*: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   parameters:
     IdempotencyKey:
@@ -2343,3 +2665,104 @@ components:
       properties:
         minor: { type: integer, example: 10050 }
         currency: { type: string, example: HTG }
+    ComplaintAttachment:
+      type: object
+      description: Contenu par GET …/attachments/{id} (joueur ou admin).
+      properties:
+        id: { type: string }
+        filename: { type: string, description: "Nom d'origine, nettoyé" }
+        mime_type: { type: string, enum: [image/jpeg, image/png, image/webp, application/pdf] }
+        size_bytes: { type: integer }
+    ComplaintLink:
+      type: [object, "null"]
+      description: Objet concerné ; null si aucun. Type agent réservé à V2-G01.
+      properties:
+        type: { type: string, enum: [bet, ledger_entry] }
+        id: { type: string }
+        label: { type: string, description: "Référence lisible : référence du ticket, ou type et date de l'écriture", example: R16-7KQ2M9XAPB }
+    Complaint:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: string, example: REC-2026-000042, description: Numéro unique à communiquer au support }
+        category: { type: string, enum: [bet, transaction, account, other] }
+        subject: { type: string }
+        status: { type: string, enum: [new, in_progress, investigation, resolved, closed] }
+        link: { $ref: "#/components/schemas/ComplaintLink" }
+        resolution: { type: [string, "null"], description: "Motif du dernier passage en resolved, montré au joueur" }
+        can_reopen: { type: boolean, description: "resolved ou closed, et dans le délai de réouverture" }
+        last_activity_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    ComplaintMessage:
+      type: object
+      properties:
+        id: { type: string }
+        author:
+          type: object
+          properties:
+            type: { type: string, enum: [player, staff] }
+            name: { type: string, description: "Côté joueur : « Service client » pour l'équipe" }
+        body: { type: string }
+        attachments: { type: array, items: { $ref: "#/components/schemas/ComplaintAttachment" } }
+        created_at: { type: string, format: date-time }
+    ComplaintEvent:
+      type: object
+      description: Entrée d'historique, en ajout seul.
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [created, status_changed, reopened, assigned, replied, note_added] }
+        from_status: { type: [string, "null"] }
+        to_status: { type: [string, "null"] }
+        reason: { type: [string, "null"], description: "Côté joueur : seulement pour resolved et reopened" }
+        actor:
+          type: object
+          properties:
+            type: { type: string, enum: [player, staff, system] }
+            name: { type: string, description: "Côté joueur : « Service client » pour l'équipe" }
+        created_at: { type: string, format: date-time }
+    ComplaintDetail:
+      description: Vue du joueur — ni notes internes, ni événements assigned ou note_added, ni identité des administrateurs.
+      allOf:
+        - $ref: "#/components/schemas/Complaint"
+        - type: object
+          properties:
+            description: { type: string }
+            attachments: { type: array, items: { $ref: "#/components/schemas/ComplaintAttachment" }, description: Pièces de l'ouverture }
+            messages: { type: array, items: { $ref: "#/components/schemas/ComplaintMessage" }, description: Plus anciens d'abord }
+            history: { type: array, items: { $ref: "#/components/schemas/ComplaintEvent" }, description: Plus anciens d'abord }
+    AdminComplaint:
+      allOf:
+        - $ref: "#/components/schemas/Complaint"
+        - type: object
+          properties:
+            user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+            assignee: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+            awaiting_staff: { type: boolean, description: Dernier message du joueur sans réponse de l'équipe }
+            waiting_since: { type: [string, "null"], format: date-time, description: Depuis quand le joueur attend une réponse }
+    AdminComplaintDetail:
+      description: Vue complète — notes internes (visibility internal) et identité des administrateurs.
+      allOf:
+        - $ref: "#/components/schemas/AdminComplaint"
+        - type: object
+          properties:
+            description: { type: string }
+            attachments: { type: array, items: { $ref: "#/components/schemas/ComplaintAttachment" } }
+            messages:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/ComplaintMessage"
+                  - type: object
+                    properties:
+                      visibility: { type: string, enum: [player, internal] }
+                      author: { type: object, properties: { id: { type: [string, "null"] } } }
+            history:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/ComplaintEvent"
+                  - type: object
+                    properties:
+                      actor: { type: object, properties: { id: { type: [string, "null"] } } }
