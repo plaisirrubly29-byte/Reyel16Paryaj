@@ -20,6 +20,7 @@ Leur proposition, ou la valeur par défaut la plus protectrice, s'applique jusqu
 | D-09 | Âge, vérification d'identité, jeu responsable, protection des données | P0-01 | ⏸ Reportée — proposition appliquée en V1 ([détail](decisions/D-01-D-09-cadre-juridique.md)) | 18 ans ; KYC avant tout dépôt réel ; jeu responsable dès la V1 | | |
 | D-10 | Hébergement, disponibilité, sauvegardes, rétention | P0-07 | ⏸ Reportée — proposition appliquée au Staging et à la démo ([détail](decisions/D-10-hebergement.md)) | Staging VPS Docker ; Prod VPS + PostgreSQL managé ; 99,5 %, RPO 15 min, RTO 4 h ; 50–120 $/mois estimés | | |
 | D-11 | Jeux virtuels : football et courses | V2-D08 | 🟡 À décider — périmètre fixé ([détail](decisions/D-11-jeux-virtuels.md)) | Football virtuel et courses virtuelles ; prestataire tiers certifié ; avis juridique, prestataire et règles à obtenir ; jeux absents du site d'ici là | | |
+| D-13 | Agents : rôle, portefeuille, documents, limites et commissions | V2-G01, V2-G02 | 🟡 À décider — options proposées ([détail](decisions/D-13-agents.md)) | Proposition : parrain (apporteur) seul au lancement, sans maniement d'argent ; encaissement en espèces après licence et D-08 ; point de vente reporté | | |
 
 ## Décisions techniques déjà prises
 
