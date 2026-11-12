@@ -171,6 +171,8 @@ describe('jeux virtuels activés (VITE_VIRTUAL_GAMES=true)', () => {
     at(START + 120_000);
     backend(loggedIn);
     renderApp('/bets');
+    // Onglet « Jeux virtuels » de Mes paris (à côté de « Sport »).
+    await userEvent.click(await screen.findByRole('button', { name: 'Jeux virtuels' }));
 
     const section = await screen.findByRole('region', { name: 'Jeux virtuels' });
     const winners = winningSelections(findEvent(MATCH, new Date(START + 120_000))!);

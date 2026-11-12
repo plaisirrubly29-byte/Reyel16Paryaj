@@ -181,9 +181,86 @@ describe('MES PARIS', () => {
     expect(await screen.findByRole('heading', { name: 'MES PARIS' })).toBeInTheDocument();
     expect(await screen.findByText('R16-ABCD2345EF')).toBeInTheDocument();
     expect(screen.getAllByText(/Everton – Chelsea/).length).toBeGreaterThan(0);
-    expect(screen.getByText('En attente')).toBeInTheDocument();
-    expect(screen.getByText('Gagné')).toBeInTheDocument();
-    expect(screen.getByText('Gain versé')).toBeInTheDocument();
+    const [pending, won] = screen.getAllByRole('listitem').filter((li) => li.classList.contains('ticket-card'));
+    expect(within(pending).getByText('En cours')).toBeInTheDocument();
+    expect(within(pending).getByText('Gains potentiels')).toBeInTheDocument();
+    expect(within(won).getByText('Gagné')).toBeInTheDocument();
+    expect(within(won).getByText('Gain versé')).toBeInTheDocument();
+  });
+
+  it('détaille chaque sélection : compétition, score final, statut, et replie au-delà de 3', async () => {
+    const selection = (id: string, status: BetTicket['status']) => ({
+      ...ticket.selections[0], id, status,
+      event: { ...ticket.selections[0].event, name: `Match ${id}`, sport: 'soccer', competition: { name: 'Premier League', country: 'Angleterre' }, status: 'finished', score: { home: '1', away: '2' } },
+    });
+    const multiple: BetTicket = {
+      ...ticket, id: '9', type: 'multiple', status: 'lost', payout: { minor: 0, currency: 'HTG' },
+      selections: [selection('1', 'won'), selection('2', 'lost'), selection('3', 'won'), selection('4', 'won')],
+    };
+    loggedIn(undefined, [multiple]);
+    renderApp('/bets');
+
+    expect(await screen.findByText('Sports - Multiple (4)')).toBeInTheDocument();
+    expect(screen.getAllByText('Angleterre - Premier League')).toHaveLength(3);
+    expect(screen.getAllByText('Score final : 1 - 2')).toHaveLength(3);
+    expect(screen.getAllByRole('img', { name: 'Gagnée' })).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'Perdue' })).toBeInTheDocument();
+    expect(screen.queryByText('Match 4')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Voir plus + (1)' }));
+    expect(screen.getByText('Match 4')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Voir moins −' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('filtre par statut, type et période côté serveur', async () => {
+    const fetchMock = loggedIn(undefined, [ticket]);
+    const router = renderApp('/bets');
+
+    await screen.findByText('R16-ABCD2345EF');
+    await userEvent.click(screen.getByRole('button', { name: 'Gagné' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type de pari' }), 'multiple');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Période' }), '7');
+
+    await waitFor(() => expect(router.state.location.search).toBe('?statut=won&type=multiple&jours=7'));
+    const urls = fetchMock.mock.calls.map(([u]) => new URL(String(u))).filter((u) => u.pathname.endsWith('/bets'));
+    expect(urls[0].searchParams.get('days')).toBe('30'); // 30 derniers jours par défaut
+    const last = urls[urls.length - 1].searchParams;
+    expect([last.get('status'), last.get('type'), last.get('days')]).toEqual(['won', 'multiple', '7']);
+  });
+
+  it('rejoue un ticket avec les cotes du moment, pas celles du ticket', async () => {
+    const old: BetTicket = {
+      ...ticket, total_odds: '2.50',
+      selections: [{ ...ticket.selections[0], odds: '2.50', market: { ...ticket.selections[0].market, id: 'm1' }, selection: { ...ticket.selections[0].selection, id: '11' } }],
+    };
+    const fetchMock = loggedIn(undefined, [old]);
+    const handlers = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => String(input).includes('/events/1/markets')
+      ? new Response(JSON.stringify({ data: EVENTS[0] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      : handlers(input, init));
+    renderApp('/bets');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Rejouer' }));
+
+    const slip = await screen.findByRole('complementary', { name: 'Coupon' });
+    expect(within(slip).getAllByText('2.95').length).toBeGreaterThan(0);
+    expect(within(slip).queryByText('2.50')).toBeNull();
+    expect(await screen.findByText('Coupon recomposé avec les cotes du moment.')).toBeInTheDocument();
+  });
+
+  it("ne propose pas de rejouer un ticket dont les matchs ont commencé", async () => {
+    loggedIn(undefined, [{ ...ticket, selections: [{ ...ticket.selections[0], event: { ...ticket.selections[0].event, starts_at: inHours(-2) }, selection: { ...ticket.selections[0].selection, id: '11' } }] }]);
+    renderApp('/bets');
+
+    expect(await screen.findByRole('button', { name: 'Rejouer' })).toBeDisabled();
+  });
+
+  it('partage le betcode à la demande', async () => {
+    loggedIn(undefined, [ticket]);
+    renderApp('/bets');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Partager' }));
+    expect(screen.getByText('WhatsApp')).toBeInTheDocument();
   });
 
   it('affiche un message quand le joueur n\'a encore aucun pari', async () => {

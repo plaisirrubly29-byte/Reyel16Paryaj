@@ -40,8 +40,10 @@ class BetsApiTest extends TestCase
             ->assertJsonPath('data.payout', null)
             ->assertJsonCount(2, 'data.selections')
             ->assertJsonPath('data.selections.0.event.name', 'Everton – Chelsea')
-            ->assertJsonPath('data.selections.0.market', ['key' => 'h2h', 'name' => 'Résultat du match (1X2)', 'line' => null])
-            ->assertJsonPath('data.selections.0.selection', ['key' => 'home', 'label' => '1', 'name' => 'Home'])
+            ->assertJsonPath('data.selections.0.market', ['id' => (string) $h2h->id, 'key' => 'h2h', 'name' => 'Résultat du match (1X2)', 'line' => null])
+            ->assertJsonPath('data.selections.0.selection', [
+                'id' => (string) $h2h->selections()->where('key', 'home')->value('id'), 'key' => 'home', 'label' => '1', 'name' => 'Home',
+            ])
             ->assertJsonPath('data.selections.0.odds', '2.05')
             ->assertJsonPath('data.selections.1.market.name', 'Nombre de buts')
             ->assertJsonPath('data.selections.1.selection.label', '> 2.5')
@@ -100,11 +102,51 @@ class BetsApiTest extends TestCase
             ->assertJsonPath('data.0.payout', ['minor' => 0, 'currency' => 'HTG']);
     }
 
+    public function test_the_list_is_filterable_by_type_and_period(): void
+    {
+        $player = User::factory()->create();
+        $single = $this->ticket($player, ['placed_at' => now()->subDays(2)]);
+        $multiple = $this->ticket($player, ['type' => BetType::Multiple, 'placed_at' => now()->subDays(10)]);
+        $this->ticket($player, ['placed_at' => now()->subDays(45)]);
+
+        $this->actingAs($player)->getJson('/api/v1/bets?type=multiple')
+            ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $multiple->id);
+        $this->actingAs($player)->getJson('/api/v1/bets?days=7')
+            ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $single->id);
+        $this->actingAs($player)->getJson('/api/v1/bets?days=30')->assertJsonCount(2, 'data');
+        $this->actingAs($player)->getJson('/api/v1/bets?days=30&type=single&status=pending')
+            ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $single->id);
+    }
+
+    public function test_each_selection_shows_its_competition_and_the_match_score(): void
+    {
+        $player = User::factory()->create();
+        $market = $this->market();
+        $ticket = $this->ticket($player);
+        $this->select($ticket, $market, 'home');
+
+        $this->actingAs($player)->getJson("/api/v1/bets/{$ticket->id}")
+            ->assertJsonPath('data.selections.0.event.sport', 'soccer')
+            ->assertJsonPath('data.selections.0.event.competition.name', 'Premier League')
+            ->assertJsonPath('data.selections.0.event.status', 'scheduled')
+            ->assertJsonPath('data.selections.0.event.score', null)
+            ->assertJsonPath('data.selections.0.selection.id', (string) $market->selections()->where('key', 'home')->value('id'));
+
+        $market->event->update(['status' => 'finished', 'home_score' => '1', 'away_score' => '2']);
+
+        $this->actingAs($player)->getJson("/api/v1/bets/{$ticket->id}")
+            ->assertJsonPath('data.selections.0.event.status', 'finished')
+            ->assertJsonPath('data.selections.0.event.score', ['home' => '1', 'away' => '2']);
+    }
+
     public function test_an_unknown_status_filter_is_rejected(): void
     {
         $this->actingAs(User::factory()->create())->getJson('/api/v1/bets?status=paid')
             ->assertUnprocessable()
             ->assertJsonPath('error.code', 'validation_failed');
+        $this->actingAs(User::factory()->create())->getJson('/api/v1/bets?days=365&type=system')
+            ->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['details' => ['days', 'type']]]);
     }
 
     public function test_a_player_never_sees_another_players_tickets(): void

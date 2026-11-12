@@ -1809,6 +1809,57 @@ a.match-line-teams:hover { color: var(--brand); }
   .ticket-card { padding: 1rem; }
 }
 
+/* MES PARIS : produits, filtres, carte de ticket détaillée */
+.my-bets-title { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 0; text-transform: uppercase; letter-spacing: 0.04em; font-size: 1.25rem; }
+.my-bets-products { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
+.my-bets-products button {
+  display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.55rem 0.5rem; border: 0; border-left: 1px solid var(--border);
+  background: none; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.my-bets-products button:first-child { border-left: 0; }
+.my-bets-products button.active { background: var(--brand); color: #fff; }
+.my-bets-filters { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
+.status-chip {
+  padding: 0.5rem 1rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm);
+  font: inherit; font-size: 0.9rem; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.status-chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.my-bets-selects { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.my-bets-selects select {
+  width: auto; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background-color: var(--surface);
+  box-shadow: var(--shadow-sm); font: inherit; font-size: 0.9rem; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.my-bets .ticket-card { padding: 0; gap: 0; overflow: hidden; }
+.my-bets .ticket-head { padding: 0.9rem 1rem; border-bottom: 1px solid var(--border); align-items: flex-start; flex-wrap: nowrap; }
+.ticket-head-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.ticket-title { font-size: 1rem; }
+.ticket-head-text .mono { white-space: nowrap; }
+.my-bets .ticket-status { text-transform: none; letter-spacing: 0; font-size: 0.82rem; border-radius: 6px; white-space: nowrap; }
+.my-bets .ticket-status.status-pending { background: #1e88e5; border-color: #1e88e5; color: #fff; }
+.my-bets .ticket-status.status-won { background: var(--success); border-color: var(--success); color: #fff; }
+.my-bets .ticket-status.status-lost { background: var(--danger); border-color: var(--danger); color: #fff; }
+.my-bets .ticket-selections li.ticket-selection { align-items: stretch; padding: 0.8rem 1rem; }
+.ticket-selection-main { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.ticket-event { display: inline-flex; align-items: center; gap: 0.35rem; }
+.ticket-pick { align-self: flex-start; margin-top: 0.35rem; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; font-size: 0.9rem; }
+.selection-won .ticket-pick { background: var(--success); color: #fff; }
+.selection-lost .ticket-pick { background: #fdecec; color: var(--danger); }
+.ticket-selection-side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 0.5rem; flex: none; }
+.selection-state { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; color: #fff; background: #1e88e5; }
+.selection-state.state-won { background: var(--success); }
+.selection-state.state-lost { background: var(--danger); }
+.selection-state.state-void { background: var(--muted); }
+.my-bets .ticket-selections .odds-value { padding: 0.2rem 0.5rem; border-radius: 6px; background: var(--surface-2); color: var(--text); font-variant-numeric: tabular-nums; }
+.ticket-more { align-self: center; margin: 0.2rem 0 0.8rem; padding: 0.3rem 0.9rem; border: 0; border-radius: 6px; background: var(--surface-2); font: inherit; font-size: 0.85rem; color: var(--muted); cursor: pointer; }
+.ticket-summary { margin: 0; padding: 0.8rem 1rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.35rem; }
+.ticket-summary div { display: flex; justify-content: space-between; gap: 1rem; }
+.ticket-summary dt { font-weight: 600; }
+.ticket-summary dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ticket-summary-return dt, .ticket-summary-return dd { font-size: 1.05rem; }
+.ticket-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; padding: 0 1rem 1rem; }
+.ticket-actions .btn { display: inline-flex; justify-content: center; align-items: center; gap: 0.4rem; }
+.my-bets .ticket-card > [role="status"], .my-bets .ticket-card > .betcode-share { padding: 0 1rem 1rem; margin: 0; }
+
 /* MON COMPTE : bandeau bleu nuit (avatar, statut, solde), raccourcis, cartes d'informations */
 .profile { display: flex; flex-direction: column; gap: 1.25rem; max-width: 1080px; width: 100%; margin: 0 auto; }
 .profile-hero {
