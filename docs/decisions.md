@@ -21,6 +21,7 @@ Leur proposition, ou la valeur par défaut la plus protectrice, s'applique jusqu
 | D-10 | Hébergement, disponibilité, sauvegardes, rétention | P0-07, V2-A03 | ⏸ Reportée — proposition appliquée au Staging et à la démo ; fournisseur de Production proposé ([détail](decisions/D-10-hebergement.md)) | Staging VPS Docker ; Prod VPS + PostgreSQL managé ; 99,5 %, RPO 15 min, RTO 4 h ; proposition V2-A03 : DigitalOcean (serveur + PostgreSQL managé, PITR 7 jours), ≈ 90–95 $/mois pour la Prod | | |
 | D-11 | Jeux virtuels : football et courses | V2-D08 | 🟡 À décider — périmètre fixé ([détail](decisions/D-11-jeux-virtuels.md)) | Football virtuel et courses virtuelles ; prestataire tiers certifié ; avis juridique, prestataire et règles à obtenir ; jeux absents du site d'ici là | | |
 | D-12 | Borlette : cadre juridique, règles des jeux, barème des gains, limites par boule | V2-D09 | 🟡 À décider — brouillon ([détail](decisions/D-12-borlette.md)) | Tirages et résultats déjà affichés (étape 1) ; vente de tickets désactivée tant que l'avis juridique, le barème et les limites ne sont pas validés par écrit | | |
+| D-13 | Agents : rôle, portefeuille, documents, limites et commissions | V2-G01, V2-G02 | 🟡 À décider — options proposées ([détail](decisions/D-13-agents.md)) | Proposition : parrain (apporteur) seul au lancement, sans maniement d'argent ; encaissement en espèces après licence et D-08 ; point de vente reporté | | |
 
 ## Décisions techniques déjà prises
 
