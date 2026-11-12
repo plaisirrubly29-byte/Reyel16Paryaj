@@ -107,7 +107,9 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
   const methods = useDepositMethods();
   const start = useStartDeposit();
   const [params, setParams] = useSearchParams();
-  const followed = params.get('depot');
+  // Retour du prestataire : ?depot=… (prestataire simulé) ou ?refference_id=… (lien de retour Plop Plop).
+  const returned = params.get('depot') ?? params.get('refference_id');
+  const followed = returned && /^pay_[a-z0-9]+$/.test(returned) ? returned : null;
   const [amount, setAmount] = useState('');
   const [provider, setProvider] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);

@@ -5,6 +5,7 @@ namespace App\Modules\Payments\Services;
 use App\Models\User;
 use App\Modules\Compliance\Exceptions\ResponsibleGamingException;
 use App\Modules\Compliance\Services\ResponsibleGamingService;
+use App\Modules\Payments\Contracts\ChecksPaymentStatus;
 use App\Modules\Payments\Contracts\PaymentProvider;
 use App\Modules\Payments\Enums\PaymentDirection;
 use App\Modules\Payments\Enums\PaymentStatus;
@@ -108,18 +109,69 @@ class PaymentService
     /** Traite un webhook et le journalise ; le résultat décide de la réponse HTTP. */
     public function handleWebhook(PaymentProvider $provider, Request $request): WebhookOutcome
     {
+        $payload = $request->getContent();
+
         if (! $provider->verifyWebhook($request)) {
             Log::warning('Webhook de paiement refusé : signature invalide.', ['provider' => $provider->name(), 'ip' => $request->ip()]);
 
-            return $this->journal($provider, $request, null, null, false, WebhookOutcome::InvalidSignature);
+            return $this->journal($provider, $payload, $request->ip(), null, null, false, WebhookOutcome::InvalidSignature);
         }
 
         try {
             $notification = $provider->parseWebhook($request);
         } catch (InvalidWebhookException) {
-            return $this->journal($provider, $request, null, null, true, WebhookOutcome::InvalidPayload);
+            return $this->journal($provider, $payload, $request->ip(), null, null, true, WebhookOutcome::InvalidPayload);
         }
 
+        return $this->process($provider, $notification, $payload, $request->ip());
+    }
+
+    /**
+     * Relit le statut d'un paiement chez le prestataire (s'il le permet) et l'applique avec les règles d'un webhook.
+     * Sert quand le webhook n'arrive pas. Null : rien à vérifier (statut final, prestataire sans vérification,
+     * paiement inconnu du prestataire, prestataire injoignable).
+     */
+    public function reconcile(PaymentTransaction $transaction): ?WebhookOutcome
+    {
+        $provider = $this->providers->find($transaction->provider);
+        if (! $provider instanceof ChecksPaymentStatus || $transaction->status->isFinal()) {
+            return null;
+        }
+
+        try {
+            $check = $provider->checkStatus($transaction);
+        } catch (Throwable $e) {
+            Log::warning('Vérification du paiement impossible chez le prestataire.', ['provider' => $provider->name(), 'reference' => $transaction->reference, 'exception' => $e->getMessage()]);
+
+            return null;
+        }
+
+        return $check === null ? null : $this->process($provider, $check->notification, $check->payload, null);
+    }
+
+    /**
+     * Vérifie les dépôts encore en attente (ou expirés : un succès tardif est crédité) des dernières heures, chez les
+     * prestataires qui le permettent (commande payments:reconcile). Renvoie le nombre de paiements dont l'état a changé.
+     */
+    public function reconcilePending(int $hours = 24): int
+    {
+        $changed = 0;
+
+        PaymentTransaction::whereIn('status', [PaymentStatus::Pending, PaymentStatus::Expired])
+            ->where('created_at', '>=', now()->subHours($hours))
+            ->orderBy('id')
+            ->each(function (PaymentTransaction $transaction) use (&$changed) {
+                if (in_array($this->reconcile($transaction), [WebhookOutcome::Applied, WebhookOutcome::AppliedLate, WebhookOutcome::Review], true)) {
+                    $changed++;
+                }
+            });
+
+        return $changed;
+    }
+
+    /** Règles communes à un webhook et à une vérification : idempotence, verrou, application, journal. */
+    private function process(PaymentProvider $provider, PaymentNotification $notification, string $payload, ?string $ip): WebhookOutcome
+    {
         // Événement déjà traité : même réponse, aucun nouvel effet.
         $known = WebhookEvent::where('provider', $provider->name())->where('event_id', $notification->eventId)->first();
         if ($known !== null) {
@@ -127,7 +179,7 @@ class PaymentService
         }
 
         try {
-            return DB::transaction(function () use ($provider, $request, $notification) {
+            return DB::transaction(function () use ($provider, $notification, $payload, $ip) {
                 // Verrou sur la transaction : deux webhooks d'un même paiement passent un par un.
                 $transaction = PaymentTransaction::where('provider', $provider->name())
                     ->where('reference', $notification->reference)
@@ -136,7 +188,7 @@ class PaymentService
 
                 $outcome = $transaction === null ? WebhookOutcome::UnknownTransaction : $this->apply($transaction, $notification);
 
-                return $this->journal($provider, $request, $notification->eventId, $transaction?->id, true, $outcome);
+                return $this->journal($provider, $payload, $ip, $notification->eventId, $transaction?->id, true, $outcome);
             });
         } catch (UniqueConstraintViolationException) {
             // Le même événement reçu deux fois en parallèle : le second est annulé avec sa transaction.
@@ -213,7 +265,8 @@ class PaymentService
         return $late ? WebhookOutcome::AppliedLate : WebhookOutcome::Applied;
     }
 
-    private function journal(PaymentProvider $provider, Request $request, ?string $eventId, ?int $transactionId, bool $signatureValid, WebhookOutcome $outcome): WebhookOutcome
+    /** Journal des webhooks et des vérifications ($ip null : statut relu par nous chez le prestataire). */
+    private function journal(PaymentProvider $provider, string $payload, ?string $ip, ?string $eventId, ?int $transactionId, bool $signatureValid, WebhookOutcome $outcome): WebhookOutcome
     {
         WebhookEvent::create([
             'provider' => $provider->name(),
@@ -221,8 +274,8 @@ class PaymentService
             'payment_transaction_id' => $transactionId,
             'signature_valid' => $signatureValid,
             'outcome' => $outcome,
-            'payload' => mb_substr($request->getContent(), 0, 60_000),
-            'ip_address' => $request->ip(),
+            'payload' => mb_substr($payload, 0, 60_000),
+            'ip_address' => $ip,
             'created_at' => now(),
         ]);
 
