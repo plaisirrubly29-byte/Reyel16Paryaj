@@ -22,6 +22,7 @@ tags:
   - name: Wallet
   - name: ResponsibleGaming
   - name: Admin
+  - name: Payments
 
 paths:
   /health:
@@ -1803,6 +1804,85 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/payments:
+    get:
+      tags: [Admin]
+      summary: Transactions des prestataires de paiement (permission ledger.view)
+      description: Journal en lecture seule ; Finance, Conformité et Super Admin. Sans les webhooks (voir le détail).
+      x-task: V2-B01
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed, expired, review] } }
+        - { name: direction, in: query, schema: { type: string, enum: [deposit, payout] } }
+        - { name: provider, in: query, schema: { type: string, example: moncash } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: reference, in: query, description: "Notre référence (pay_…) ou celle du prestataire", schema: { type: string } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Transactions, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminPaymentTransaction" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/payments/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une transaction, avec les webhooks reçus (permission ledger.view)
+      x-task: V2-B01
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminPaymentTransaction" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /payments/webhooks/{provider}:
+    post:
+      tags: [Payments]
+      summary: Webhook d'un prestataire de paiement (signé, idempotent)
+      description: |
+        Sans compte ni session : la signature du prestataire fait foi (faux prestataire : en-tête X-Fake-Signature
+        « t=<horodatage>,v1=<HMAC-SHA256 de "<horodatage>.<corps>"> », refusé au-delà de 5 minutes). Chaque webhook est
+        journalisé. Un même événement n'a qu'un effet : rejoué, il renvoie le même résultat. Un dépôt réussi est crédité
+        une seule fois, si le montant et la devise correspondent (sinon `review`, sans crédit) ; reçu après
+        l'expiration du dépôt, il est crédité quand même (`applied_late`).
+      x-task: V2-B01
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, example: moncash } }
+      requestBody:
+        required: true
+        description: Format propre à chaque prestataire.
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        "200":
+          description: Événement enregistré (avec ou sans effet)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      outcome: { type: string, enum: [applied, applied_late, review, ignored, unknown_transaction] }
+        "400": { description: "`invalid_payload` : contenu illisible ou incomplet", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { description: "`invalid_signature` : signature absente, fausse ou trop ancienne", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { description: Trop de requêtes (300 par minute et par IP) }
   /admin/finance/reconciliation:
     get:
       tags: [Admin]
@@ -2587,6 +2667,37 @@ components:
         rules_snapshot: { type: object, description: Règles acceptées par le joueur (détail uniquement) }
         selections: { type: array, items: { $ref: "#/components/schemas/BetTicket/properties/selections/items" } }
         ledger_entries: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+    AdminPaymentTransaction:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        provider: { type: string, example: moncash }
+        direction: { type: string, enum: [deposit, payout] }
+        status: { type: string, enum: [pending, succeeded, failed, expired, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        reference: { type: string, example: pay_01jc5x0v6z0k6q7m4c2b9p3r8t }
+        provider_reference: { type: [string, "null"] }
+        ledger_entry_id: { type: [string, "null"], description: Écriture du crédit (dépôt réussi) }
+        review_reason: { type: [string, "null"], example: amount_mismatch }
+        reported: { type: [object, "null"], description: "Montant et devise annoncés par le prestataire, en cas d'écart", properties: { amount_minor: { type: integer }, currency: { type: string } } }
+        late: { type: boolean, description: Succès reçu après l'expiration }
+        expires_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        webhooks:
+          type: array
+          description: Détail seulement, du plus ancien au plus récent
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              event_id: { type: [string, "null"] }
+              signature_valid: { type: boolean }
+              outcome: { type: string, enum: [applied, applied_late, review, ignored, unknown_transaction, invalid_signature, invalid_payload] }
+              payload: { type: string, description: Corps brut reçu }
+              ip_address: { type: [string, "null"] }
+              created_at: { type: string, format: date-time }
     AdminLedgerEntry:
       type: object
       properties:

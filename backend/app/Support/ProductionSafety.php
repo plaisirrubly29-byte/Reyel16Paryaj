@@ -37,6 +37,10 @@ final class ProductionSafety
             $problems[] = 'SANCTUM_STATEFUL_DOMAINS ne doit pas contenir "*" (session ouverte à n\'importe quel domaine).';
         }
 
+        if (config('payments.providers.fake.enabled')) {
+            $problems[] = 'PAYMENTS_FAKE_ENABLED doit valoir false (le faux prestataire de paiement créditerait des dépôts sans argent réel).';
+        }
+
         return $problems;
     }
 

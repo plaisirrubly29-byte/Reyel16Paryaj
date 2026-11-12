@@ -18,6 +18,7 @@ class ProductionSafetyTest extends TestCase
             'trustedproxy.proxies' => '10.0.0.2',
             'cors.allowed_origins' => ['https://reyel16paryaj.ht'],
             'sanctum.stateful' => ['reyel16paryaj.ht'],
+            'payments.providers.fake.enabled' => false,
         ]);
     }
 
@@ -41,6 +42,8 @@ class ProductionSafetyTest extends TestCase
             ['SANCTUM_STATEFUL_DOMAINS', ['sanctum.stateful' => ['*']]],
             // Sanctum retire les espaces avant de comparer : « site.ht, * » ouvre les sessions à tous les domaines.
             ['SANCTUM_STATEFUL_DOMAINS', ['sanctum.stateful' => ['reyel16paryaj.ht', ' *']]],
+            // Faux prestataire de paiement (V2-B01) : il créditerait des dépôts sans argent réel.
+            ['PAYMENTS_FAKE_ENABLED', ['payments.providers.fake.enabled' => true]],
         ];
 
         foreach ($cases as [$variable, $setting]) {
