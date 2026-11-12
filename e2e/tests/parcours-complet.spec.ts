@@ -58,7 +58,7 @@ test('parcours complet du joueur, du compte au règlement', async ({ page }) => 
     await expect(await balance(page)).toHaveText(money('4 900'));
 
     await page.goto('/bets');
-    await expect(page.locator('.ticket-card').filter({ hasText: match.home }).locator('.ticket-status')).toHaveText('En attente');
+    await expect(page.locator('.ticket-card').filter({ hasText: match.home }).locator('.ticket-status')).toHaveText('En cours');
   });
 
   await test.step('résultat test (2-1) et règlement simulé', () => {
