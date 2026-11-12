@@ -27,9 +27,38 @@ class FakePaymentProvider implements PaymentProvider
         return 'fake';
     }
 
+    /**
+     * Le joueur confirme sur la page du prestataire simulé (FakeCheckoutController), comme sur celle de MonCash.
+     * Chemin relatif : le frontend et l'API partagent la même origine (proxy Vite, Caddy).
+     */
     public function initiate(PaymentTransaction $transaction): PaymentInitiation
     {
-        return new PaymentInitiation('fake_'.Str::lower((string) Str::ulid()));
+        return new PaymentInitiation(
+            'fake_'.Str::lower((string) Str::ulid()),
+            '/api/v1/payments/fake/checkout/'.$transaction->reference,
+        );
+    }
+
+    /**
+     * Webhook signé que le prestataire simulé envoie après la décision du joueur : il suit le même chemin qu'un
+     * webhook reçu (vérification, idempotence, crédit unique).
+     */
+    public static function simulatedWebhook(PaymentTransaction $transaction, PaymentStatus $status, string $ip = '127.0.0.1'): Request
+    {
+        $body = (string) json_encode([
+            'id' => 'evt_'.Str::lower((string) Str::ulid()),
+            'reference' => $transaction->reference,
+            'provider_reference' => $transaction->provider_reference,
+            'status' => $status->value,
+            'amount_minor' => $transaction->amount_minor,
+            'currency' => $transaction->currency,
+        ]);
+
+        return Request::create('/api/v1/payments/webhooks/fake', 'POST', server: [
+            'CONTENT_TYPE' => 'application/json',
+            'REMOTE_ADDR' => $ip,
+            'HTTP_'.strtoupper(str_replace('-', '_', self::SIGNATURE_HEADER)) => self::signatureHeader($body, (string) config('payments.providers.fake.secret')),
+        ], content: $body);
     }
 
     public function verifyWebhook(Request $request): bool

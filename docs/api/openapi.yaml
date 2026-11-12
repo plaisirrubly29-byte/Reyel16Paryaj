@@ -2011,6 +2011,108 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /payments/methods:
+    get:
+      tags: [Payments]
+      summary: Moyens de paiement activés et montants de dépôt acceptés
+      description: Liste vide quand aucun prestataire n'est activé (aucun dépôt en ligne possible).
+      x-task: V2-B02
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      methods:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            provider: { type: string, example: fake }
+                            label: { type: string, example: Paiement test }
+                      min_amount: { $ref: "#/components/schemas/Money" }
+                      max_amount: { $ref: "#/components/schemas/Money" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /payments/deposits:
+    get:
+      tags: [Payments]
+      summary: Dépôts du joueur connecté (plus récents d'abord)
+      x-task: V2-B05
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Deposit" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Payments]
+      summary: Ouvrir un dépôt chez un prestataire de paiement
+      description: |
+        Ne crédite rien : le joueur confirme sur la page du prestataire (`redirect_url`), puis seul le webhook signé du
+        prestataire crédite le solde, une seule fois. Contrôles avant l'appel au prestataire : compte joueur, portefeuille
+        actif, limites de dépôt du joueur (V2-B06) en comptant ses dépôts encore en attente. 10 dépôts par minute.
+        Faux prestataire (`fake`, hors production) : `redirect_url` est la page simulée
+        `/api/v1/payments/fake/checkout/{reference}`, qui envoie un vrai webhook signé puis renvoie sur
+        `FRONTEND_URL/wallet?depot={reference}`.
+      x-task: V2-B02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, amount_minor]
+              properties:
+                provider: { type: string, example: fake }
+                amount_minor: { type: integer, example: 150000, description: "Unité mineure ; bornes de GET /payments/methods (100,00 à 100 000,00 HTG par défaut)" }
+      responses:
+        "201":
+          description: Dépôt ouvert, en attente de confirmation
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Deposit" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422":
+          description: |
+            validation_failed ; payment_provider_unavailable ; not_a_player ; deposit_limit_exceeded (journalisé ;
+            details.period, limit_minor, remaining_minor)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423": { description: "`wallet_frozen` : portefeuille gelé", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "502": { description: "`payment_provider_error` : le prestataire ne répond pas (dépôt marqué failed)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /payments/deposits/{reference}:
+    get:
+      tags: [Payments]
+      summary: Suivre un dépôt du joueur connecté
+      description: Interrogé par la page Solde au retour du prestataire, jusqu'à un statut final.
+      x-task: V2-B05
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string, example: pay_01jbz8k3m2v7q9x4w5r6t0y1ab } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Deposit" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /payments/webhooks/{provider}:
     post:
       tags: [Payments]
@@ -2557,6 +2659,19 @@ components:
         de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
 
   schemas:
+    Deposit:
+      type: object
+      description: Dépôt vu par le joueur (V2-B02). Le motif d'une revue reste interne.
+      properties:
+        reference: { type: string, example: pay_01jbz8k3m2v7q9x4w5r6t0y1ab }
+        provider: { type: string, example: fake }
+        provider_label: { type: string, example: Paiement test }
+        status: { type: string, enum: [pending, succeeded, failed, expired, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        redirect_url: { type: [string, "null"], description: Page du prestataire où confirmer ; seulement tant que le dépôt est en attente }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
     LedgerEntry:
       type: object
       properties:

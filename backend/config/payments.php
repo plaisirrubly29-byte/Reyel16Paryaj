@@ -28,4 +28,8 @@ return [
     // Un succès reçu plus tard est quand même crédité : l'argent a quitté le compte du joueur.
     'deposit_expiry_minutes' => (int) env('PAYMENTS_DEPOSIT_EXPIRY_MINUTES', 30),
 
+    // Montants d'un dépôt ouvert par le joueur, en unité mineure (100,00 HTG à 100 000,00 HTG par défaut).
+    'deposit_min_minor' => (int) env('PAYMENTS_DEPOSIT_MIN_MINOR', 100_00),
+    'deposit_max_minor' => (int) env('PAYMENTS_DEPOSIT_MAX_MINOR', 100_000_00),
+
 ];

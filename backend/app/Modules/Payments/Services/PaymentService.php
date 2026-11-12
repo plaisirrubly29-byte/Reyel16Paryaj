@@ -3,6 +3,8 @@
 namespace App\Modules\Payments\Services;
 
 use App\Models\User;
+use App\Modules\Compliance\Exceptions\ResponsibleGamingException;
+use App\Modules\Compliance\Services\ResponsibleGamingService;
 use App\Modules\Payments\Contracts\PaymentProvider;
 use App\Modules\Payments\Enums\PaymentDirection;
 use App\Modules\Payments\Enums\PaymentStatus;
@@ -11,6 +13,7 @@ use App\Modules\Payments\Exceptions\InvalidWebhookException;
 use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Payments\Models\WebhookEvent;
 use App\Modules\Payments\Support\PaymentNotification;
+use App\Modules\Wallet\Models\Wallet;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
@@ -35,29 +38,56 @@ class PaymentService
     public function __construct(
         private readonly PaymentProviderRegistry $providers,
         private readonly LedgerService $ledger,
+        private readonly ResponsibleGamingService $responsibleGaming,
     ) {}
 
     /**
-     * Ouvre un dépôt chez le prestataire. V2-B02 l'exposera au joueur, après les contrôles KYC et limites de dépôt.
+     * Ouvre le dépôt d'un joueur chez le prestataire (POST /payments/deposits). Contrôles avant tout appel au
+     * prestataire : compte joueur, portefeuille actif, limites de dépôt du joueur (V2-B06) en comptant ses dépôts
+     * encore en attente. Rien n'est crédité ici : seul le webhook vérifié du prestataire crédite.
      *
-     * @throws ApiException payment_provider_unavailable | payment_provider_error
+     * @throws ApiException payment_provider_unavailable | not_a_player | wallet_frozen | payment_provider_error
+     * @throws ResponsibleGamingException deposit_limit_exceeded (refus journalisé)
      */
     public function startDeposit(User $user, Money $amount, string $providerName): PaymentTransaction
     {
         $provider = $this->providers->find($providerName)
             ?? throw new ApiException('payment_provider_unavailable', __('Ce moyen de paiement n\'est pas disponible.'), 422);
 
-        $transaction = PaymentTransaction::create([
-            'user_id' => $user->id,
-            'provider' => $provider->name(),
-            'direction' => PaymentDirection::Deposit,
-            'status' => PaymentStatus::Pending,
-            'amount_minor' => $amount->minor,
-            'currency' => $amount->currency,
-            'reference' => 'pay_'.Str::lower((string) Str::ulid()),
-            'expires_at' => now()->addMinutes((int) config('payments.deposit_expiry_minutes')),
-        ]);
+        if ($user->isAdmin()) {
+            throw new ApiException('not_a_player', __('Seul un joueur peut déposer.'), 422);
+        }
 
+        try {
+            $transaction = DB::transaction(function () use ($user, $amount, $provider) {
+                // Verrou sur le joueur : ses dépôts simultanés passent un par un devant les limites.
+                User::whereKey($user->id)->lockForUpdate()->first();
+
+                if ($this->ledger->walletFor($user, $amount->currency)->status !== Wallet::STATUS_ACTIVE) {
+                    throw new ApiException('wallet_frozen', __('Ce portefeuille est gelé.'), 423);
+                }
+
+                $this->responsibleGaming->assertCanDeposit($user, $amount->minor, $this->pendingDepositsMinor($user));
+
+                return PaymentTransaction::create([
+                    'user_id' => $user->id,
+                    'provider' => $provider->name(),
+                    'direction' => PaymentDirection::Deposit,
+                    'status' => PaymentStatus::Pending,
+                    'amount_minor' => $amount->minor,
+                    'currency' => $amount->currency,
+                    'reference' => 'pay_'.Str::lower((string) Str::ulid()),
+                    'expires_at' => now()->addMinutes((int) config('payments.deposit_expiry_minutes')),
+                ]);
+            });
+        } catch (ResponsibleGamingException $refusal) {
+            // Le dépôt n'est pas ouvert : le refus est journalisé hors de la transaction annulée.
+            $this->responsibleGaming->recordDepositRefusal($user, $refusal, $amount->minor);
+
+            throw $refusal;
+        }
+
+        // Appel au prestataire hors transaction : un prestataire lent ne garde pas le verrou du joueur.
         try {
             $initiation = $provider->initiate($transaction);
         } catch (Throwable $e) {
@@ -112,6 +142,16 @@ class PaymentService
             // Le même événement reçu deux fois en parallèle : le second est annulé avec sa transaction.
             return WebhookEvent::where('provider', $provider->name())->where('event_id', $notification->eventId)->sole()->outcome;
         }
+    }
+
+    /** Montant des dépôts du joueur ouverts et pas encore confirmés ni expirés. */
+    private function pendingDepositsMinor(User $user): int
+    {
+        return (int) PaymentTransaction::where('user_id', $user->id)
+            ->where('direction', PaymentDirection::Deposit)
+            ->where('status', PaymentStatus::Pending)
+            ->where('expires_at', '>', now())
+            ->sum('amount_minor');
     }
 
     /** Dépôts jamais confirmés dans le délai : « expired » (commande payments:expire). */
