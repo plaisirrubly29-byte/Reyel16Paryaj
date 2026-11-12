@@ -93,6 +93,19 @@ describe('dépôt en ligne', () => {
     expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith('/wallet')).length).toBeGreaterThan(1);
   });
 
+  it('suit aussi le dépôt au retour de Plop Plop (?refference_id=…), et ignore une référence invalide', async () => {
+    mockApi({ ...base, 'GET /payments/deposits/pay_01abc': { status: 200, body: { data: deposit('succeeded') } } });
+
+    renderApp('/wallet?statut=ok&id_transaction=173763124912345&refference_id=pay_01abc');
+    expect(await screen.findByText('Dépôt crédité')).toBeInTheDocument();
+    cleanup();
+
+    const fetchMock = mockApi(base);
+    renderApp('/wallet?refference_id=../../admin');
+    expect(await screen.findByLabelText('Montant du dépôt')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/payments/deposits/'))).toBe(false);
+  });
+
   it('explique un paiement refusé et un dépôt encore en attente', async () => {
     const open = vi.spyOn(providerNavigation, 'open').mockImplementation(() => {});
     mockApi({ ...base, 'GET /payments/deposits/pay_01abc': { status: 200, body: { data: deposit('failed') } } });

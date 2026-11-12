@@ -2120,8 +2120,11 @@ paths:
       tags: [Payments]
       summary: Webhook d'un prestataire de paiement (signé, idempotent)
       description: |
-        Sans compte ni session : la signature du prestataire fait foi (faux prestataire : en-tête X-Fake-Signature
-        « t=<horodatage>,v1=<HMAC-SHA256 de "<horodatage>.<corps>"> », refusé au-delà de 5 minutes). Chaque webhook est
+        Sans compte ni session : la signature du prestataire fait foi. Plop Plop (`plopplop`) : en-tête
+        X-Webhook-Signature « sha256=<HMAC-SHA256 du corps brut avec le client_secret> », événements transaction.created
+        et transaction.status_changed (ok, failed, no / pending) ; identifiant retenu « <événement>:<transaction_id>:<statut> ».
+        Faux prestataire (`fake`) : en-tête X-Fake-Signature
+        « t=<horodatage>,v1=<HMAC-SHA256 de "<horodatage>.<corps>"> », refusé au-delà de 5 minutes. Chaque webhook est
         journalisé. Un même événement n'a qu'un effet : rejoué, il renvoie le même résultat. Un dépôt réussi est crédité
         une seule fois, si le montant et la devise correspondent (sinon `review`, sans crédit) ; reçu après
         l'expiration du dépôt, il est crédité quand même (`applied_late`).

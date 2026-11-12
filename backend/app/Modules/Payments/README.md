@@ -15,7 +15,8 @@
 ## Dépendances
 
 - Wallet & Ledger (`LedgerService::providerDeposit`)
-- Prestataires agréés : décision D-08 (V2-A02). Seul le faux prestataire existe aujourd'hui.
+- Prestataire retenu : **Plop Plop** (MonCash, NatCash, Kashpaw, carte), documentation « API Paiement Marchand »
+  v1.4 fournie par le prestataire. Le faux prestataire reste pour les tests et le développement.
 
 ## Tables
 
@@ -41,11 +42,32 @@
   page où le joueur paie ou refuse. La décision part en webhook signé traité par `PaymentService` (même chemin qu'un
   vrai webhook), puis le joueur revient sur `FRONTEND_URL/wallet?depot={reference}`.
 
-## Remplacer le prestataire simulé
+## Plop Plop (`PlopplopPaymentProvider`)
 
-Ajouter le vrai prestataire (ex. MonCash) comme décrit plus bas, l'activer, et désactiver `fake`
-(`PAYMENTS_FAKE_ENABLED=false`). La page Solde liste les moyens activés et suit `redirect_url` ; rien d'autre ne
-change côté frontend ni côté ledger. Le faux prestataire est de toute façon refusé en production.
+1. Ouverture : `POST api/paiement-marchand` (`client_id`, `refference_id` = notre référence `pay_…`, `montant` en HTG,
+   `payment_method`, `all` par défaut). Le joueur est envoyé sur l'`url` renvoyée ; `transaction_id` est gardé comme
+   référence du prestataire.
+2. Webhook `transaction.created` / `transaction.status_changed` sur `/api/v1/payments/webhooks/plopplop`, signé
+   `X-Webhook-Signature: sha256=<HMAC-SHA256 du corps brut avec le client_secret>`. Statuts : `ok` → crédité,
+   `failed` → échoué, `no` / `pending` → en attente. Sans identifiant d'événement ni horodatage signé : l'identifiant
+   retenu est `<événement>:<transaction_id>:<statut>`, si bien qu'un webhook rejoué n'a aucun nouvel effet.
+3. Vérification de secours (`ChecksPaymentStatus`, `POST api/paiement-verify`) : le webhook n'est envoyé qu'une fois,
+   sans nouvel essai. `payments:reconcile` (chaque minute) relit les dépôts en attente ou expirés des dernières 24 h,
+   et le suivi du dépôt par le joueur (`GET /payments/deposits/{reference}`) relit son statut au plus toutes les
+   10 secondes. Même règles qu'un webhook (montant contrôlé, crédit unique), journalisé dans `webhook_events`.
+4. Retour du joueur : le `lien_retour` du compte marchand (`<frontend>/wallet`) reçoit `?refference_id=pay_…` ; la page
+   Solde suit alors ce dépôt.
+
+**Mise en service** (Staging puis Production) :
+- `.env` : `PAYMENTS_PLOPPLOP_ENABLED=true`, `PAYMENTS_PLOPPLOP_CLIENT_ID`, `PAYMENTS_PLOPPLOP_CLIENT_SECRET` (saisis
+  sur le serveur, jamais dans le dépôt), `PAYMENTS_FAKE_ENABLED=false` ; sans ces deux valeurs, la Production refuse de
+  démarrer (`ProductionSafety`).
+- Espace marchand Plop Plop : `webhook_url` = `https://<site>/api/v1/payments/webhooks/plopplop`, `lien_retour` =
+  `https://<site>/wallet`, `client_secret` configuré (sinon aucun webhook n'est signé, donc aucun n'est accepté).
+- Le scheduler doit tourner (`payments:reconcile`, `payments:expire`).
+
+Retraits Plop Plop (jeton marchand, jeton de retrait signé `amount|method|recipient|reference|timestamp`, exécution,
+vérification) : avec V2-B03.
 
 ## Règles à respecter
 
@@ -65,14 +87,14 @@ change côté frontend ni côté ledger. Le faux prestataire est de toute façon
 
 ```
 Payments/
-├── Console            # payments:expire
-├── Contracts          # PaymentProvider
+├── Console            # payments:expire, payments:reconcile
+├── Contracts          # PaymentProvider, ChecksPaymentStatus (vérification active)
 ├── Enums              # PaymentStatus, PaymentDirection, WebhookOutcome
-├── Http/Controllers   # webhook des prestataires
+├── Http/Controllers   # webhook des prestataires, dépôts du joueur, page du prestataire simulé
 ├── Models             # PaymentTransaction, WebhookEvent
-├── Providers          # FakePaymentProvider (MonCash, NatCash : V2-B02)
+├── Providers          # PlopplopPaymentProvider, FakePaymentProvider
 ├── Services           # PaymentService, PaymentProviderRegistry
-├── Support            # PaymentInitiation, PaymentNotification
+├── Support            # PaymentInitiation, PaymentNotification, PaymentStatusCheck
 └── routes.php
 ```
 

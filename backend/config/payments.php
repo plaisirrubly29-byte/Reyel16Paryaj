@@ -1,16 +1,32 @@
 <?php
 
 use App\Modules\Payments\Providers\FakePaymentProvider;
+use App\Modules\Payments\Providers\PlopplopPaymentProvider;
 
 /*
-| Module Payments Adapter (V2-B01).
-| Aucun prestataire réel tant que D-08 n'est pas validée : MonCash (et NatCash si retenu) arriveront avec V2-B02.
-| Un prestataire n'est utilisable (paiement, webhook) que s'il est listé ici ET activé.
+| Module Payments Adapter (V2-B01, V2-B02).
+| Prestataire retenu : Plop Plop (MonCash, NatCash, Kashpaw, carte). Un prestataire n'est utilisable (paiement, webhook)
+| que s'il est listé ici ET activé. L'ordre de la liste est celui proposé au joueur.
 */
 
 return [
 
     'providers' => [
+        // Plop Plop : page de paiement unique (MonCash, NatCash, Kashpaw, carte). À configurer dans l'espace marchand :
+        // webhook_url = <site>/api/v1/payments/webhooks/plopplop, lien_retour = <frontend>/wallet.
+        'plopplop' => [
+            'class' => PlopplopPaymentProvider::class,
+            'label' => 'MonCash, NatCash ou carte', // libellé proposé au joueur et repris dans son historique
+            'enabled' => (bool) env('PAYMENTS_PLOPPLOP_ENABLED', false),
+            'base_url' => env('PAYMENTS_PLOPPLOP_BASE_URL', 'https://plopplop.solutionip.app/'),
+            'client_id' => env('PAYMENTS_PLOPPLOP_CLIENT_ID'),
+            // Clé du webhook (X-Webhook-Signature) et, plus tard, des retraits signés. Jamais exposée au navigateur.
+            'client_secret' => env('PAYMENTS_PLOPPLOP_CLIENT_SECRET'),
+            // moncash, natcash, kashpaw, carte ou all (le joueur choisit sur la page Plop Plop).
+            'payment_method' => env('PAYMENTS_PLOPPLOP_METHOD', 'all'),
+            'timeout' => (int) env('PAYMENTS_PLOPPLOP_TIMEOUT', 15),
+        ],
+
         // Faux prestataire des tests et du développement : signature HMAC comme un vrai. Interdit en production
         // (App\Support\ProductionSafety).
         'fake' => [

@@ -4,6 +4,7 @@ namespace App\Modules\Payments\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Payments\Enums\PaymentDirection;
+use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Http\Resources\DepositResource;
 use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Payments\Services\PaymentProviderRegistry;
@@ -14,6 +15,7 @@ use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Dépôts du joueur connecté par un prestataire de paiement (V2-B02 / V2-B05). Ouvrir un dépôt ne crédite rien :
@@ -75,6 +77,14 @@ class DepositController extends Controller
             ->where('reference', $reference)
             ->first()
             ?? throw new ApiException('not_found', __('Dépôt introuvable.'), 404);
+
+        // Retour de la page du prestataire : si le webhook n'est pas encore arrivé, le statut est relu chez le
+        // prestataire (au plus toutes les 10 secondes par dépôt), pour créditer le joueur sans attendre.
+        if (in_array($transaction->status, [PaymentStatus::Pending, PaymentStatus::Expired], true)
+            && Cache::add("payments:check:{$transaction->id}", true, 10)
+            && $this->payments->reconcile($transaction) !== null) {
+            $transaction->refresh();
+        }
 
         return new DepositResource($transaction);
     }
