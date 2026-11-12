@@ -1958,6 +1958,15 @@ a.match-line-teams:hover { color: var(--brand); }
 #withdraw .money-card-icon, .money-card:nth-child(2) .money-card-icon { background: var(--accent-soft); color: var(--accent); }
 .money-card-body { display: flex; flex-direction: column; align-items: flex-start; gap: 0.6rem; font-size: 0.9rem; }
 .money-card-body p { margin: 0; }
+.money-card-body > .alert, .deposit-form, .deposit-history { width: 100%; }
+.deposit-form .field { width: 100%; }
+.deposit-form .field-control input { flex: 1; min-width: 0; }
+.deposit-methods { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0; padding: 0; border: 0; }
+.deposit-methods legend { margin-bottom: 0.35rem; font-weight: 600; }
+.deposit-method { display: inline-flex; align-items: center; gap: 0.4rem; }
+.quick-amounts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.deposit-waiting { display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; }
+.deposit-history summary { cursor: pointer; font-weight: 600; margin-bottom: 0.5rem; }
 .recent-ops { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
 .recent-ops li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
 .recent-ops li:last-child { border-bottom: 0; }

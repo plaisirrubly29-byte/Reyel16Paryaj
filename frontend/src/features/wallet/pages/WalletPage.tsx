@@ -6,10 +6,11 @@ import { MoneyText } from '../../../shared/components/MoneyText';
 import { Spinner } from '../../../shared/components/Spinner';
 import { useMe } from '../../auth/api/auth';
 import { ENTRY_LABELS, useWallet, useWalletTransactions } from '../api/wallet';
+import { DepositCard } from '../components/DepositCard';
 
 /**
- * Dépôt ou retrait. Aucun prestataire de paiement n'est intégré (P7-01) : le joueur paie ou est payé
- * auprès de REYEL 16 PARYAJ avec son numéro de compte, puis l'opération est enregistrée par l'administration.
+ * Retrait : pas encore de retrait en ligne (V2-B03), le joueur est payé auprès de REYEL 16 PARYAJ avec son
+ * numéro de compte, puis l'opération est enregistrée par l'administration. Le dépôt est dans DepositCard.
  */
 function MoneyMovement({ id, icon, title, intro, steps, accountId }: { id: string; icon: IconName; title: string; intro: string; steps: string; accountId?: string }) {
   return (
@@ -52,8 +53,7 @@ export function WalletPage() {
       )}
 
       <div className="money-grid">
-        <MoneyMovement id="deposit" icon="deposit" title="Dépôt" intro="Alimenter votre solde." accountId={me?.id}
-          steps="Effectuez votre dépôt auprès de REYEL 16 PARYAJ en indiquant votre numéro de compte. Votre solde est crédité dès réception du paiement." />
+        <DepositCard accountId={me?.id} currency={wallet.data?.currency ?? 'HTG'} frozen={wallet.data?.status === 'frozen'} />
         <MoneyMovement id="withdraw" icon="withdraw" title="Retrait" intro="Retirer vos gains." accountId={me?.id}
           steps="Demandez votre retrait auprès de REYEL 16 PARYAJ avec votre numéro de compte. Le montant est débité de votre solde puis vous est remis." />
       </div>
