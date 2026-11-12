@@ -663,6 +663,8 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: type, in: query, schema: { type: string, enum: [single, multiple] } }
+        - { name: days, in: query, description: Tickets placés depuis N jours, schema: { type: integer, enum: [1, 7, 30, 90] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -3063,15 +3065,30 @@ components:
                   id: { type: string }
                   name: { type: string, example: Everton – Chelsea }
                   starts_at: { type: string, format: date-time }
+                  sport: { type: [string, "null"], example: soccer, description: Relu dans le catalogue (affichage) }
+                  competition:
+                    type: [object, "null"]
+                    properties:
+                      name: { type: string, example: Premier League }
+                      country: { type: [string, "null"], example: Angleterre }
+                  status: { type: [string, "null"], enum: [scheduled, live, finished, postponed, cancelled, null] }
+                  score:
+                    type: [object, "null"]
+                    description: Score en cours (live) ou final (finished) ; null tant qu'il n'est pas connu
+                    properties:
+                      home: { type: string, example: "1" }
+                      away: { type: string, example: "2" }
               market:
                 type: object
                 properties:
+                  id: { type: string, description: Marché du catalogue }
                   key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even] }
                   name: { type: string, example: Nombre de buts }
                   line: { type: [string, "null"], example: "2.5" }
               selection:
                 type: object
                 properties:
+                  id: { type: string, description: "Sélection du catalogue (rejouer le ticket avec les cotes du moment)" }
                   key: { type: string, example: over }
                   label: { type: string, example: "> 2.5" }
                   name: { type: string, example: Over }

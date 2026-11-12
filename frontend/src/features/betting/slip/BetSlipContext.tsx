@@ -43,6 +43,8 @@ type BetSlip = {
   /** Remplace la cote (et sa version) des sélections dont le serveur a changé la cote. */
   updateOdds: (changes: { selectionId: string; odds: string; oddsVersion: number }[]) => void;
   clear: () => void;
+  /** Remplace tout le coupon (ex. rejouer un ticket de Mes paris), type de pari redéduit. */
+  replace: (selections: SlipSelection[]) => void;
   /** Vrai juste après un ajout refusé parce que le coupon est complet. */
   full: boolean;
   /** Panneau du coupon ouvert (mobile : ouvert depuis la barre d'onglets). */
@@ -234,7 +236,8 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
       return change ? { ...s, odds: change.odds, oddsVersion: change.oddsVersion } : s;
     })),
     clear: () => { setFull(false); setSelections([]); },
-  }), [selections, setSelections, full, panelOpen, stake, mode, setMode, stakes, toggle]);
+    replace: (next) => { setFull(false); setChosenMode(null); setStakes({}); setSelections(next.slice(0, MAX_SELECTIONS)); },
+  }),[selections, setSelections, full, panelOpen, stake, mode, setMode, stakes, toggle]);
 
   return <BetSlipContext.Provider value={value}>{children}</BetSlipContext.Provider>;
 }
