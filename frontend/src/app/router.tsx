@@ -48,6 +48,7 @@ import { ResponsibleGamingPage } from '../features/legal/pages/ResponsibleGaming
 import { TermsPage } from '../features/legal/pages/TermsPage';
 import { ResponsibleSettingsPage } from '../features/responsible/pages/ResponsibleSettingsPage';
 import { SelfExclusionDonePage } from '../features/responsible/pages/SelfExclusionDonePage';
+import { SpendingHistoryPage } from '../features/responsible/pages/SpendingHistoryPage';
 
 /** Écran d'une section admin, protégé par la permission déclarée dans admin/navigation.ts. */
 function section(path: string, element: ReactNode, sectionPath = path.split('/')[0]) {
@@ -90,6 +91,7 @@ export const routes = [
           { path: 'account', element: <AccountPage /> },
           { path: 'devices', element: <DevicesPage /> },
           { path: 'responsible-gaming', element: <ResponsibleSettingsPage /> },
+          { path: 'responsible-gaming/history', element: <SpendingHistoryPage /> },
           { path: 'messages', element: <MessagesPage /> },
         ],
       },

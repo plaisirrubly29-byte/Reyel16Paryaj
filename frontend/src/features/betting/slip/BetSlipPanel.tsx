@@ -31,6 +31,14 @@ function refusal(error: unknown): string {
     return min && max ? `La mise doit être comprise entre ${formatMoney(min)} et ${formatMoney(max)}.` : error.message;
   }
   if (error.code === 'insufficient_funds') return 'Solde insuffisant pour cette mise.';
+  // Limites que le joueur s'est fixées (P7-02, V2-E06) : le montant encore possible l'aide à ajuster sa mise.
+  if (error.code === 'stake_limit_exceeded' || error.code === 'loss_limit_exceeded') {
+    const { remaining_minor: remaining } = error.details as { remaining_minor?: number };
+    if (typeof remaining !== 'number') return error.message;
+    return remaining > 0
+      ? `${error.message} Mise maximale possible : ${formatMoney({ minor: remaining, currency: 'HTG' })}.`
+      : `${error.message} Vous ne pouvez plus parier sur cette période.`;
+  }
   if (error.status === 0) return 'Serveur injoignable : le pari n\'a pas été placé.';
   return error.message;
 }
