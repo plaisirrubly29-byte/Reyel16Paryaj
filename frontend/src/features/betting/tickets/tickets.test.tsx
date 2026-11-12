@@ -143,6 +143,34 @@ describe('placer un pari', () => {
 
     expect(await within(slip).findByText(/La mise doit être comprise entre 10,00.*et 50.000,00/)).toBeInTheDocument();
   });
+
+  it('montre au joueur sa propre mise maximale, posée par un administrateur (V2-D05)', async () => {
+    loggedIn({ status: 422, body: { error: { code: 'stake_out_of_range', message: 'Mise hors limites.', details: { min: { minor: 1000, currency: 'HTG' }, max: { minor: 50000, currency: 'HTG' } } } } });
+    renderApp('/');
+
+    const slip = await placeEvertonBet('1000');
+
+    expect(await within(slip).findByText(/La mise doit être comprise entre 10,00.*et 500,00/)).toBeInTheDocument();
+    expect(within(slip).getByLabelText('1 sélection')).toBeInTheDocument();
+  });
+
+  it('refuse un pari au-delà du plafond du match sans révéler le plafond, et garde le coupon (V2-D05)', async () => {
+    loggedIn({
+      status: 422,
+      body: { error: {
+        code: 'risk_limit_exceeded',
+        message: 'Ce pari dépasse le montant que nous acceptons sur ce match : réduisez la mise ou choisissez une autre sélection.',
+        details: { scope: 'event', event_id: '1' },
+      } },
+    });
+    renderApp('/');
+
+    const slip = await placeEvertonBet('5000');
+
+    expect(await within(slip).findByText(/Ce pari dépasse le montant que nous acceptons sur ce match/)).toBeInTheDocument();
+    expect(within(slip).getByLabelText('1 sélection')).toBeInTheDocument();
+    expect(within(slip).queryByText(/plafond/i)).toBeNull();
+  });
 });
 
 describe('MES PARIS', () => {

@@ -759,6 +759,19 @@ p { margin: 0; }
 .exposure-figure.is-safe { color: var(--success); }
 .exposure-detail { padding: 0.25rem 1rem 1rem; background: #fafbfd; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.75rem; }
 .exposure-table caption { caption-side: top; text-align: left; padding: 0.6rem 0 0.4rem; font-size: 0.82rem; font-weight: 700; color: var(--text); }
+/* Plafonds d'engagement (V2-D05) : part du plafond atteinte par un pire cas. */
+.risk-limits { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.limit-usage { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.76rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.limit-usage.is-near { color: var(--warning); }
+.limit-usage.is-reached { color: var(--danger); }
+.limit-usage meter { width: 3.5rem; height: 0.4rem; appearance: none; border: 0; border-radius: 999px; background: #e7eaf0; overflow: hidden; }
+.limit-usage meter::-webkit-meter-bar { background: #e7eaf0; border: 0; border-radius: 999px; height: 0.4rem; }
+.limit-usage meter::-webkit-meter-optimum-value { background: var(--muted); border-radius: 999px; }
+.limit-usage meter::-moz-meter-bar { background: var(--muted); border-radius: 999px; }
+.limit-usage.is-near meter::-webkit-meter-optimum-value { background: var(--warning); }
+.limit-usage.is-near meter::-moz-meter-bar { background: var(--warning); }
+.limit-usage.is-reached meter::-webkit-meter-optimum-value { background: var(--danger); }
+.limit-usage.is-reached meter::-moz-meter-bar { background: var(--danger); }
 
 @container admin-content (max-width: 900px) {
   .detail-grid-even { grid-template-columns: minmax(0, 1fr); }

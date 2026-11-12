@@ -210,6 +210,151 @@ describe('fiche utilisateur', () => {
   });
 });
 
+describe('mise maximale propre à un joueur (V2-D05)', () => {
+  const NBSP = new RegExp(`[${String.fromCharCode(0xa0, 0x202f)}]`, 'g');
+  const text = (el: HTMLElement) => (el.textContent ?? '').replace(NBSP, ' ');
+  const panel = async () => (await screen.findByRole('heading', { name: 'Mise maximale par ticket' })).closest('form') as HTMLElement;
+
+  const setting = (key: string, minor: number) => ({ key, group: 'Paris', label: key, type: 'money', help: null, options: null, currency: 'HTG', value: minor, default: minor });
+  const settings = {
+    status: 200,
+    body: { data: { version: 1, updated_at: null, updated_by: null, items: [setting('betting.min_stake_minor', 10_00), setting('betting.max_stake_minor', 50_000_00)] } },
+  };
+
+  it('fixe une limite en centimes, avec motif et clé d\'idempotence, puis affiche la nouvelle limite', async () => {
+    let put: RequestInit | undefined;
+    mockApi({
+      'GET /me': me(['users.view', 'users.suspend']),
+      'GET /admin/users/7': { status: 200, body: { data: account({ max_stake_minor: null }) } },
+      'PUT /admin/users/7/stake-limit': (init) => {
+        put = init;
+        return { status: 200, body: { data: account({ max_stake_minor: 500_00 }) } };
+      },
+    });
+    renderApp('/admin/users/7');
+
+    const form = await panel();
+    expect(text(form)).toContain('Limite générale. Aucune limite propre à ce joueur.');
+    const submit = within(form).getByRole('button', { name: 'Fixer la limite' });
+    expect(within(form).queryByRole('button', { name: 'Retirer la limite' })).toBeNull();
+
+    // Montant puis motif : rien ne part sans les deux.
+    await userEvent.type(within(form).getByLabelText('Limite pour ce joueur'), '500');
+    expect(submit).toBeDisabled();
+    await userEvent.type(within(form).getByLabelText('Motif de la limite (obligatoire)'), 'Mises inhabituelles sur des matchs mineurs');
+    await userEvent.click(submit);
+
+    expect(await within(form).findByText('Limite appliquée.')).toBeInTheDocument();
+    expect(JSON.parse(String(put?.body))).toEqual({ max_stake_minor: 500_00, reason: 'Mises inhabituelles sur des matchs mineurs' });
+    expect((put?.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(text(form)).toContain('Limite propre à ce joueur : 500,00 HTG');
+    expect(within(form).getByRole('button', { name: 'Modifier la limite' })).toBeInTheDocument();
+  });
+
+  it('retire la limite : null est envoyé et la limite générale s\'applique de nouveau', async () => {
+    let put: RequestInit | undefined;
+    mockApi({
+      'GET /me': me(['users.view', 'users.suspend']),
+      'GET /admin/users/7': { status: 200, body: { data: account({ max_stake_minor: 500_00 }) } },
+      'PUT /admin/users/7/stake-limit': (init) => {
+        put = init;
+        return { status: 200, body: { data: account({ max_stake_minor: null }) } };
+      },
+    });
+    renderApp('/admin/users/7');
+
+    const form = await panel();
+    expect(text(form)).toContain('Limite propre à ce joueur : 500,00 HTG');
+    const remove = within(form).getByRole('button', { name: 'Retirer la limite' });
+    expect(remove).toBeDisabled(); // motif obligatoire
+    await userEvent.type(within(form).getByLabelText('Motif de la limite (obligatoire)'), 'Vérification terminée, rien à signaler');
+    await userEvent.click(remove);
+
+    expect(await within(form).findByText("Limite retirée : la limite générale s'applique de nouveau.")).toBeInTheDocument();
+    expect(JSON.parse(String(put?.body))).toEqual({ max_stake_minor: null, reason: 'Vérification terminée, rien à signaler' });
+    expect(text(form)).toContain('Aucune limite propre à ce joueur.');
+  });
+
+  it('rappelle les bornes quand les paramètres sont lisibles, et n\'envoie pas un montant hors bornes', async () => {
+    const fetchMock = mockApi({
+      'GET /me': me(['users.view', 'users.suspend', 'settings.view']),
+      'GET /admin/users/7': { status: 200, body: { data: account({ max_stake_minor: null }) } },
+      'GET /admin/settings': settings,
+    });
+    renderApp('/admin/users/7');
+
+    const form = await panel();
+    await waitFor(() => expect(text(form)).toContain('Montant entre 10,00 HTG et 50 000,00 HTG.'));
+    expect(text(form)).toContain('Limite générale : 50 000,00 HTG.');
+
+    await userEvent.type(within(form).getByLabelText('Limite pour ce joueur'), '90000');
+    await userEvent.type(within(form).getByLabelText('Motif de la limite (obligatoire)'), 'Essai au-delà de la limite générale');
+    await userEvent.click(within(form).getByRole('button', { name: 'Fixer la limite' }));
+
+    expect(text(await within(form).findByRole('alert'))).toBe('La limite doit être comprise entre 10,00 HTG et 50 000,00 HTG.');
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    // La saisie reste à l'écran ; l'erreur s'efface dès qu'on la corrige.
+    expect(within(form).getByLabelText('Limite pour ce joueur')).toHaveValue('90000');
+    await userEvent.clear(within(form).getByLabelText('Limite pour ce joueur'));
+    expect(within(form).queryByRole('alert')).toBeNull();
+  });
+
+  it('traduit le refus du serveur sur le montant quand les bornes ne sont pas lisibles', async () => {
+    mockApi({
+      'GET /me': me(['users.view', 'users.suspend']),
+      'GET /admin/users/7': { status: 200, body: { data: account({ max_stake_minor: null }) } },
+      'PUT /admin/users/7/stake-limit': {
+        status: 422,
+        // Message de validation tel que le serveur l'envoie : technique, en unité mineure.
+        body: { error: { code: 'validation_failed', message: 'Données invalides.', details: { max_stake_minor: ['The max stake minor field must not be greater than 5000000.'] } } },
+      },
+    });
+    renderApp('/admin/users/7');
+
+    const form = await panel();
+    await userEvent.type(within(form).getByLabelText('Limite pour ce joueur'), '90000');
+    await userEvent.type(within(form).getByLabelText('Motif de la limite (obligatoire)'), 'Essai au-delà de la limite générale');
+    await userEvent.click(within(form).getByRole('button', { name: 'Fixer la limite' }));
+
+    expect(await within(form).findByText('La limite doit rester entre la mise minimale et la mise maximale générales.')).toBeInTheDocument();
+    expect(within(form).queryByText(/must not be greater/)).toBeNull();
+    expect(within(form).queryByText('Limite appliquée.')).toBeNull();
+  });
+
+  it('ne lit pas les paramètres sans la permission settings.view', async () => {
+    const fetchMock = mockApi({
+      'GET /me': me(['users.view', 'users.suspend']),
+      'GET /admin/users/7': { status: 200, body: { data: account({ max_stake_minor: null }) } },
+    });
+    renderApp('/admin/users/7');
+
+    await panel();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/admin/settings'))).toBe(false);
+  });
+
+  it('ne propose pas la limite sans la permission users.suspend', async () => {
+    mockApi({
+      'GET /me': me(['users.view']),
+      'GET /admin/users/7': { status: 200, body: { data: account({ max_stake_minor: null }) } },
+    });
+    renderApp('/admin/users/7');
+
+    expect(await screen.findByRole('heading', { name: 'Informations du compte' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Mise maximale par ticket' })).toBeNull();
+  });
+
+  it('ne propose pas la limite sur un compte administrateur', async () => {
+    mockApi({
+      'GET /me': me(['users.view', 'users.suspend']),
+      'GET /admin/users/8': { status: 200, body: { data: account({ id: '8', name: 'Sam Support', is_admin: true, max_stake_minor: null }) } },
+    });
+    renderApp('/admin/users/8');
+
+    expect(await screen.findByRole('heading', { name: 'Suspendre le compte' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Mise maximale par ticket' })).toBeNull();
+  });
+});
+
 describe('dépôt refusé par une limite du joueur (V2-B06)', () => {
   const refused = (remaining: number) => ({
     status: 422,
