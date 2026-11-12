@@ -734,6 +734,35 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/deposit-limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de dépôt (journalisé)
+      description: |
+        Même règle que les limites de mise : une baisse (ou une première limite) s'applique tout de suite et annule une
+        hausse en attente ; une hausse ou une suppression (amount_minor null) attend le délai de réflexion. Chaque dépôt
+        est ensuite contrôlé sur les périodes glissantes : au-delà, 422 deposit_limit_exceeded.
+      x-task: V2-B06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 500000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
   /responsible-gaming/pause:
     post:
       tags: [ResponsibleGaming]
@@ -1242,7 +1271,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
-          description: "`validation_failed`, `not_a_player` ou `insufficient_funds`"
+          description: "`validation_failed`, `not_a_player`, `insufficient_funds` ou `deposit_limit_exceeded` (dépôt au-delà d'une limite de dépôt du joueur ; details : period, limit_minor, remaining_minor)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`wallet_frozen`"
@@ -2157,6 +2186,13 @@ components:
             day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
             week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
             month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        deposit_limits:
+          type: object
+          description: Limites de dépôt (V2-B06) ; used = dépôts de la période glissante
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
         pause:
           type: object
           properties:
@@ -2173,6 +2209,7 @@ components:
       properties:
         user: { type: object, properties: { id: { type: string }, status: { type: string, enum: [active, suspended, excluded, closed] } } }
         limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/limits" }
+        deposit_limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/deposit_limits" }
         pause: { $ref: "#/components/schemas/ResponsibleGaming/properties/pause" }
         restrictions:
           type: array

@@ -7,7 +7,10 @@ use App\Models\User;
 use App\Modules\Admin\Http\Resources\AdminLedgerEntryResource;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Compliance\Exceptions\ResponsibleGamingException;
+use App\Modules\Compliance\Services\ResponsibleGamingService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
+use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
@@ -28,7 +31,10 @@ class AdminWalletController extends Controller
     /** 1 000 000,00 HTG : plafond d'une opération (gain maximal d'un ticket, D-06). */
     private const MAX_AMOUNT_MINOR = 100_000_000;
 
-    public function __construct(private readonly LedgerService $ledger) {}
+    public function __construct(
+        private readonly LedgerService $ledger,
+        private readonly ResponsibleGamingService $responsibleGaming,
+    ) {}
 
     public function show(User $user): JsonResponse
     {
@@ -44,7 +50,7 @@ class AdminWalletController extends Controller
     }
 
     /**
-     * @throws ApiException not_a_player, insufficient_funds, wallet_frozen
+     * @throws ApiException not_a_player, insufficient_funds, wallet_frozen, deposit_limit_exceeded
      */
     public function store(Request $request, User $user, AuditLogger $audit): JsonResponse
     {
@@ -61,7 +67,27 @@ class AdminWalletController extends Controller
         $type = LedgerEntryType::from($data['type']);
         $actor = $request->user();
 
-        $entry = DB::transaction(function () use ($user, $type, $data, $actor, $audit) {
+        try {
+            $entry = $this->record($user, $type, $data, $actor, $audit);
+        } catch (ResponsibleGamingException $refusal) {
+            // Le dépôt est annulé avec sa transaction : le refus est journalisé à part, au nom de l'admin.
+            $this->responsibleGaming->recordDepositRefusal($user, $refusal, $data['amount_minor'], $actor);
+
+            throw $refusal;
+        }
+
+        return (new AdminLedgerEntryResource($entry->load(['wallet', 'reversedBy'])))->response()->setStatusCode(201);
+    }
+
+    /** @param  array{type: string, amount_minor: int, reason: string}  $data */
+    private function record(User $user, LedgerEntryType $type, array $data, User $actor, AuditLogger $audit): LedgerEntry
+    {
+        return DB::transaction(function () use ($user, $type, $data, $actor, $audit) {
+            if ($type === LedgerEntryType::Deposit) {
+                // Limites de dépôt choisies par le joueur (V2-B06) : le verrou sérialise ses dépôts simultanés.
+                $this->responsibleGaming->assertCanDeposit($user, $data['amount_minor']);
+            }
+
             $wallet = $this->ledger->walletFor($user);
             $amount = Money::ofMinor($data['amount_minor'], $wallet->currency);
             // La requête rejouée (même Idempotency-Key) est servie par le middleware : chaque appel est une opération.
@@ -80,7 +106,5 @@ class AdminWalletController extends Controller
 
             return $entry;
         });
-
-        return (new AdminLedgerEntryResource($entry->load(['wallet', 'reversedBy'])))->response()->setStatusCode(201);
     }
 }
