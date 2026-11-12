@@ -54,6 +54,16 @@ class LedgerService
     }
 
     /**
+     * Dépôt confirmé par le webhook vérifié d'un prestataire de paiement (V2-B01). La référence unique
+     * (payment:<référence>) garantit un seul crédit par transaction, même si le webhook est rejoué.
+     */
+    public function providerDeposit(Wallet $wallet, Money $amount, string $reference, string $paymentId, string $providerLabel): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Deposit, $amount, $reference, 'payment', $paymentId,
+            description: __('Dépôt :provider', ['provider' => $providerLabel]));
+    }
+
+    /**
      * Retrait remis hors plateforme, enregistré par le Super Admin. Refusé si le solde est insuffisant ou gelé.
      *
      * @throws ApiException insufficient_funds, wallet_frozen
