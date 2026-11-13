@@ -6,6 +6,8 @@ use App\Models\User;
 use App\Modules\Admin\Services\PlatformSettings;
 use App\Modules\Betting\Services\TicketStakeHistory;
 use App\Modules\Compliance\Contracts\DepositHistory;
+use App\Modules\Compliance\Contracts\LossHistory;
+use App\Modules\Compliance\Contracts\SpendingHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
 use App\Modules\Lottery\Contracts\LotteryProvider;
@@ -17,6 +19,7 @@ use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
 use App\Modules\SportsData\Services\CreditBudget;
 use App\Modules\Wallet\Services\LedgerDepositHistory;
+use App\Modules\Wallet\Services\LedgerPlayHistory;
 use App\Support\ProductionSafety;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -65,6 +68,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
         // Dépôts d'un joueur pour ses limites de dépôt : fournis par Wallet à Compliance (V2-B06).
         $this->app->bind(DepositHistory::class, LedgerDepositHistory::class);
+        // Pertes nettes et historique des dépenses, lus dans le ledger par Wallet (V2-E06).
+        $this->app->bind(LossHistory::class, LedgerPlayHistory::class);
+        $this->app->bind(SpendingHistory::class, LedgerPlayHistory::class);
 
         // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
         $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(
