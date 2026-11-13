@@ -14,14 +14,14 @@ L'essentiel est solide : **aucune injection, aucun XSS, aucun secret commité, a
 
 Avant la production, **3 points bloquants** devaient être réglés : B1 dépendait de P4-03, B2 se corrigeait dans le backend, B3 se règle dans la configuration de l'hébergement. S'y ajoute une **checklist de déploiement** (mode debug, cookies, proxies).
 
-> **État au 13 novembre 2026 :** les trois points bloquants sont corrigés (B3 dans les images du site, V2-F01 pour la Production). Le point **élevé** E1 (paris en direct) est corrigé (#108). F1 à F11 sont corrigés (V2-C07) ; seul F12 reste en partie. Voir « Suivi des correctifs ».
+> **État au 13 novembre 2026 :** les trois points bloquants sont corrigés (B3 dans les images du site, V2-F01 pour la Production). Le point **élevé** E1 (paris en direct) est corrigé (#108). Tous les points faibles sont corrigés (F1 à F11 et F12 : V2-C07 ; F13). Voir « Suivi des correctifs ».
 
 | Gravité | Nombre | Corrigés |
 |---|---|---|
 | Bloquant | 3 | 3 (B1, B2, B3) |
 | Élevé | 1 | 1 (E1) |
 | Moyen | 5 | 4 (M1, M2, M4, M5) |
-| Faible | 13 | 12 (F1 à F11, F13) ; F12 en partie |
+| Faible | 13 | 13 (F1 à F13) |
 | Info | 8 | — (I3 en partie) |
 
 Échelle : **Bloquant** = à corriger avant toute mise en production · **Élevé** = à corriger avant toute mise en production avec de l'argent réel, et avant le lancement contrôlé · **Moyen** = à corriger avant le lancement contrôlé · **Faible** = à planifier · **Info** = à connaître.
@@ -111,7 +111,7 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 | F9 | **Ledger et audit non protégés contre `TRUNCATE`** ; le rôle applicatif peut supprimer les déclencheurs | migrations `…000300` et `…000500` | Déclencheur `BEFORE TRUNCATE` ; en production, rôle de migration distinct et `REVOKE UPDATE, DELETE, TRUNCATE` | ✅ V2-C07 : `BEFORE TRUNCATE` sur les 5 tables en ajout seul (#200) ; en Production, compte propriétaire distinct (`.env.migration`, jamais chargé par l'application) et compte de l'application limité à la lecture et à l'ajout sur ces tables, contrôlé à chaque déploiement (`scripts/db/restrict-app-role.sql`, [deploiement-production.md §5.1](../ops/deploiement-production.md)) |
 | F10 | **Données personnelles en clair dans `idempotency_keys.response_body`** (24 h) | `RequireIdempotencyKey.php:61-66` | Ne stocker qu'un corps minimal ou chiffrer la colonne | ✅ V2-C07 (réponse chiffrée avec `APP_KEY`, rejouée à l'identique) |
 | F11 | **Coupon et tickets du joueur précédent visibles sur un appareil partagé** (cybercafé) | `BetSlipContext.tsx:86-93`, `AdminLayout.tsx:66` | Vider `r16p.betslip` à la déconnexion ; lier le coupon à l'id du joueur | ✅ V2-C07 (coupon lié au compte, effacé à la déconnexion ; données du compte oubliées à la fin de la session — voir « Point frontend F11 ») |
-| F12 | **Sessions longues et pas de limite de débit globale** : 120 min d'inactivité sans expiration absolue (y compris admins) ; aucune limite sur `/me`, `/wallet`, `/admin/*` ; pas de « déconnecter tous les appareils » ; événements de connexion non audités | `config/session.php`, `bootstrap/app.php`, `AuditAction.php` | Revalider le MFA après ~30 min pour les admins ; `throttleApi()` ; route de déconnexion globale ; auditer connexions et échecs | 🟡 V2-C06 : durée maximale (12 h joueur, 8 h admin), MFA redemandé après 30 min d'inactivité admin, déconnexion des autres appareils, `POST /bets` limité à 10/min. Reste : limite globale (`/me`, `/wallet`, `/admin/*`), audit des connexions |
+| F12 | **Sessions longues et pas de limite de débit globale** : 120 min d'inactivité sans expiration absolue (y compris admins) ; aucune limite sur `/me`, `/wallet`, `/admin/*` ; pas de « déconnecter tous les appareils » ; événements de connexion non audités | `config/session.php`, `bootstrap/app.php`, `AuditAction.php` | Revalider le MFA après ~30 min pour les admins ; `throttleApi()` ; route de déconnexion globale ; auditer connexions et échecs | 🟡 V2-C06 : durée maximale (12 h joueur, 8 h admin), MFA redemandé après 30 min d'inactivité admin, déconnexion des autres appareils, `POST /bets` limité à 10/min. ✅ V2-C07 : limite globale de toute l'API pour un compte connecté (120/min par compte, jamais par IP, `API_ACCOUNT_RATE_PER_MINUTE`) ; connexions réussies et échouées auditées (`auth.login_succeeded`, `auth.login_failed` : motif, IP, identifiant masqué, jamais le mot de passe) ; alerte `login_failures` (10 échecs sur un compte ou 30 depuis une IP en 1 h) |
 | F13 | **Pas d'en-têtes de sécurité sur l'API, et version de PHP révélée** (`X-Powered-By: PHP/8.3.35`, vérifié par `curl`). L'API ne renvoie que du JSON : c'est une défense en profondeur, le vrai risque est sur le frontend (B3) | `bootstrap/app.php`, configuration PHP | Middleware `SecurityHeaders` (`nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`) ; `expose_php = Off` | ✅ `0f363e4` (plus HSTS en HTTPS, `X-Powered-By` retiré). `expose_php = Off` : image de production (checklist) |
 
 ## Pour information
@@ -223,5 +223,5 @@ Accepté par écrit :
 |---|---|---|
 | Équipe | Décider pour le blocage volontaire de compte (M1) et, le cas échéant, l'activation des paris en direct (E1) | Avant le lancement contrôlé |
 | Rubly | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
-| Backend | Reste de F12 (limite de débit globale, audit des connexions) ; F7 à F11 sont corrigés (V2-C07) | À planifier |
+| Backend | F7 à F12 corrigés (V2-C07) | — |
 | Hébergement (V2-F01) | Checklist de déploiement en Production : `TRUSTED_PROXIES`, deux comptes de base (F9), `curl -I` des en-têtes (B3) ; modèles `docker/production/production.env.example` et `migration.env.example` | À la mise en place de la Production |

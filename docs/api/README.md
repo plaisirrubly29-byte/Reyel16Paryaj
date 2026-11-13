@@ -80,7 +80,7 @@ Toutes les erreurs de `/api/*` ont la même forme, appliquée par le handler d'e
 | 419 | `csrf_token_mismatch` | Jeton CSRF absent/expiré (mode SPA Sanctum) |
 | 422 | `validation_failed` | Entrées invalides (`details` par champ) |
 | 428 | `precondition_required` | En-tête obligatoire manquant (ex. `Idempotency-Key`) |
-| 429 | `too_many_requests` | Limitation de débit — respecter l'en-tête `Retry-After` |
+| 429 | `too_many_requests` | Limitation de débit — respecter l'en-tête `Retry-After`. Toute route, pour un compte connecté : 120 requêtes par minute et par compte (`API_ACCOUNT_RATE_PER_MINUTE`, revue P8-02 F12), en plus des limites propres à certaines routes |
 | 500 | `server_error` | Erreur interne (journalisée côté serveur) |
 | 503 | `service_unavailable` | Maintenance ou dépendance indisponible |
 

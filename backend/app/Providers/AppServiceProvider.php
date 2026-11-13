@@ -123,6 +123,17 @@ class AppServiceProvider extends ServiceProvider
 
     private function configureRateLimiting(): void
     {
+        // Toute l'API (throttleApi, bootstrap/app.php), par compte connecté (revue P8-02, F12) : /me, /wallet, /admin/*
+        // et les routes futures. Jamais par IP (cybercafés). Visiteur : aucune limite ici, ses routes ont les leurs
+        // (connexion, inscription, catalogue, webhooks).
+        RateLimiter::for('api', function (Request $request) {
+            $id = $request->user()?->getAuthIdentifier();
+
+            return $id === null
+                ? Limit::none()
+                : Limit::perMinute(config('identity.api_rate_per_minute'))->by('api-account:'.$id);
+        });
+
         RateLimiter::for('login', function (Request $request) {
             // Le limiteur passe avant LoginRequest : il normalise lui-même le numéro (ou l'email), sinon "3412-3456"
             // et "+509 34123456" auraient chacun leur compteur (revue P8-02, M1).

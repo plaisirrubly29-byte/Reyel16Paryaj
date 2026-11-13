@@ -3,6 +3,7 @@
 namespace Tests\Feature\Modules\Admin;
 
 use App\Models\User;
+use App\Modules\Admin\Services\AlertService;
 use App\Modules\Admin\Services\SystemStatusService;
 use App\Modules\Betting\Enums\BetType;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
@@ -77,6 +78,41 @@ class AdminSupervisionApiTest extends TestCase
 
         $this->travel(73)->hours();
         $this->assertNull($alerts(RoleSlug::SuperAdmin)->firstWhere('key', 'role_changes'));
+    }
+
+    /** Revue P8-02, F12 : échecs de connexion répétés sur un compte, ou depuis une adresse IP, en 1 h. */
+    public function test_repeated_login_failures_raise_a_security_alert(): void
+    {
+        $target = User::factory()->create(['phone' => '34123456', 'password' => 'motdepasse123']);
+        $fail = fn (string $phone, string $ip) => $this->withServerVariables(['REMOTE_ADDR' => $ip])
+            ->postJson('/api/v1/auth/login', ['phone' => $phone, 'password' => 'mauvais-mdp1'])->assertStatus(422);
+        $alert = fn (RoleSlug $role) => collect($this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+            ->actingAsVerifiedAdmin($this->admin($role))
+            ->getJson('/api/v1/admin/alerts')->assertOk()->json('data'))->firstWhere('key', 'login_failures');
+
+        // Un même compte, depuis des adresses différentes : alerte au 10e échec.
+        for ($i = 1; $i < AlertService::LOGIN_FAILURES_PER_ACCOUNT; $i++) {
+            $fail($target->phone, "10.0.0.{$i}");
+        }
+        $this->assertNull($alert(RoleSlug::SuperAdmin));
+
+        $fail($target->phone, '10.0.0.99');
+        $this->assertSame('Échecs de connexion répétés : 1 compte(s), 0 adresse(s) IP sur 60 min', $alert(RoleSlug::SuperAdmin)['title']);
+        $this->assertNull($alert(RoleSlug::Support)); // sans audit.view
+
+        // Une heure plus tard, l'alerte disparaît.
+        $this->travel(61)->minutes();
+        $this->assertNull($alert(RoleSlug::SuperAdmin));
+
+        // Une même adresse, des numéros tous différents (comptes inexistants) : alerte au 30e échec. Le limiteur
+        // « login » autorise 20 essais par minute et par IP : deux vagues, à une minute d'intervalle.
+        for ($i = 0; $i < AlertService::LOGIN_FAILURES_PER_IP; $i++) {
+            if ($i === 20) {
+                $this->travel(61)->seconds();
+            }
+            $fail(sprintf('3800%04d', $i), '10.9.9.9');
+        }
+        $this->assertSame('Échecs de connexion répétés : 0 compte(s), 1 adresse(s) IP sur 60 min', $alert(RoleSlug::SuperAdmin)['title']);
     }
 
     public function test_no_alert_when_everything_is_fine(): void
