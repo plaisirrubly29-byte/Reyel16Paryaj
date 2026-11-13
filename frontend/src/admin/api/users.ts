@@ -86,6 +86,31 @@ export function useChangeUserStatus(id: string) {
   });
 }
 
+/** null : retirer la limite propre au joueur (la limite générale s'applique de nouveau). */
+export type StakeLimitChange = { maxStakeMinor: number | null; reason: string; idempotencyKey: string };
+
+/**
+ * Mise maximale par ticket propre à un joueur (V2-D05, permission users.suspend, motif obligatoire, audité).
+ * Elle ne fait que baisser la limite générale ; les bornes sont vérifiées par le serveur.
+ */
+export function useSetStakeLimit(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ maxStakeMinor, reason, idempotencyKey }: StakeLimitChange) =>
+      (await api<Envelope<AdminUser>>(`/admin/users/${encodeURIComponent(id)}/stake-limit`, {
+        method: 'PUT',
+        body: { max_stake_minor: maxStakeMinor, reason },
+        idempotencyKey,
+      })).data,
+    onSuccess: (user) => {
+      // La fiche affichée vient d'être remplacée par la réponse : seules les listes sont à relire.
+      queryClient.setQueryData(['admin', 'users', id], user);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], predicate: (q) => q.queryKey[2] !== id });
+    },
+  });
+}
+
 /** Solde d'un compte (GET /admin/users/{id}/wallet, permission ledger.view). */
 export type AdminUserWallet = { user_id: string; currency: string; balance: Money; status: 'active' | 'frozen' };
 

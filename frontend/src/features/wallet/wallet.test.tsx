@@ -89,11 +89,13 @@ describe('solde et transactions', () => {
 });
 
 describe('espace joueur', () => {
-  it('explique le dépôt et le retrait avec le numéro de compte, sans formulaire de paiement', async () => {
+  it('sans moyen de paiement en ligne, explique le dépôt et le retrait avec le numéro de compte', async () => {
     mockApi({
       'GET /me': { status: 200, body: { data: player } },
       'GET /wallet': { status: 200, body: wallet },
       'GET /wallet/transactions': { status: 200, body: page([entry('2', 'withdrawal', -1_000_00, 4_000_00), entry('1', 'deposit', 5_000_00, 5_000_00)]) },
+      'GET /payments/methods': { status: 200, body: { data: { methods: [], min_amount: htg(100_00), max_amount: htg(100_000_00) } } },
+      'GET /payments/deposits': { status: 200, body: page([]) },
     });
 
     renderApp('/wallet');
@@ -101,14 +103,14 @@ describe('espace joueur', () => {
     expect(await screen.findByRole('heading', { name: 'Solde', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Dépôt', level: 2 })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Retrait', level: 2 })).toBeInTheDocument();
-    expect(await screen.findAllByText((_, el) => el?.tagName === 'P' && el.textContent === 'Votre numéro de compte : 1')).toHaveLength(2);
+    await waitFor(() => expect(screen.getAllByText((_, el) => el?.tagName === 'P' && el.textContent === 'Votre numéro de compte : 1')).toHaveLength(2));
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(await screen.findByText('Dépôt', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('Retrait', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Toutes mes transactions' })).toHaveAttribute('href', '/transactions');
   });
 
-  it('affiche les 9 rubriques du compte, celles à venir signalées', async () => {
+  it('affiche les 10 rubriques du compte, celles à venir signalées', async () => {
     mockApi({
       'GET /me': { status: 200, body: { data: player } },
       'GET /wallet': { status: 200, body: wallet },
@@ -118,7 +120,7 @@ describe('espace joueur', () => {
 
     const nav = await screen.findByRole('navigation', { name: 'Rubriques du compte' });
     expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
-      '/wallet', '/bets', '/coupons', '/transactions', '/loyalty', '/referral', '/account', '/responsible-gaming', '/messages',
+      '/wallet', '/bets', '/coupons', '/transactions', '/loyalty', '/referral', '/account', '/devices', '/responsible-gaming', '/messages',
     ]);
     expect(within(nav).getAllByText('Bientôt')).toHaveLength(3);
     expect(screen.getByRole('heading', { name: 'Points de fidélité', level: 1 })).toBeInTheDocument();

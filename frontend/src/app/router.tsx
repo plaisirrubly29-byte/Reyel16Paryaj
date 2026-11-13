@@ -7,8 +7,12 @@ import { MatchPage } from '../features/catalogue/pages/MatchPage';
 import { MyBetsPage } from '../features/betting/pages/MyBetsPage';
 import { SportsPage } from '../features/catalogue/pages/SportsPage';
 import { LotteryPage } from '../features/lottery/pages/LotteryPage';
+import { VirtualGate } from '../features/virtual/components/VirtualGate';
+import { VirtualEventPage } from '../features/virtual/pages/VirtualEventPage';
+import { VirtualGamesPage } from '../features/virtual/pages/VirtualGamesPage';
 import { RequireAuth } from '../features/auth/components/RequireAuth';
 import { AccountPage } from '../features/auth/pages/AccountPage';
+import { DevicesPage } from '../features/auth/pages/DevicesPage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
@@ -44,6 +48,7 @@ import { ResponsibleGamingPage } from '../features/legal/pages/ResponsibleGaming
 import { TermsPage } from '../features/legal/pages/TermsPage';
 import { ResponsibleSettingsPage } from '../features/responsible/pages/ResponsibleSettingsPage';
 import { SelfExclusionDonePage } from '../features/responsible/pages/SelfExclusionDonePage';
+import { SpendingHistoryPage } from '../features/responsible/pages/SpendingHistoryPage';
 
 /** Écran d'une section admin, protégé par la permission déclarée dans admin/navigation.ts. */
 function section(path: string, element: ReactNode, sectionPath = path.split('/')[0]) {
@@ -59,6 +64,9 @@ export const routes = [
       { path: 'sports', element: <SportsPage /> },
       { path: 'events/:id', element: <MatchPage /> },
       { path: 'borlette', element: <LotteryPage /> },
+      // Jeux virtuels (V2-D08) : « page introuvable » tant que VITE_VIRTUAL_GAMES n'est pas activée (D-11).
+      { path: 'jeux-virtuels', element: <VirtualGate><VirtualGamesPage /></VirtualGate> },
+      { path: 'jeux-virtuels/:id', element: <VirtualGate><VirtualEventPage /></VirtualGate> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
@@ -81,7 +89,9 @@ export const routes = [
           { path: 'loyalty', element: <LoyaltyPage /> },
           { path: 'referral', element: <ReferralPage /> },
           { path: 'account', element: <AccountPage /> },
+          { path: 'devices', element: <DevicesPage /> },
           { path: 'responsible-gaming', element: <ResponsibleSettingsPage /> },
+          { path: 'responsible-gaming/history', element: <SpendingHistoryPage /> },
           { path: 'messages', element: <MessagesPage /> },
         ],
       },

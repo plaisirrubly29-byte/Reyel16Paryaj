@@ -1,5 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api, ApiError, type Envelope } from '../../../shared/api/client';
+import { forgetAccountData, SESSION_KEY } from '../../../shared/api/queryClient';
+import { forgetStoredSlip } from '../../betting/slip/storage';
 
 /** Utilisateur connecté (GET /me) — docs/api/openapi.yaml, schéma User. */
 export type User = {
@@ -51,7 +53,18 @@ export type ResetPasswordInput = {
   password_confirmation: string;
 };
 
-export const ME_KEY = ['me'] as const;
+export const ME_KEY = SESSION_KEY;
+
+/**
+ * Fin de session voulue par l'utilisateur (déconnexion, auto-exclusion) : rien de son compte ne reste sur
+ * l'appareil (revue P8-02, F11) — ni ses données en cache, ni son coupon.
+ */
+export function signOutLocally(queryClient: QueryClient): void {
+  forgetStoredSlip();
+  forgetAccountData(queryClient);
+  // On met à jour la session au lieu de la supprimer : les composants affichés (en-tête, coupon…) la suivent.
+  queryClient.setQueryData(ME_KEY, null);
+}
 
 /**
  * Session courante. Renvoie null si personne n'est connecté (401) — ce n'est pas une erreur.
@@ -96,12 +109,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api<null>('/auth/logout', { method: 'POST' }),
     // Session terminée (ou déjà expirée) : on oublie toutes les données de l'utilisateur.
-    onSettled: () => {
-      // On efface les données du compte, mais on met à jour la session au lieu de la supprimer :
-      // clear() détacherait les composants affichés (en-tête, coupon…), qui garderaient l'ancien utilisateur.
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
-      queryClient.setQueryData(ME_KEY, null);
-    },
+    onSettled: () => signOutLocally(queryClient),
   });
 }
 

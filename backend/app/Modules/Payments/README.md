@@ -1,44 +1,101 @@
 # Module Payments Adapter
 
 **Namespace :** `App\Modules\Payments`
-**Livraison :** Phase 7 (BLOQUÉ)
-**Responsable :** _à assigner_
+**Livraison :** V2 (V2-B01 : socle commun ; V2-B02 : dépôts du joueur, prestataire simulé en attendant MonCash ; V2-B03 : retraits)
+**Responsable :** Benginio Jean-Baptiste
 
 ## Responsabilités
 
-- Abstraction des prestataires de paiement.
-- Références internes/externes, webhooks vérifiés, rapprochement.
+- Interface commune des prestataires de paiement (`Contracts\PaymentProvider`) : ouvrir un paiement, vérifier
+  et traduire un webhook.
+- Règles communes (`Services\PaymentService`) : webhooks signés et idempotents, crédit unique au ledger, écarts mis
+  en revue, expiration des dépôts non confirmés.
+- Journal des transactions (`payment_transactions`) et des webhooks reçus (`webhook_events`, en ajout seul).
 
 ## Dépendances
 
-- Wallet & Ledger
-- Prestataire agréé
+- Wallet & Ledger (`LedgerService::providerDeposit`)
+- Prestataire retenu : **Plop Plop** (MonCash, NatCash, Kashpaw, carte), documentation « API Paiement Marchand »
+  v1.4 fournie par le prestataire. Le faux prestataire reste pour les tests et le développement.
 
-## Tables (modèle de données initial)
+## Tables
 
-- `payment_transactions`
-- `webhook_events`
+- `payment_transactions` : une ligne par paiement (dépôt ou versement), statut, notre référence (`pay_…`), celle du
+  prestataire, écriture du ledger, motif de revue, expiration
+- `webhook_events` : chaque webhook reçu (corps brut, signature valide ou non, résultat), unique par
+  (prestataire, identifiant d'événement)
 
-## Routes prévues
+## Routes
 
-- (à définir après contrat prestataire)
+- `POST /api/v1/payments/webhooks/{provider}` : sans compte, signature vérifiée par le prestataire ; 404 si le
+  prestataire n'est pas listé et activé dans `config/payments.php`
+- Admin (module Admin, `ledger.view`) : `GET /api/v1/admin/payments`, `GET /api/v1/admin/payments/{id}`
+- Joueur (connecté, compte actif) :
+  - `GET /api/v1/payments/methods` : prestataires activés et montants acceptés (`PAYMENTS_DEPOSIT_MIN_MINOR` /
+    `PAYMENTS_DEPOSIT_MAX_MINOR`) ;
+  - `POST /api/v1/payments/deposits` (Idempotency-Key, 10 par minute) : ouvre le dépôt et renvoie `redirect_url`, la
+    page du prestataire où le joueur confirme. Refusé pour un compte admin, un portefeuille gelé ou une limite de
+    dépôt dépassée (les dépôts encore en attente comptent dans la limite) ;
+  - `GET /api/v1/payments/deposits`, `GET /api/v1/payments/deposits/{reference}` : suivi de ses dépôts.
+  - Retraits : V2-B03.
+- Prestataire simulé (seulement si `fake` est activé, 404 sinon) : `GET|POST /api/v1/payments/fake/checkout/{reference}`,
+  page où le joueur paie ou refuse. La décision part en webhook signé traité par `PaymentService` (même chemin qu'un
+  vrai webhook), puis le joueur revient sur `FRONTEND_URL/wallet?depot={reference}`.
+
+## Plop Plop (`PlopplopPaymentProvider`)
+
+1. Ouverture : `POST api/paiement-marchand` (`client_id`, `refference_id` = notre référence `pay_…`, `montant` en HTG,
+   `payment_method`, `all` par défaut). Le joueur est envoyé sur l'`url` renvoyée ; `transaction_id` est gardé comme
+   référence du prestataire.
+2. Webhook `transaction.created` / `transaction.status_changed` sur `/api/v1/payments/webhooks/plopplop`, signé
+   `X-Webhook-Signature: sha256=<HMAC-SHA256 du corps brut avec le client_secret>`. Statuts : `ok` → crédité,
+   `failed` → échoué, `no` / `pending` → en attente. Sans identifiant d'événement ni horodatage signé : l'identifiant
+   retenu est `<événement>:<transaction_id>:<statut>`, si bien qu'un webhook rejoué n'a aucun nouvel effet.
+3. Vérification de secours (`ChecksPaymentStatus`, `POST api/paiement-verify`) : le webhook n'est envoyé qu'une fois,
+   sans nouvel essai. `payments:reconcile` (chaque minute) relit les dépôts en attente ou expirés des dernières 24 h,
+   et le suivi du dépôt par le joueur (`GET /payments/deposits/{reference}`) relit son statut au plus toutes les
+   10 secondes. Même règles qu'un webhook (montant contrôlé, crédit unique), journalisé dans `webhook_events`.
+4. Retour du joueur : le `lien_retour` du compte marchand (`<frontend>/wallet`) reçoit `?refference_id=pay_…` ; la page
+   Solde suit alors ce dépôt.
+
+**Mise en service** (Staging puis Production) :
+- `.env` : `PAYMENTS_PLOPPLOP_ENABLED=true`, `PAYMENTS_PLOPPLOP_CLIENT_ID`, `PAYMENTS_PLOPPLOP_CLIENT_SECRET` (saisis
+  sur le serveur, jamais dans le dépôt), `PAYMENTS_FAKE_ENABLED=false` ; sans ces deux valeurs, la Production refuse de
+  démarrer (`ProductionSafety`).
+- Espace marchand Plop Plop : `webhook_url` = `https://<site>/api/v1/payments/webhooks/plopplop`, `lien_retour` =
+  `https://<site>/wallet`, `client_secret` configuré (sinon aucun webhook n'est signé, donc aucun n'est accepté).
+- Le scheduler doit tourner (`payments:reconcile`, `payments:expire`).
+
+Retraits Plop Plop (jeton marchand, jeton de retrait signé `amount|method|recipient|reference|timestamp`, exécution,
+vérification) : avec V2-B03.
 
 ## Règles à respecter
 
-- ⚠️ Désactivé tant que la validation juridique, contractuelle et fournisseur n’est pas écrite.
-- Vérifier signature, montant, devise, référence, date et état avant tout effet financier.
+- Aucun effet financier sans webhook à la signature vérifiée. Un webhook signé de plus de 5 minutes est refusé
+  (`PAYMENTS_WEBHOOK_TOLERANCE_SECONDS`).
+- Un même événement n'a qu'un effet : rejoué, il renvoie le même résultat ; reçu deux fois en parallèle, le verrou
+  sur la transaction et la contrainte unique de `webhook_events` arrêtent le second. Le crédit porte la référence
+  unique `payment:<référence>` au ledger.
+- Succès avec un montant ou une devise différents : statut `review`, aucun crédit, revue par l'équipe.
+- Dépôt non confirmé après 30 minutes (`PAYMENTS_DEPOSIT_EXPIRY_MINUTES`) : `expired` (commande `payments:expire`,
+  toutes les 5 minutes). Un succès reçu ensuite est crédité (l'argent a quitté le compte du joueur) et marqué `late`.
+- Le faux prestataire (`PAYMENTS_FAKE_ENABLED`) est refusé en production (`App\Support\ProductionSafety`).
+- Ajouter un prestataire : une classe qui implémente `PaymentProvider`, une entrée dans `config/payments.php`
+  (classe, libellé vu par le joueur, activation, secrets), et ses tests de signature.
 
 ## Organisation
 
 ```
 Payments/
-├── Http/Controllers   # contrôleurs minces : validation -> service -> resource
-├── Http/Requests      # FormRequest (validation des entrées)
-├── Http/Resources     # format JSON de sortie
-├── Models             # modèles Eloquent du module
-├── Services           # logique métier (testée en unitaire)
-└── routes.php         # routes du module (/api/v1)
+├── Console            # payments:expire, payments:reconcile
+├── Contracts          # PaymentProvider, ChecksPaymentStatus (vérification active)
+├── Enums              # PaymentStatus, PaymentDirection, WebhookOutcome
+├── Http/Controllers   # webhook des prestataires, dépôts du joueur, page du prestataire simulé
+├── Models             # PaymentTransaction, WebhookEvent
+├── Providers          # PlopplopPaymentProvider, FakePaymentProvider
+├── Services           # PaymentService, PaymentProviderRegistry
+├── Support            # PaymentInitiation, PaymentNotification, PaymentStatusCheck
+└── routes.php
 ```
 
-Migrations : `database/migrations` (ex. `php artisan make:migration create_payment_transactions_table`).
-Tests : `tests/Feature/Modules/Payments` et `tests/Unit/Modules/Payments`.
+Tests : `tests/Feature/Modules/Payments`.

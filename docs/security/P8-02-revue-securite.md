@@ -21,7 +21,7 @@ Avant la production, **3 points bloquants** devaient être réglés : B1 dépend
 | Bloquant | 3 | 2 (B1, B2) |
 | Élevé | 1 | 1 (E1) |
 | Moyen | 5 | 4 (M1, M2, M4, M5) |
-| Faible | 13 | 7 (F1, F2, F3, F4, F5, F6, F13) |
+| Faible | 13 | 11 (F1 à F8, F10, F11, F13) ; F9 et F12 en partie |
 | Info | 8 | — (I3 en partie) |
 
 Échelle : **Bloquant** = à corriger avant toute mise en production · **Élevé** = à corriger avant toute mise en production avec de l'argent réel, et avant le lancement contrôlé · **Moyen** = à corriger avant le lancement contrôlé · **Faible** = à planifier · **Info** = à connaître.
@@ -109,7 +109,7 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 | F8 | **Double compensation simultanée → 500** au lieu d'un rejeu (la contrainte unique protège bien les données) | `LedgerService.php:80-83` | Vérifier sous verrou, ou intercepter la violation d'unicité | ✅ V2-C07 (vérifié sous le verrou du portefeuille) |
 | F9 | **Ledger et audit non protégés contre `TRUNCATE`** ; le rôle applicatif peut supprimer les déclencheurs | migrations `…000300` et `…000500` | Déclencheur `BEFORE TRUNCATE` ; en production, rôle de migration distinct et `REVOKE UPDATE, DELETE, TRUNCATE` | 🟡 V2-C07 : `BEFORE TRUNCATE` sur les 5 tables en ajout seul ; rôle de migration distinct et `REVOKE` avec la Production (V2-F01) |
 | F10 | **Données personnelles en clair dans `idempotency_keys.response_body`** (24 h) | `RequireIdempotencyKey.php:61-66` | Ne stocker qu'un corps minimal ou chiffrer la colonne | ✅ V2-C07 (réponse chiffrée avec `APP_KEY`, rejouée à l'identique) |
-| F11 | **Coupon et tickets du joueur précédent visibles sur un appareil partagé** (cybercafé) | `BetSlipContext.tsx:86-93`, `AdminLayout.tsx:66` | Vider `r16p.betslip` à la déconnexion ; lier le coupon à l'id du joueur | ⏳ Rubly |
+| F11 | **Coupon et tickets du joueur précédent visibles sur un appareil partagé** (cybercafé) | `BetSlipContext.tsx:86-93`, `AdminLayout.tsx:66` | Vider `r16p.betslip` à la déconnexion ; lier le coupon à l'id du joueur | ✅ V2-C07 (coupon lié au compte, effacé à la déconnexion ; données du compte oubliées à la fin de la session — voir « Point frontend F11 ») |
 | F12 | **Sessions longues et pas de limite de débit globale** : 120 min d'inactivité sans expiration absolue (y compris admins) ; aucune limite sur `/me`, `/wallet`, `/admin/*` ; pas de « déconnecter tous les appareils » ; événements de connexion non audités | `config/session.php`, `bootstrap/app.php`, `AuditAction.php` | Revalider le MFA après ~30 min pour les admins ; `throttleApi()` ; route de déconnexion globale ; auditer connexions et échecs | 🟡 V2-C06 : durée maximale (12 h joueur, 8 h admin), MFA redemandé après 30 min d'inactivité admin, déconnexion des autres appareils, `POST /bets` limité à 10/min. Reste : limite globale (`/me`, `/wallet`, `/admin/*`), audit des connexions |
 | F13 | **Pas d'en-têtes de sécurité sur l'API, et version de PHP révélée** (`X-Powered-By: PHP/8.3.35`, vérifié par `curl`). L'API ne renvoie que du JSON : c'est une défense en profondeur, le vrai risque est sur le frontend (B3) | `bootstrap/app.php`, configuration PHP | Middleware `SecurityHeaders` (`nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`) ; `expose_php = Off` | ✅ `0f363e4` (plus HSTS en HTTPS, `X-Powered-By` retiré). `expose_php = Off` : image de production (checklist) |
 
@@ -197,11 +197,30 @@ Une relecture de la PR #101 après sa fusion a montré que plusieurs correctifs 
 - Les limiteurs de débit vérifient puis incrémentent en deux étapes (Laravel) : une rafale de requêtes simultanées peut dépasser un plafond d'environ le nombre de processus PHP.
 - F13 : la CSP `default-src 'none'` s'applique aussi aux rares pages HTML du backend (`/up`, page d'erreur en développement), qui s'affichent sans style.
 
+### Point frontend F11 (V2-C07, 10 novembre 2026)
+
+Sur un appareil partagé, le joueur suivant ne voit plus ni le coupon ni les données du précédent. Chaque règle a un test (`shared-device.test.tsx`, `queryClient.test.ts`).
+
+| Situation | Comportement |
+|---|---|
+| Déconnexion (site ou administration), auto-exclusion | Le coupon est effacé du navigateur (`r16p.betslip`, `r16p.betslip.owner`) et les données du compte quittent le cache |
+| Coupon composé par un joueur connecté | Enregistré avec l'id du compte : il n'est affiché qu'à ce compte |
+| Session expirée, puis visiteur ou autre joueur sur le même appareil | Le coupon du compte précédent est caché. Il revient si son joueur se reconnecte ; il est effacé dès qu'un autre compte se connecte ou qu'un visiteur commence un coupon |
+| Le serveur répond 401 à un compte que l'écran croit connecté (session expirée ou fermée depuis « Appareils connectés ») | La session est close à l'écran, les pages protégées renvoient à la connexion |
+| Le compte de la session change, quelle qu'en soit la cause | Solde, tickets, transactions et autres données du compte précédent sont retirés du cache |
+
+Accepté par écrit :
+
+- **Coupon d'un visiteur** (jamais connecté) : il reste dans le navigateur et le premier compte qui se connecte le reprend. Ce n'est qu'une liste de sélections, sans donnée de compte.
+- **Coupon mis de côté** : tant que son joueur ne revient pas et que personne ne le remplace, la liste des sélections reste lisible dans le stockage du navigateur (outils de développement), jamais à l'écran. Choix fait pour qu'un joueur dont la session a expiré (12 h au plus) retrouve son coupon.
+- **Jeux virtuels** : en attendant l'API du prestataire, le simulateur garde les paris virtuels dans le navigateur, une clé par joueur (`reyel16.virtual-bets.<id>`). Ils ne sont affichés qu'à leur joueur, mais restent sur l'appareil après la déconnexion. Ce stockage disparaît avec le simulateur (V2-D08).
+- **Joueur parti sans se déconnecter, session encore valide** : le suivant est connecté à sa place. Seule l'expiration des sessions côté serveur (V2-C06) limite ce cas.
+
 ## Actions
 
 | Qui | Quoi | Quand |
 |---|---|---|
 | Équipe | Décider pour le blocage volontaire de compte (M1) et, le cas échéant, l'activation des paris en direct (E1) | Avant le lancement contrôlé |
 | Rubly | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
-| Rubly | F7, F8, F9, F10, F11, F12 | À planifier |
+| Backend | Reste de F9 (rôle de migration distinct et `REVOKE`, avec la Production V2-F01) et de F12 (limite de débit globale, audit des connexions) ; F7, F8, F10 et F11 sont corrigés (V2-C07) | À planifier |
 | Hébergement (P0-07 / P1-06) | B3 (en-têtes du frontend), checklist de déploiement (`TRUSTED_PROXIES`, `expose_php`, `.env.production.example`), HTTPS, rôle PostgreSQL restreint (F9) | Avant la mise en ligne du staging |

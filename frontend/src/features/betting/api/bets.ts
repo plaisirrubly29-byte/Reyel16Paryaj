@@ -6,9 +6,20 @@ export type BetTicketStatus = 'pending' | 'won' | 'lost' | 'void';
 
 export type BetSelection = {
   id: string;
-  event: { id: string; name: string; starts_at: string };
-  market: { key: string; name: string; line: string | null };
-  selection: { key: string; label: string; name: string };
+  event: {
+    id: string;
+    name: string;
+    starts_at: string;
+    /** Repères relus dans le catalogue (Mes paris) ; absents des anciennes réponses. */
+    sport?: string | null;
+    competition?: { name: string; country: string | null } | null;
+    status?: string | null;
+    /** Score en cours ou final ; null tant qu'il n'est pas connu. */
+    score?: { home: string; away: string } | null;
+  };
+  market: { id?: string; key: string; name: string; line: string | null };
+  /** id : sélection du catalogue (rejouer le ticket). */
+  selection: { id?: string; key: string; label: string; name: string };
   /** Cote acceptée, figée sur le ticket. */
   odds: string;
   status: BetTicketStatus;
@@ -41,11 +52,18 @@ export type PlaceBetInput = {
 
 export const BETS_KEY = ['bets'] as const;
 
-/** GET /bets — tickets du joueur connecté, plus récents d'abord. */
-export function useBets(page = 1) {
+export type BetFilters = {
+  status?: BetTicketStatus;
+  type?: BetTicket['type'];
+  /** Tickets placés depuis N jours (1, 7, 30 ou 90). */
+  days?: number;
+};
+
+/** GET /bets — tickets du joueur connecté, plus récents d'abord, filtrés par le serveur. */
+export function useBets(page = 1, filters: BetFilters = {}) {
   return useQuery({
-    queryKey: [...BETS_KEY, page],
-    queryFn: ({ signal }) => api<Paginated<BetTicket>>('/bets', { signal, query: { page } }),
+    queryKey: [...BETS_KEY, page, filters],
+    queryFn: ({ signal }) => api<Paginated<BetTicket>>('/bets', { signal, query: { page, ...filters } }),
     placeholderData: keepPreviousData,
   });
 }

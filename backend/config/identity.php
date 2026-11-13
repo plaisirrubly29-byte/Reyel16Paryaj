@@ -10,6 +10,11 @@ return [
     // Âge minimum pour ouvrir un compte (années).
     'minimum_age' => (int) env('IDENTITY_MINIMUM_AGE', 18),
 
+    // V2-E01 : version en vigueur des textes d'information (conditions, confidentialité, règlement des paris, jeu
+    // responsable), acceptée à l'inscription. Doit rester égale à LEGAL_VERSION du frontend (features/legal/legal.ts) :
+    // tout changement de fond d'un texte = nouvelle version des deux côtés.
+    'terms_version' => env('IDENTITY_TERMS_VERSION', '2026-11-02'),
+
     // Limitation des tentatives de connexion, sur le numéro normalisé.
     'login' => [
         'max_attempts_per_phone' => 5, // par minute, par couple téléphone + IP

@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\IdentityAccess;
 use App\Models\User;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
+use App\Modules\IdentityAccess\Models\TermsAcceptance;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +32,8 @@ class AuthApiTest extends TestCase
             'password_confirmation' => 'motdepasse123',
             'birth_date' => now()->subYears(25)->toDateString(),
             'country' => 'ht',
+            'terms_accepted' => true,
+            'terms_version' => '2026-11-02',
         ], $overrides);
     }
 
@@ -66,6 +69,42 @@ class AuthApiTest extends TestCase
         $this->postJson('/api/v1/auth/register', $this->registrationData(['phone' => '+509 34-12 34-56']))
             ->assertCreated()
             ->assertJsonPath('data.phone', '34123456');
+    }
+
+    public function test_register_records_the_acceptance_of_the_terms_with_their_version(): void
+    {
+        $this->travelTo('2026-11-03 10:00:00');
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
+            ->withHeader('User-Agent', 'Mozilla/5.0 (Android 14) Chrome/130')
+            ->postJson('/api/v1/auth/register', $this->registrationData())
+            ->assertCreated();
+
+        $acceptance = TermsAcceptance::sole();
+        $this->assertSame(User::where('phone', '34123456')->value('id'), $acceptance->user_id);
+        $this->assertSame('2026-11-02', $acceptance->version);
+        $this->assertSame('2026-11-03 10:00:00', $acceptance->accepted_at->toDateTimeString());
+        $this->assertSame('203.0.113.7', $acceptance->ip_address);
+        $this->assertSame('Mozilla/5.0 (Android 14) Chrome/130', $acceptance->user_agent);
+    }
+
+    public function test_register_requires_the_terms_to_be_accepted_in_their_current_version(): void
+    {
+        foreach ([['terms_accepted' => false], ['terms_accepted' => null]] as $overrides) {
+            $this->postJson('/api/v1/auth/register', $this->registrationData($overrides))
+                ->assertStatus(422)
+                ->assertJsonPath('error.code', 'validation_failed')
+                ->assertJsonStructure(['error' => ['details' => ['terms_accepted']]]);
+        }
+
+        // Textes mis à jour côté serveur pendant que le joueur remplissait le formulaire : il doit recharger la page.
+        config(['identity.terms_version' => '2026-12-01']);
+        $this->postJson('/api/v1/auth/register', $this->registrationData())
+            ->assertStatus(422)
+            ->assertJsonStructure(['error' => ['details' => ['terms_version']]]);
+
+        $this->assertSame(0, User::count());
+        $this->assertSame(0, TermsAcceptance::count());
     }
 
     public function test_register_validates_input(): void

@@ -10,8 +10,8 @@ import { Spinner } from '../../../shared/components/Spinner';
 import { TextField } from '../../../shared/components/TextField';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import {
-  durationLabel, PERIODS, useResponsibleGaming, usePause, useSelfExclude, useSetLimit,
-  type LimitPeriod, type ResponsibleGaming, type StakeLimit,
+  durationLabel, limitsOf, PERIODS, useResponsibleGaming, usePause, useSelfExclude, useSetLimit, useSetSessionReminder,
+  type LimitKind, type LimitPeriod, type ResponsibleGaming, type StakeLimit,
 } from '../api/responsibleGaming';
 
 /** « 9 novembre 2026 à 18:45 » (heure locale du joueur). */
@@ -23,8 +23,9 @@ function formatDateTime(iso: string): string {
 const refused = (err: unknown) => err instanceof ApiError && err.status !== 0;
 
 /**
- * Jeu responsable du joueur connecté (P7-02) : limites de mise, pause, auto-exclusion.
- * Le serveur applique ces règles (POST /bets) et calcule les mises de la période : l'écran les affiche tels quels.
+ * Jeu responsable du joueur connecté (P7-02) : limites de mise, de pertes (V2-E06) et de dépôt (V2-B06), rappel de
+ * durée de session et historique des dépenses (V2-E06), pause, auto-exclusion.
+ * Le serveur applique ces règles (paris et dépôts) et calcule les montants de la période : l'écran les affiche tels quels.
  */
 export function ResponsibleSettingsPage() {
   const rg = useResponsibleGaming();
@@ -34,7 +35,7 @@ export function ResponsibleSettingsPage() {
       <header className="rg-head">
         <h1>Jeu responsable</h1>
         <p className="muted">
-          Fixez-vous des limites, faites une pause ou excluez-vous du jeu : ces réglages s'appliquent à tous vos paris.{' '}
+          Fixez-vous des limites, suivez vos dépenses, faites une pause ou excluez-vous du jeu.{' '}
           <Link to="/jeu-responsable">Conseils et aide</Link>
         </p>
       </header>
@@ -48,7 +49,17 @@ export function ResponsibleSettingsPage() {
               <p>Vous ne pouvez pas parier jusqu'au {formatDateTime(rg.data.pause.ends_at)}. Votre solde et vos tickets restent accessibles.</p>
             </Alert>
           )}
-          <LimitsCard state={rg.data} />
+          {rg.data.session && (
+            <Link to="/responsible-gaming/history" className="rg-history-link">
+              <Icon name="activity" size={20} />
+              <span><strong>Historique de mes dépenses</strong><span className="muted small">Dépôts, mises et gains, jour par jour et mois par mois</span></span>
+              <Icon name="chevron" size={18} />
+            </Link>
+          )}
+          <LimitsCard state={rg.data} kind="stake" />
+          <LimitsCard state={rg.data} kind="loss" />
+          <LimitsCard state={rg.data} kind="deposit" />
+          <SessionReminderCard state={rg.data} />
           <PauseCard state={rg.data} />
           <ExclusionCard durations={rg.data.options.exclusion_durations} />
         </>
@@ -72,27 +83,47 @@ function Card({ id, icon, title, intro, tone, children }: { id: string; icon: Ic
   );
 }
 
-function LimitsCard({ state }: { state: ResponsibleGaming }) {
+/** Textes propres à chaque type de limite ; la règle (baisse immédiate, hausse différée) est la même. */
+const KINDS: Record<LimitKind, { id: string; icon: IconName; title: string; subject: string; used: string; progress: string }> = {
+  stake: { id: 'rg-limits', icon: 'scale', title: 'Limites de mise', subject: 'Le total de vos mises', used: 'Misé', progress: 'Mises' },
+  deposit: { id: 'rg-deposit-limits', icon: 'deposit', title: 'Limites de dépôt', subject: 'Le total de vos dépôts', used: 'Déposé', progress: 'Dépôts' },
+  loss: { id: 'rg-loss-limits', icon: 'shield', title: 'Limites de pertes', subject: 'Votre perte nette', used: 'Perdu', progress: 'Pertes' },
+};
+
+/** Précision propre à un type de limite, sous l'introduction de sa carte. */
+const KIND_NOTES: Partial<Record<LimitKind, string>> = {
+  deposit: 'Un dépôt qui ferait dépasser une de ces limites est refusé, en ligne comme en agence.',
+  loss: 'Perte nette = vos mises moins vos gains et remboursements (zéro si vous êtes gagnant). Chaque nouveau pari compte comme perdu : il est refusé s\'il pouvait vous faire dépasser une limite.',
+};
+
+function LimitsCard({ state, kind }: { state: ResponsibleGaming; kind: LimitKind }) {
   const delay = state.options.limit_increase_delay_days;
+  const limits = limitsOf(state, kind);
+  const text = KINDS[kind];
+  // Serveur qui ne gère pas encore ce type de limite (V2-B06, V2-E06) : la carte n'est pas proposée plutôt que vide.
+  if (!limits) return null;
+  const note = KIND_NOTES[kind];
 
   return (
     <Card
-      id="rg-limits"
-      icon="scale"
-      title="Limites de mise"
-      intro={`Le total de vos mises ne pourra pas dépasser ces montants. Une baisse s'applique tout de suite ; une hausse ou une suppression après ${delay} jours de réflexion.`}
+      id={text.id}
+      icon={text.icon}
+      title={text.title}
+      intro={`${text.subject} ne pourra pas dépasser ces montants. Une baisse s'applique tout de suite ; une hausse ou une suppression après ${delay} jours de réflexion.`}
     >
+      {note && <p className="muted small">{note}</p>}
       <div className="rg-limits">
         {PERIODS.map(({ period, label }) => (
-          <LimitRow key={period} period={period} label={label} limit={state.limits[period]} />
+          <LimitRow key={period} kind={kind} period={period} label={label} limit={limits[period]} />
         ))}
       </div>
     </Card>
   );
 }
 
-function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string; limit: StakeLimit }) {
-  const setLimit = useSetLimit();
+function LimitRow({ kind, period, label, limit }: { kind: LimitKind; period: LimitPeriod; label: string; limit: StakeLimit }) {
+  const setLimit = useSetLimit(kind);
+  const text = KINDS[kind];
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [invalid, setInvalid] = useState(false);
@@ -103,7 +134,7 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
   function send(amountMinor: number | null) {
     setLimit.mutate({ period, amountMinor, idempotencyKey }, {
       onSuccess: (state) => {
-        const pending = state.limits[period].pending;
+        const pending = limitsOf(state, kind)?.[period].pending ?? null;
         // La date d'effet d'une hausse ou d'une suppression est affichée juste au-dessus (pending).
         setNotice(pending ? `${pending.amount ? 'Hausse' : 'Suppression'} enregistrée, après le délai de réflexion.` : 'Limite appliquée.');
         setEditing(false);
@@ -136,10 +167,10 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
       </div>
 
       {limit.amount && (
-        <progress className="rg-progress" value={limit.used.minor} max={limit.amount.minor} aria-label={`Mises ${label.toLowerCase()}`} />
+        <progress className="rg-progress" value={limit.used.minor} max={limit.amount.minor} aria-label={`${text.progress} ${label.toLowerCase()}`} />
       )}
       <p className="rg-usage">
-        Misé : <MoneyText value={limit.used} />
+        {text.used} : <MoneyText value={limit.used} />
         {limit.remaining && <> · Reste : <MoneyText value={limit.remaining} /></>}
       </p>
       {limit.pending && (
@@ -154,7 +185,7 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
       {editing ? (
         <form className="rg-limit-form" onSubmit={submit} noValidate>
           <TextField
-            label={`Nouvelle limite ${label.toLowerCase()} (HTG)`}
+            label={`Nouvelle limite ${{ stake: '', deposit: 'de dépôt ', loss: 'de pertes ' }[kind]}${label.toLowerCase()} (HTG)`}
             inputMode="decimal"
             autoComplete="off"
             placeholder="Ex. 5000"
@@ -177,6 +208,53 @@ function LimitRow({ period, label, limit }: { period: LimitPeriod; label: string
       )}
       {notice && <p className="rg-notice" role="status"><Icon name="check" size={15} />{notice}</p>}
     </div>
+  );
+}
+
+/**
+ * Rappel de durée de session (V2-E06) : un message toutes les N minutes depuis la connexion (SessionReminder).
+ * Le changement s'applique tout de suite, dans les deux sens : pas de délai de réflexion.
+ */
+function SessionReminderCard({ state }: { state: ResponsibleGaming }) {
+  const setReminder = useSetSessionReminder();
+  const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
+  const [notice, setNotice] = useState<string | null>(null);
+  const name = useId();
+  const choices = state.options.session_reminder_minutes;
+  if (!state.session || !choices) return null;
+  const current = state.session.reminder_minutes;
+
+  function choose(minutes: number | null) {
+    if (minutes === current || setReminder.isPending) return;
+    setNotice(null);
+    setReminder.mutate({ minutes, idempotencyKey }, {
+      onSuccess: () => {
+        setNotice(minutes === null ? 'Rappel désactivé.' : `Rappel toutes les ${minutes} minutes.`);
+        setIdempotencyKey(newIdempotencyKey());
+      },
+      onError: (err) => { if (refused(err)) setIdempotencyKey(newIdempotencyKey()); },
+    });
+  }
+
+  return (
+    <Card
+      id="rg-session"
+      icon="clock"
+      title="Rappel de durée de session"
+      intro="Un message vous indique depuis combien de temps vous êtes connecté, à l'intervalle choisi. Le changement s'applique tout de suite."
+    >
+      <fieldset className="rg-choices" disabled={setReminder.isPending}>
+        <legend>Me rappeler</legend>
+        {[null, ...choices].map((minutes) => (
+          <label key={minutes ?? 'off'} className="rg-choice">
+            <input type="radio" name={name} checked={current === minutes} onChange={() => choose(minutes)} />
+            <span>{minutes === null ? 'Jamais' : `Toutes les ${minutes} min`}</span>
+          </label>
+        ))}
+      </fieldset>
+      <ErrorAlert error={setReminder.error} />
+      {notice && <p className="rg-notice" role="status"><Icon name="check" size={15} />{notice}</p>}
+    </Card>
   );
 }
 

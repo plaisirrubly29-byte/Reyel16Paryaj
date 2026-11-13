@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\User;
 use App\Modules\Admin\Services\PlatformSettings;
 use App\Modules\Betting\Services\TicketStakeHistory;
+use App\Modules\Compliance\Contracts\DepositHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
 use App\Modules\Lottery\Contracts\LotteryProvider;
@@ -15,6 +16,7 @@ use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
 use App\Modules\SportsData\Services\CreditBudget;
+use App\Modules\Wallet\Services\LedgerDepositHistory;
 use App\Support\ProductionSafety;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -61,6 +63,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Mises d'un joueur pour les limites de jeu responsable : fournies par Betting à Compliance (P7-02).
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
+        // Dépôts d'un joueur pour ses limites de dépôt : fournis par Wallet à Compliance (V2-B06).
+        $this->app->bind(DepositHistory::class, LedgerDepositHistory::class);
 
         // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
         $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(
@@ -170,6 +174,11 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Catalogue public : 120 requêtes/min par IP (lecture seule, sans authentification).
+        // Webhooks des prestataires de paiement (V2-B01), par IP : large, un prestataire envoie par rafales.
+        RateLimiter::for('payments-webhook', fn (Request $request) => Limit::perMinute(300)->by('payments-webhook:'.$request->ip()));
+        // Dépôts ouverts par un joueur (V2-B02) : 10 par minute, chaque ouverture appelle le prestataire.
+        RateLimiter::for('payments-deposit', fn (Request $request) => Limit::perMinute(10)->by('payments-deposit:'.$request->user()?->id));
+
         RateLimiter::for('catalogue', fn (Request $request) => Limit::perMinute(120)->by('catalogue:'.$request->ip()));
     }
 }
