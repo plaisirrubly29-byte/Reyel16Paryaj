@@ -1,0 +1,51 @@
+# Production SANS base managée (option « tout sur le serveur » de D-10 §7.2) : PostgreSQL dans un conteneur.
+# Activé par la ligne COMPOSE_FILE=docker-compose.yml:docker-compose.local-db.yml du .env du serveur, avec
+# DB_SSLMODE=disable (le conteneur n'a pas de SSL ; il n'est joignable que par le réseau Docker).
+#
+# Attention : la restauration à un instant donné (PITR) n'existe pas ici. Seules les sauvegardes du script de
+# déploiement (avant chaque migration) et celles planifiées sur le serveur protègent les données
+# (docs/ops/deploiement-production.md §5). À n'utiliser qu'en fonds fictifs.
+#
+# Deux comptes, comme avec la base managée (revue P8-02, F9) : le conteneur est créé avec le compte PROPRIÉTAIRE de
+# .env.migration (migrations, sauvegardes), et scripts/db/local-app-role.sh ajoute le compte de l'APPLICATION
+# (DB_USERNAME de .env), propriétaire de rien, à la première initialisation du volume.
+
+x-local-db: &local-db
+  environment:
+    DB_HOST: postgres
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # .env.migration n'est chargé que dans ce conteneur, jamais dans ceux de l'application.
+    env_file: .env.migration
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?DB_DATABASE manquant}
+      APP_DB_USERNAME: ${DB_USERNAME:?DB_USERNAME manquant}
+      APP_DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant}
+    # Le compte propriétaire est celui de .env.migration (POSTGRES_USER et POSTGRES_PASSWORD de l'image).
+    entrypoint:
+      - sh
+      - -c
+      - 'export POSTGRES_USER="$$DB_MIGRATION_USERNAME" POSTGRES_PASSWORD="$$DB_MIGRATION_PASSWORD"; exec docker-entrypoint.sh postgres'
+    # Aucun port publié : la base n'est joignable que par les conteneurs.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db/local-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$DB_MIGRATION_USERNAME\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend: *local-db
+  queue: *local-db
+  scheduler: *local-db
+
+volumes:
+  pgdata:
