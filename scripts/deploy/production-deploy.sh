@@ -12,10 +12,14 @@
 # - configuration refusée si elle n'est pas celle d'une Production (debug, cookies, fournisseurs fictifs, SSL) ;
 # - sauvegarde de la base AVANT CHAQUE migration, premier déploiement compris ; un échec de sauvegarde arrête tout ;
 # - base PostgreSQL managée par défaut (outils PostgreSQL 16 du serveur, connexion SSL), ou conteneur local
-#   avec docker-compose.local-db.yml (COMPOSE_FILE dans le .env).
+#   avec docker-compose.local-db.yml (COMPOSE_FILE dans le .env) ;
+# - deux comptes de base (revue P8-02, F9) : le compte PROPRIÉTAIRE de .env.migration sauvegarde, migre et règle
+#   les droits ; l'application en marche n'utilise que le compte de .env, sans droit de modifier, effacer ou vider
+#   les tables en ajout seul (scripts/db/restrict-app-role.sql), et ne voit jamais le mot de passe du propriétaire.
 #
-# deploy : contrôles → images → Redis (et base locale) → sauvegarde → migrations et rôles → démarrage (contrôles
-# de santé) → contrôle HTTPS de l'API. Échec avant le démarrage : l'ancienne version n'a pas été arrêtée.
+# deploy : contrôles → images → Redis (et base locale) → sauvegarde → migrations et rôles → droits du compte de
+# l'application → démarrage (contrôles de santé) → contrôle HTTPS de l'API. Échec avant le démarrage : l'ancienne
+# version n'a pas été arrêtée.
 # Échec après : retour automatique à la version précédente. Rien n'est supprimé (volumes, sauvegardes, images).
 #
 # Variables facultatives (essais locaux) : DEPLOY_SKIP_PULL=1, HEALTHCHECK_URL, HEALTHCHECK_CURL_OPTS.
@@ -27,8 +31,12 @@ STATE_DIR=.deploy
 
 log() { printf '\n==> %s\n' "$*"; }
 fail() { echo "ERREUR : $*" >&2; exit 1; }
-# Valeur d'une variable du .env (guillemets et fin de ligne Windows retirés), sans exécuter le fichier.
-env_get() { sed -n "s/^$1=//p" .env | tail -n 1 | sed -e 's/\r$//' -e 's/^"\(.*\)"$/\1/'; }
+# Valeur d'une variable d'un fichier d'environnement (guillemets et fin de ligne Windows retirés), sans l'exécuter.
+file_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -n 1 | sed -e 's/\r$//' -e 's/^"\(.*\)"$/\1/'; }
+env_get() { file_get .env "$1"; }
+# Compte propriétaire de la base (F9) : fichier à part, jamais chargé dans les conteneurs de l'application.
+MIGRATION_ENV=.env.migration
+migration_get() { file_get "$MIGRATION_ENV" "$1"; }
 
 [ -f .env ] || fail ".env absent (modèle : docker/production/production.env.example)."
 [ -f docker-compose.yml ] || fail "docker-compose.yml absent."
@@ -65,11 +73,32 @@ check_config() {
             *) problems+=("DB_SSLMODE doit valoir require, verify-ca ou verify-full vers une base managée") ;;
         esac
         command -v pg_dump > /dev/null || problems+=("pg_dump absent du serveur (paquet postgresql-client-16)")
+        command -v psql > /dev/null || problems+=("psql absent du serveur (paquet postgresql-client-16)")
     fi
 
-    if [ "$(stat -c %a .env 2>/dev/null || echo 600)" != "600" ]; then
-        problems+=(".env lisible par d'autres comptes (chmod 600 .env)")
+    # Revue P8-02, F9 : compte propriétaire séparé, hors de .env (que les conteneurs de l'application chargent).
+    if [ ! -f "$MIGRATION_ENV" ]; then
+        problems+=("$MIGRATION_ENV absent : compte propriétaire de la base (modèle : docker/production/migration.env.example)")
+    else
+        [ -n "$(migration_get DB_MIGRATION_USERNAME)" ] || problems+=("DB_MIGRATION_USERNAME manquant dans $MIGRATION_ENV")
+        [ -n "$(migration_get DB_MIGRATION_PASSWORD)" ] || problems+=("DB_MIGRATION_PASSWORD manquant dans $MIGRATION_ENV")
+        if [ "$(migration_get DB_MIGRATION_USERNAME)" = "$(env_get DB_USERNAME)" ]; then
+            problems+=("DB_MIGRATION_USERNAME doit différer de DB_USERNAME (compte de l'application)")
+        fi
+        if [ -n "$(migration_get DB_MIGRATION_PASSWORD)" ] && [ "$(migration_get DB_MIGRATION_PASSWORD)" = "$(env_get DB_PASSWORD)" ]; then
+            problems+=("DB_MIGRATION_PASSWORD doit différer de DB_PASSWORD")
+        fi
     fi
+    if grep -q '^DB_MIGRATION_' .env; then
+        problems+=("DB_MIGRATION_* dans .env : à placer dans $MIGRATION_ENV seulement (.env est lu par l'application)")
+    fi
+
+    local file
+    for file in .env "$MIGRATION_ENV"; do
+        if [ -f "$file" ] && [ "$(stat -c %a "$file" 2>/dev/null || echo 600)" != "600" ]; then
+            problems+=("$file lisible par d'autres comptes (chmod 600 $file)")
+        fi
+    done
 
     if [ "${#problems[@]}" -gt 0 ]; then
         printf 'ERREUR : configuration de Production refusée :\n' >&2
@@ -115,15 +144,39 @@ report_failure() {
     docker compose logs --tail 40 backend web >&2 || true
 }
 
-# Sauvegarde complète avant migration (scripts/db/backup.sh) : conteneur local, ou base managée par les outils du
-# serveur et les variables PG* (connexion SSL). Un échec arrête le déploiement : on ne migre jamais sans sauvegarde.
+# Sauvegarde complète avant migration (scripts/db/backup.sh), avec le compte propriétaire : conteneur local, ou base
+# managée par les outils du serveur et les variables PG* (connexion SSL). Un échec arrête le déploiement : on ne
+# migre jamais sans sauvegarde.
 backup_database() {
     if local_db; then
-        PGUSER="$(env_get DB_USERNAME)" BACKUP_DIR=backups scripts/db/backup.sh "$(env_get DB_DATABASE)"
+        PGUSER="$(migration_get DB_MIGRATION_USERNAME)" BACKUP_DIR=backups scripts/db/backup.sh "$(env_get DB_DATABASE)"
     else
-        PGHOST="$(env_get DB_HOST)" PGPORT="$(env_get DB_PORT)" PGUSER="$(env_get DB_USERNAME)" \
-            PGPASSWORD="$(env_get DB_PASSWORD)" PGSSLMODE="$(env_get DB_SSLMODE)" \
+        PGHOST="$(env_get DB_HOST)" PGPORT="$(env_get DB_PORT)" PGUSER="$(migration_get DB_MIGRATION_USERNAME)" \
+            PGPASSWORD="$(migration_get DB_MIGRATION_PASSWORD)" PGSSLMODE="$(env_get DB_SSLMODE)" \
             BACKUP_DIR=backups scripts/db/backup.sh "$(env_get DB_DATABASE)"
+    fi
+}
+
+# Commande artisan dans un conteneur jetable, avec le compte PROPRIÉTAIRE (migrations, rôles admin). Les
+# identifiants passent par l'environnement de ce seul conteneur (-e sans valeur : pris dans celui du script), jamais
+# par la ligne de commande ni par les conteneurs de l'application.
+artisan_as_owner() {
+    DB_USERNAME="$(migration_get DB_MIGRATION_USERNAME)" DB_PASSWORD="$(migration_get DB_MIGRATION_PASSWORD)" \
+        docker compose run --rm --no-deps -e DB_USERNAME -e DB_PASSWORD backend php artisan "$@"
+}
+
+# Droits du compte de l'application, réglés par le compte propriétaire après chaque migration (revue P8-02, F9).
+restrict_app_role() {
+    local app db
+    app="$(env_get DB_USERNAME)"
+    db="$(env_get DB_DATABASE)"
+    if local_db; then
+        docker compose exec -T postgres psql -U "$(migration_get DB_MIGRATION_USERNAME)" -d "$db" -q \
+            -v ON_ERROR_STOP=1 -v app_role="$app" < scripts/db/restrict-app-role.sql
+    else
+        PGHOST="$(env_get DB_HOST)" PGPORT="$(env_get DB_PORT)" PGUSER="$(migration_get DB_MIGRATION_USERNAME)" \
+            PGPASSWORD="$(migration_get DB_MIGRATION_PASSWORD)" PGSSLMODE="$(env_get DB_SSLMODE)" \
+            psql -d "$db" -q -v ON_ERROR_STOP=1 -v app_role="$app" -f scripts/db/restrict-app-role.sql
     fi
 }
 
@@ -151,9 +204,12 @@ deploy() {
     log "Sauvegarde de la base avant migration (backups/)"
     backup_database
 
-    log "Migrations et rôles administratifs"
-    docker compose run --rm --no-deps backend php artisan migrate --force
-    docker compose run --rm --no-deps backend php artisan db:seed --class=PermissionSeeder --force
+    log "Migrations et rôles administratifs (compte propriétaire)"
+    artisan_as_owner migrate --force
+    artisan_as_owner db:seed --class=PermissionSeeder --force
+
+    log "Droits du compte de l'application"
+    restrict_app_role
 
     log "Démarrage de $tag"
     if start "$tag" && healthy; then

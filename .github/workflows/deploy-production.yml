@@ -185,7 +185,9 @@ jobs:
           ssh production "mkdir -p '$DEPLOY_DIR/scripts/db' '$DEPLOY_DIR/backups'"
           scp docker/production/docker-compose.yml docker/production/docker-compose.local-db.yml \
             scripts/deploy/production-deploy.sh "production:$DEPLOY_DIR/"
-          scp scripts/db/backup.sh scripts/db/restore.sh scripts/db/verify.sh scripts/db/lib.sh "production:$DEPLOY_DIR/scripts/db/"
+          scp scripts/db/backup.sh scripts/db/restore.sh scripts/db/verify.sh scripts/db/lib.sh \
+            scripts/db/restrict-app-role.sql scripts/db/production-roles.sql scripts/db/local-app-role.sh \
+            "production:$DEPLOY_DIR/scripts/db/"
           # shellcheck disable=SC2029
           ssh production "chmod +x '$DEPLOY_DIR/production-deploy.sh' '$DEPLOY_DIR'/scripts/db/*.sh"
 
