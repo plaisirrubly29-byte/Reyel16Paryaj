@@ -5,6 +5,7 @@ namespace App\Modules\Betting\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\RequireIdempotencyKey;
 use App\Modules\Betting\Enums\BetTicketStatus;
+use App\Modules\Betting\Enums\BetType;
 use App\Modules\Betting\Http\Requests\PlaceBetRequest;
 use App\Modules\Betting\Http\Resources\BetTicketResource;
 use App\Modules\Betting\Models\BetTicket;
@@ -26,10 +27,15 @@ class BetController extends Controller
     {
         $filters = $request->validate([
             'status' => ['nullable', Rule::enum(BetTicketStatus::class)],
+            'type' => ['nullable', Rule::enum(BetType::class)],
+            // Tickets placés depuis N jours (Mes paris : 7, 30 ou 90 derniers jours).
+            'days' => ['nullable', 'integer', Rule::in([1, 7, 30, 90])],
         ]);
 
         $tickets = $this->ownTickets($request)
             ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($filters['type'] ?? null, fn ($q, $type) => $q->where('type', $type))
+            ->when($filters['days'] ?? null, fn ($q, $days) => $q->where('placed_at', '>=', now()->subDays((int) $days)))
             ->orderByDesc('id')
             ->paginate(Pagination::perPage($request))
             ->withQueryString();

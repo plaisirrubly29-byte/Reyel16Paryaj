@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | P8-02 — Revue de sécurité (OWASP : CORS, CSRF, XSS, injection, en-têtes, secrets, dépendances) |
-| **Date** | 25 octobre 2026 — mis à jour le 28 octobre 2026 (correctifs, voir « Suivi des correctifs ») |
+| **Date** | 25 octobre 2026 — mis à jour le 28 octobre 2026 (correctifs, voir « Suivi des correctifs ») et le 13 novembre 2026 (V2-C07 : F7 à F11, B3, `expose_php`) |
 | **Auteur** | Benginio Jean-Baptiste (@benginio) |
 | **Code revu** | Backend : `local/integration` @ `85eead5` (PR #87) · Frontend : `feature/home-redesign` @ `a37fcae` (PR #86) · Suivi : `develop` @ `a267f6d` (#86 à #98 fusionnées) |
 | **Méthode** | Lecture du code (backend, frontend, comportement de Laravel 13.36 / Sanctum 4.3 vérifié dans `vendor/`), `composer audit`, `npm audit`, recherche de secrets dans tout l'historique git, revue de la CI |
@@ -14,14 +14,14 @@ L'essentiel est solide : **aucune injection, aucun XSS, aucun secret commité, a
 
 Avant la production, **3 points bloquants** devaient être réglés : B1 dépendait de P4-03, B2 se corrigeait dans le backend, B3 se règle dans la configuration de l'hébergement. S'y ajoute une **checklist de déploiement** (mode debug, cookies, proxies).
 
-> **État au 29 octobre 2026 :** B1 et B2 sont corrigés, B3 reste à l'hébergement. Le point **élevé** E1 (paris en direct) est corrigé (#108). La relecture des correctifs a donné lieu à une PR de suivi. Voir « Suivi des correctifs ».
+> **État au 13 novembre 2026 :** les trois points bloquants sont corrigés (B3 dans les images du site, V2-F01 pour la Production). Le point **élevé** E1 (paris en direct) est corrigé (#108). F1 à F11 sont corrigés (V2-C07) ; seul F12 reste en partie. Voir « Suivi des correctifs ».
 
 | Gravité | Nombre | Corrigés |
 |---|---|---|
-| Bloquant | 3 | 2 (B1, B2) |
+| Bloquant | 3 | 3 (B1, B2, B3) |
 | Élevé | 1 | 1 (E1) |
 | Moyen | 5 | 4 (M1, M2, M4, M5) |
-| Faible | 13 | 7 (F1, F2, F3, F4, F5, F6, F13) |
+| Faible | 13 | 12 (F1 à F11, F13) ; F12 en partie |
 | Info | 8 | — (I3 en partie) |
 
 Échelle : **Bloquant** = à corriger avant toute mise en production · **Élevé** = à corriger avant toute mise en production avec de l'argent réel, et avant le lancement contrôlé · **Moyen** = à corriger avant le lancement contrôlé · **Faible** = à planifier · **Info** = à connaître.
@@ -55,7 +55,7 @@ Statuts : **✅ corrigé** (commit ou PR indiqué) · **⏳ `responsable`** = à
 - **Problème :** les pages HTML du frontend n'envoient ni `Content-Security-Policy`/`frame-ancestors`, ni `X-Content-Type-Options`, ni `Referrer-Policy`, ni HSTS.
 - **Scénario :** clickjacking de l'admin (`/admin/users/:id`) affiché dans une iframe transparente qui fait cliquer « Suspendre » ; rétrogradation HTTPS → HTTP sans HSTS ; fuite du jeton de réinitialisation (dans l'URL) par l'en-tête Referer.
 - **Correctif :** ces en-têtes se posent sur le **reverse proxy qui sert le frontend** — `Content-Security-Policy: default-src 'self'; connect-src 'self' <API>; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`, plus `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security`. Les en-têtes côté API Laravel sont une défense en profondeur (voir F13).
-- **Statut :** ⏳ hébergement (P0-07 / P1-06).
+- **Statut :** ✅ `2b0bdb3` : en-têtes posés par le Caddy de l'image du site ([`docker/production/Caddyfile`](../../docker/production/Caddyfile)), utilisée au Staging et en Production (CSP avec `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, HSTS). À contrôler par `curl -I` sur chaque environnement après sa mise en service.
 
 ---
 
@@ -78,8 +78,9 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 - [ ] `LOG_LEVEL=warning` (ou plus strict).
 - [ ] **`TRUSTED_PROXIES`** renseigné avec l'IP du reverse proxy (voir B2) ; `SESSION_SECURE_COOKIE` peut rester vide (vrai par défaut en production).
 - [ ] `SANCTUM_STATEFUL_DOMAINS` et `CORS_ALLOWED_ORIGINS` renseignés avec les domaines exacts (démarrage refusé s'ils contiennent `*`, voir I3).
-- [ ] `expose_php = Off` dans le `php.ini` de l'image de production (l'API retire déjà `X-Powered-By`, voir F13).
-- [ ] En-têtes de sécurité du frontend sur le reverse proxy (voir B3).
+- [x] `expose_php = Off` dans le `php.ini` de l'image de production ([`docker/production/php.ini`](../../docker/production/php.ini) ; l'API retire déjà `X-Powered-By`, voir F13).
+- [x] En-têtes de sécurité du frontend sur le reverse proxy (voir B3).
+- [ ] Production : deux comptes de base, propriétaire et application (voir F9), et `production-deploy.sh check` sans erreur ([deploiement-production.md](../ops/deploiement-production.md)).
 
 ---
 
@@ -107,9 +108,9 @@ Ces points ne sont pas des défauts du code (les valeurs par défaut sont sûres
 | F6 | **Codes de secours régénérables sans réauthentification ni audit** : une session admin volée obtient 8 codes durables | `routes.php:30`, `MfaService.php:100-103` | Exiger un code TOTP courant ; `throttle:mfa` ; audit | ✅ #110 |
 | F7 | **Le motif interne d'une compensation est visible par le joueur** (« soupçon de fraude… ») | `LedgerService.php:92`, `LedgerEntryResource.php:25` | Motif dans `metadata`, libellé neutre dans `description` | ✅ V2-C07 (motif visible des admins : `reason`) |
 | F8 | **Double compensation simultanée → 500** au lieu d'un rejeu (la contrainte unique protège bien les données) | `LedgerService.php:80-83` | Vérifier sous verrou, ou intercepter la violation d'unicité | ✅ V2-C07 (vérifié sous le verrou du portefeuille) |
-| F9 | **Ledger et audit non protégés contre `TRUNCATE`** ; le rôle applicatif peut supprimer les déclencheurs | migrations `…000300` et `…000500` | Déclencheur `BEFORE TRUNCATE` ; en production, rôle de migration distinct et `REVOKE UPDATE, DELETE, TRUNCATE` | 🟡 V2-C07 : `BEFORE TRUNCATE` sur les 5 tables en ajout seul ; rôle de migration distinct et `REVOKE` avec la Production (V2-F01) |
+| F9 | **Ledger et audit non protégés contre `TRUNCATE`** ; le rôle applicatif peut supprimer les déclencheurs | migrations `…000300` et `…000500` | Déclencheur `BEFORE TRUNCATE` ; en production, rôle de migration distinct et `REVOKE UPDATE, DELETE, TRUNCATE` | ✅ V2-C07 : `BEFORE TRUNCATE` sur les 5 tables en ajout seul (#200) ; en Production, compte propriétaire distinct (`.env.migration`, jamais chargé par l'application) et compte de l'application limité à la lecture et à l'ajout sur ces tables, contrôlé à chaque déploiement (`scripts/db/restrict-app-role.sql`, [deploiement-production.md §5.1](../ops/deploiement-production.md)) |
 | F10 | **Données personnelles en clair dans `idempotency_keys.response_body`** (24 h) | `RequireIdempotencyKey.php:61-66` | Ne stocker qu'un corps minimal ou chiffrer la colonne | ✅ V2-C07 (réponse chiffrée avec `APP_KEY`, rejouée à l'identique) |
-| F11 | **Coupon et tickets du joueur précédent visibles sur un appareil partagé** (cybercafé) | `BetSlipContext.tsx:86-93`, `AdminLayout.tsx:66` | Vider `r16p.betslip` à la déconnexion ; lier le coupon à l'id du joueur | ⏳ Rubly |
+| F11 | **Coupon et tickets du joueur précédent visibles sur un appareil partagé** (cybercafé) | `BetSlipContext.tsx:86-93`, `AdminLayout.tsx:66` | Vider `r16p.betslip` à la déconnexion ; lier le coupon à l'id du joueur | ✅ V2-C07 (coupon lié au compte, effacé à la déconnexion ; données du compte oubliées à la fin de la session — voir « Point frontend F11 ») |
 | F12 | **Sessions longues et pas de limite de débit globale** : 120 min d'inactivité sans expiration absolue (y compris admins) ; aucune limite sur `/me`, `/wallet`, `/admin/*` ; pas de « déconnecter tous les appareils » ; événements de connexion non audités | `config/session.php`, `bootstrap/app.php`, `AuditAction.php` | Revalider le MFA après ~30 min pour les admins ; `throttleApi()` ; route de déconnexion globale ; auditer connexions et échecs | 🟡 V2-C06 : durée maximale (12 h joueur, 8 h admin), MFA redemandé après 30 min d'inactivité admin, déconnexion des autres appareils, `POST /bets` limité à 10/min. Reste : limite globale (`/me`, `/wallet`, `/admin/*`), audit des connexions |
 | F13 | **Pas d'en-têtes de sécurité sur l'API, et version de PHP révélée** (`X-Powered-By: PHP/8.3.35`, vérifié par `curl`). L'API ne renvoie que du JSON : c'est une défense en profondeur, le vrai risque est sur le frontend (B3) | `bootstrap/app.php`, configuration PHP | Middleware `SecurityHeaders` (`nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`) ; `expose_php = Off` | ✅ `0f363e4` (plus HSTS en HTTPS, `X-Powered-By` retiré). `expose_php = Off` : image de production (checklist) |
 
@@ -197,11 +198,30 @@ Une relecture de la PR #101 après sa fusion a montré que plusieurs correctifs 
 - Les limiteurs de débit vérifient puis incrémentent en deux étapes (Laravel) : une rafale de requêtes simultanées peut dépasser un plafond d'environ le nombre de processus PHP.
 - F13 : la CSP `default-src 'none'` s'applique aussi aux rares pages HTML du backend (`/up`, page d'erreur en développement), qui s'affichent sans style.
 
+### Point frontend F11 (V2-C07, 10 novembre 2026)
+
+Sur un appareil partagé, le joueur suivant ne voit plus ni le coupon ni les données du précédent. Chaque règle a un test (`shared-device.test.tsx`, `queryClient.test.ts`).
+
+| Situation | Comportement |
+|---|---|
+| Déconnexion (site ou administration), auto-exclusion | Le coupon est effacé du navigateur (`r16p.betslip`, `r16p.betslip.owner`) et les données du compte quittent le cache |
+| Coupon composé par un joueur connecté | Enregistré avec l'id du compte : il n'est affiché qu'à ce compte |
+| Session expirée, puis visiteur ou autre joueur sur le même appareil | Le coupon du compte précédent est caché. Il revient si son joueur se reconnecte ; il est effacé dès qu'un autre compte se connecte ou qu'un visiteur commence un coupon |
+| Le serveur répond 401 à un compte que l'écran croit connecté (session expirée ou fermée depuis « Appareils connectés ») | La session est close à l'écran, les pages protégées renvoient à la connexion |
+| Le compte de la session change, quelle qu'en soit la cause | Solde, tickets, transactions et autres données du compte précédent sont retirés du cache |
+
+Accepté par écrit :
+
+- **Coupon d'un visiteur** (jamais connecté) : il reste dans le navigateur et le premier compte qui se connecte le reprend. Ce n'est qu'une liste de sélections, sans donnée de compte.
+- **Coupon mis de côté** : tant que son joueur ne revient pas et que personne ne le remplace, la liste des sélections reste lisible dans le stockage du navigateur (outils de développement), jamais à l'écran. Choix fait pour qu'un joueur dont la session a expiré (12 h au plus) retrouve son coupon.
+- **Jeux virtuels** : en attendant l'API du prestataire, le simulateur garde les paris virtuels dans le navigateur, une clé par joueur (`reyel16.virtual-bets.<id>`). Ils ne sont affichés qu'à leur joueur, mais restent sur l'appareil après la déconnexion. Ce stockage disparaît avec le simulateur (V2-D08).
+- **Joueur parti sans se déconnecter, session encore valide** : le suivant est connecté à sa place. Seule l'expiration des sessions côté serveur (V2-C06) limite ce cas.
+
 ## Actions
 
 | Qui | Quoi | Quand |
 |---|---|---|
 | Équipe | Décider pour le blocage volontaire de compte (M1) et, le cas échéant, l'activation des paris en direct (E1) | Avant le lancement contrôlé |
 | Rubly | M3 (double validation des rôles) et I2 (données visibles par le Support) | Décision P0-06 |
-| Rubly | F7, F8, F9, F10, F11, F12 | À planifier |
-| Hébergement (P0-07 / P1-06) | B3 (en-têtes du frontend), checklist de déploiement (`TRUSTED_PROXIES`, `expose_php`, `.env.production.example`), HTTPS, rôle PostgreSQL restreint (F9) | Avant la mise en ligne du staging |
+| Backend | Reste de F12 (limite de débit globale, audit des connexions) ; F7 à F11 sont corrigés (V2-C07) | À planifier |
+| Hébergement (V2-F01) | Checklist de déploiement en Production : `TRUSTED_PROXIES`, deux comptes de base (F9), `curl -I` des en-têtes (B3) ; modèles `docker/production/production.env.example` et `migration.env.example` | À la mise en place de la Production |

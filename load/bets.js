@@ -11,6 +11,8 @@ import { API, BASE_URL, csrf, expectStatus, headers, uuid, writeHeaders } from '
 const RATE = Number(__ENV.RATE || 30);
 const PLAYERS = Number(__ENV.PLAYERS || 200);
 const PASSWORD = 'Charge-P8-03-2026';
+// Version des conditions acceptées à l'inscription (V2-E01) : identity.terms_version du serveur testé.
+const TERMS_VERSION = __ENV.TERMS_VERSION || '2026-11-02';
 
 export const options = {
   insecureSkipTLSVerify: __ENV.INSECURE_TLS === '1',
@@ -49,6 +51,7 @@ export function setup() {
     csrf(100000 + n);
     const res = http.post(`${API}/auth/register`, JSON.stringify({
       name: `Joueur charge ${n}`, phone: phoneOf(run, n), birth_date: '1990-01-01', country: 'HT',
+      terms_accepted: true, terms_version: TERMS_VERSION,
       password: PASSWORD, password_confirmation: PASSWORD,
     }), { headers: writeHeaders(100000 + n), tags: { name: 'setup register' } });
     if (res.status !== 201) throw new Error(`Inscription du joueur ${n} : ${res.status} ${res.body}`);

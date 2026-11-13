@@ -3,6 +3,7 @@
 namespace App\Modules\IdentityAccess\Services;
 
 use App\Models\User;
+use App\Modules\IdentityAccess\Models\TermsAcceptance;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
@@ -17,11 +18,11 @@ class AuthService
     /**
      * Crée un compte joueur actif (sans rôle), son profil et, en V1 (fonds fictifs), son crédit de bienvenue.
      *
-     * @param  array{name: string, phone: string, email?: string|null, password: string, birth_date: string, country?: string|null}  $data
+     * @param  array{name: string, phone: string, email?: string|null, password: string, birth_date: string, country?: string|null, terms_version: string}  $data
      */
-    public function register(array $data): User
+    public function register(array $data, ?string $ip = null, ?string $userAgent = null): User
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $ip, $userAgent) {
             // Email absent => NULL explicite (pas de chaîne vide, qui romprait l'unicité "nullable").
             $email = isset($data['email']) && $data['email'] !== '' ? Str::lower($data['email']) : null;
 
@@ -35,6 +36,15 @@ class AuthService
             $user->profile()->create([
                 'birth_date' => $data['birth_date'],
                 'country' => $data['country'] ?? null,
+            ]);
+
+            // V2-E01 : preuve de l'acceptation des textes (version, date, IP), dans la même transaction que le compte.
+            TermsAcceptance::create([
+                'user_id' => $user->id,
+                'version' => $data['terms_version'],
+                'accepted_at' => now(),
+                'ip_address' => $ip,
+                'user_agent' => $userAgent === null ? null : mb_substr($userAgent, 0, 255),
             ]);
 
             $this->creditWelcomeFunds($user);

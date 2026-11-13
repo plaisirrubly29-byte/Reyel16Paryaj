@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { ApiError } from '../../shared/api/client';
 import { Alert } from '../../shared/components/Alert';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
 import { since, useAdminEvent, useChangeMarketStatus, type AdminEvent, type AdminMarket } from '../api/events';
-import { CORRECTION_STATUS_LABELS, currentLabel, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory, type ResultStatus } from '../api/results';
+import {
+  awaitsManualResult, CORRECTION_STATUS_LABELS, currentLabel, isFirstResult, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory,
+  type ResultStatus,
+} from '../api/results';
 import { EventStatusBadge, MarketStatusBadge } from '../components/MarketStatusBadge';
 import { PageHeader } from '../components/PageHeader';
 import { ReasonForm } from '../components/ReasonForm';
@@ -105,19 +109,34 @@ function MarketItem({ market }: { market: AdminMarket }) {
   );
 }
 
-/** Résultat du match : versions successives, demandes de correction, et nouvelle demande (results.enter). */
+/** Résultat du match : versions successives, demandes, et saisie (results.enter) du premier résultat ou d'une correction. */
 function ResultSection({ event }: { event: AdminEvent }) {
   const { data: me } = useMe();
+  const { hash } = useLocation();
+  const section = useRef<HTMLElement>(null);
   const history = useResultHistory(event.id);
   const h = history.data;
   const pending = h?.corrections.find((c) => c.status === 'pending');
+  const noResult = h?.results.length === 0;
+  const started = new Date(event.starts_at).getTime() <= Date.now();
+  const canEnter = Boolean(me?.permissions.includes('results.enter'));
+  const loaded = h !== undefined;
+
+  // Lien « Résultat manquant » de la liste des événements : la page s'ouvre sur cette section.
+  useEffect(() => {
+    if (loaded && hash === '#resultat') section.current?.scrollIntoView?.({ block: 'start' });
+  }, [loaded, hash]);
 
   return (
-    <section className="admin-card stack">
+    <section id="resultat" ref={section} className="admin-card stack">
       <h2 className="card-title">Résultat et corrections</h2>
       <ErrorAlert error={history.error} onRetry={() => history.refetch()} />
 
-      {h && h.results.length === 0 && <p className="muted">Pas encore de résultat pour ce match.</p>}
+      {noResult && (
+        <p className="muted">
+          {started ? "Le fournisseur n'a pas encore publié de résultat pour ce match." : "Le match n'a pas encore commencé : pas de résultat."}
+        </p>
+      )}
       {h && h.results.length > 0 && (
         <ol className="result-history">
           {h.results.map((r) => (
@@ -143,42 +162,78 @@ function ResultSection({ event }: { event: AdminEvent }) {
         </ul>
       )}
 
-      {pending && <Alert tone="info">Une correction attend la validation d'un second administrateur : <Link to={`/admin/settlements/${pending.id}`}>voir la demande</Link>.</Alert>}
+      {pending && (
+        <Alert tone="info">
+          {isFirstResult(pending) ? 'Le résultat saisi à la main' : 'Une correction'} attend la validation d'un second administrateur :{' '}
+          <Link to={`/admin/settlements/${pending.id}`}>voir la demande</Link>.
+        </Alert>
+      )}
 
-      {h && h.results.length > 0 && !pending && me?.permissions.includes('results.enter') && <CorrectionRequestForm eventId={event.id} sportSlug={event.sport.slug} />}
+      {h && !pending && canEnter && (noResult ? started : true) && (
+        <ResultRequestForm event={event} first={noResult === true} />
+      )}
     </section>
   );
 }
 
-function CorrectionRequestForm({ eventId, sportSlug }: { eventId: string; sportSlug: string }) {
-  const request = useRequestCorrection(eventId);
+const digits = (value: string) => value.replace(/\D/g, '');
+
+/**
+ * Saisie d'un résultat par un administrateur : premier résultat quand le fournisseur n'en publie pas (V2-D04),
+ * ou correction du résultat en vigueur (P5-06). Dans les deux cas, rien ne change avant la validation d'un autre
+ * administrateur.
+ */
+function ResultRequestForm({ event, first }: { event: AdminEvent; first: boolean }) {
+  const request = useRequestCorrection(event.id);
   const [status, setStatus] = useState<ResultStatus>('final');
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
   const [regulationTime, setRegulationTime] = useState(false);
+  // Refus « trop tôt » (409 result_too_early) : le serveur donne l'heure à partir de laquelle la saisie est acceptée.
+  const [availableAt, setAvailableAt] = useState<string | null>(null);
   // D-03 : football réglé sur le temps réglementaire, à confirmer par le saisisseur (exigé par l'API, V2-D04).
-  const needsRegulationTime = status === 'final' && sportSlug === 'soccer';
-  const scoreMissing = status === 'final' && (home.trim() === '' || away.trim() === '');
+  const needsRegulationTime = status === 'final' && event.sport.slug === 'soccer';
+  const scoreMissing = status === 'final' && (home === '' || away === '');
+
+  async function send(reason: string, idempotencyKey: string) {
+    setAvailableAt(null);
+    try {
+      await request.mutateAsync({
+        status,
+        home_score: status === 'final' ? home : null,
+        away_score: status === 'final' ? away : null,
+        regulation_time: needsRegulationTime && regulationTime,
+        reason,
+        idempotencyKey,
+      });
+    } catch (err) {
+      const at = err instanceof ApiError && err.code === 'result_too_early' ? err.details.available_at : null;
+      if (typeof at === 'string') setAvailableAt(at);
+      throw err;
+    }
+  }
 
   return (
-    <details className="market-action">
-      <summary>Demander une correction du résultat</summary>
+    <details className="market-action" open={first && awaitsManualResult(event) ? true : undefined}>
+      <summary>{first ? 'Saisir le résultat à la main' : 'Demander une correction du résultat'}</summary>
       <ReasonForm
         id="correction"
-        title="Demande de correction"
-        description="Rien ne change tant qu'un autre administrateur n'a pas validé la demande. À la validation, les tickets déjà réglés sont réévalués (gains repris ou versés)."
-        submitLabel="Envoyer la demande"
+        title={first ? 'Premier résultat du match' : 'Demande de correction'}
+        description={first
+          ? "À utiliser quand le fournisseur ne publie pas le résultat. Rien n'est enregistré tant qu'un autre administrateur n'a pas validé la saisie ; à la validation, le résultat est enregistré et les tickets en attente sont réglés."
+          : "Rien ne change tant qu'un autre administrateur n'a pas validé la demande. À la validation, les tickets déjà réglés sont réévalués (gains repris ou versés)."}
+        submitLabel={first ? 'Envoyer pour validation' : 'Envoyer la demande'}
         incomplete={scoreMissing || (needsRegulationTime && !regulationTime)}
-        successMessage="Demande envoyée : elle attend la validation d'un second administrateur."
-        onSubmit={(reason, idempotencyKey) => request.mutateAsync({
-          status,
-          home_score: status === 'final' ? home.trim() : null,
-          away_score: status === 'final' ? away.trim() : null,
-          regulation_time: needsRegulationTime && regulationTime,
-          reason,
-          idempotencyKey,
-        })}
+        successMessage={first
+          ? "Résultat envoyé : il attend la validation d'un second administrateur."
+          : "Demande envoyée : elle attend la validation d'un second administrateur."}
+        onSubmit={send}
       >
+        {availableAt && (
+          <Alert tone="info">
+            Saisie à la main possible à partir du {dateTime(availableAt)}. D'ici là, le fournisseur peut encore publier le résultat.
+          </Alert>
+        )}
         <div className="field">
           <label htmlFor="correction-status">Issue</label>
           <select id="correction-status" value={status} onChange={(ev) => setStatus(ev.target.value as ResultStatus)}>
@@ -190,11 +245,13 @@ function CorrectionRequestForm({ eventId, sportSlug }: { eventId: string; sportS
           <div className="score-inputs">
             <div className="field">
               <label htmlFor="correction-home">Domicile</label>
-              <input id="correction-home" inputMode="numeric" maxLength={3} value={home} onChange={(ev) => setHome(ev.target.value)} />
+              <input id="correction-home" inputMode="numeric" maxLength={3} value={home} onChange={(ev) => setHome(digits(ev.target.value))} aria-describedby="correction-home-team" />
+              <small id="correction-home-team" className="muted">{event.home_team}</small>
             </div>
             <div className="field">
               <label htmlFor="correction-away">Extérieur</label>
-              <input id="correction-away" inputMode="numeric" maxLength={3} value={away} onChange={(ev) => setAway(ev.target.value)} />
+              <input id="correction-away" inputMode="numeric" maxLength={3} value={away} onChange={(ev) => setAway(digits(ev.target.value))} aria-describedby="correction-away-team" />
+              <small id="correction-away-team" className="muted">{event.away_team}</small>
             </div>
           </div>
         )}

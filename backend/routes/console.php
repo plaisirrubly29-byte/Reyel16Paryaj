@@ -42,6 +42,18 @@ Schedule::command('sports-data:extra-markets')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Dépôts jamais confirmés par le prestataire dans le délai : « expired » (V2-B01).
+Schedule::command('payments:expire')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Statut relu chez le prestataire pour les dépôts en attente : le webhook Plop Plop n'est envoyé qu'une fois (V2-B02).
+Schedule::command('payments:reconcile')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))

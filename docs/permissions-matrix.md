@@ -20,7 +20,7 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 |
 | Utilisateur — suspendre, limiter sa mise maximale (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
 | Tickets — consulter | ✅ | 👁 | 👁 | 👁 | 👁 |
-| Ledger / rapprochement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 |
+| Ledger / rapprochement / transactions des prestataires de paiement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 |
 | Correction financière | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ |
 | Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Paramètres (limites, règles, fournisseur) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 |

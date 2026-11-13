@@ -36,6 +36,11 @@ class AccessAndSessionTest extends TestCase
         'GET api/v1/competitions',
         'GET api/v1/events',
         'GET api/v1/events/{id}/markets',
+        // Webhooks des prestataires de paiement (V2-B01) : sans compte, la signature du prestataire fait foi.
+        'POST api/v1/payments/webhooks/{provider}',
+        // Page du prestataire simulé (V2-B02) : sans compte comme celle d'un vrai prestataire ; 404 hors faux prestataire.
+        'GET api/v1/payments/fake/checkout/{reference}',
+        'POST api/v1/payments/fake/checkout/{reference}',
         // Borlette : tirages et résultats publiés, en lecture seule (404 tant que LOTTERY_ENABLED=false).
         'GET api/v1/lottery/draws',
         'GET api/v1/lottery/results',

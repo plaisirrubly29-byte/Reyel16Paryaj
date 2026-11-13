@@ -3,7 +3,9 @@
 namespace App\Modules\Compliance\Services;
 
 use App\Models\User;
+use App\Modules\Compliance\Contracts\DepositHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
+use App\Modules\Compliance\Enums\LimitKind;
 use App\Modules\Compliance\Enums\LimitPeriod;
 use App\Modules\Compliance\Enums\ResponsiblePlayEventType;
 use App\Modules\Compliance\Enums\RestrictionType;
@@ -19,7 +21,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * Jeu responsable côté joueur (P7-02, D-09) : limites de mise, pause, auto-exclusion, contrôle avant chaque pari.
+ * Jeu responsable côté joueur (P7-02, D-09) : limites de mise, pause, auto-exclusion, contrôle avant chaque pari ;
+ * limites de dépôt, contrôlées avant chaque dépôt (V2-B06).
  *
  * Règles (les plus protectrices tant que l'avis juridique J-8 n'est pas rendu) :
  * - une limite se baisse tout de suite ; une hausse ou une suppression attend le délai de réflexion ;
@@ -30,44 +33,36 @@ class ResponsibleGamingService
 {
     public function __construct(
         private readonly StakeHistory $stakes,
+        private readonly DepositHistory $deposits,
         private readonly AccountStatusService $accounts,
     ) {}
 
     /**
-     * État du joueur : limites (montant, mises de la période, reste, changement en attente) et pause.
+     * État du joueur : limites de mise et de dépôt (montant, mises ou dépôts de la période, reste, changement
+     * en attente) et pause.
      *
-     * @return array{limits: array<string, array<string, mixed>>, pause: ?ResponsibleGamingRestriction}
+     * @return array{limits: array<string, array<string, mixed>>, deposit_limits: array<string, array<string, mixed>>, pause: ?ResponsibleGamingRestriction}
      */
     public function status(User $user): array
     {
-        $limits = [];
-        foreach (LimitPeriod::cases() as $period) {
-            $limit = $this->applyDueChange($this->limitFor($user, $period));
-            $used = $this->stakes->stakedSince($user, now()->subMinutes($period->minutes()));
-
-            $limits[$period->value] = [
-                'amount_minor' => $limit?->amount_minor,
-                'used_minor' => $used,
-                'remaining_minor' => $limit?->amount_minor === null ? null : max(0, $limit->amount_minor - $used),
-                'pending' => $limit?->hasPendingChange()
-                    ? ['amount_minor' => $limit->pending_amount_minor, 'effective_at' => $limit->pending_effective_at]
-                    : null,
-            ];
-        }
-
-        return ['limits' => $limits, 'pause' => $this->activePause($user)];
+        return [
+            'limits' => $this->limitsStatus($user, LimitKind::Stake),
+            'deposit_limits' => $this->limitsStatus($user, LimitKind::Deposit),
+            'pause' => $this->activePause($user),
+        ];
     }
 
     /**
-     * Fixe la limite d'une période. Baisse (ou première limite) : immédiate, et annule une hausse en attente.
+     * Fixe la limite de mise (ou de dépôt, selon $kind) d'une période. Baisse (ou première limite) : immédiate, et annule une hausse en attente.
      * Hausse ou suppression ($amountMinor null) : appliquée après le délai de réflexion.
      */
-    public function setLimit(User $user, LimitPeriod $period, ?int $amountMinor): BettingLimit
+    public function setLimit(User $user, LimitPeriod $period, ?int $amountMinor, LimitKind $kind = LimitKind::Stake): BettingLimit
     {
-        return DB::transaction(function () use ($user, $period, $amountMinor) {
+        return DB::transaction(function () use ($user, $period, $amountMinor, $kind) {
+            $model = $kind->model();
             $limit = $this->applyDueChange(
-                BettingLimit::where('user_id', $user->id)->where('period', $period)->lockForUpdate()->first()
-            ) ?? new BettingLimit(['user_id' => $user->id, 'period' => $period]);
+                $model::where('user_id', $user->id)->where('period', $period)->lockForUpdate()->first()
+            ) ?? new $model(['user_id' => $user->id, 'period' => $period]);
 
             $current = $limit->amount_minor;
             $stricter = $amountMinor !== null && ($current === null || $amountMinor <= $current);
@@ -78,7 +73,7 @@ class ResponsibleGamingService
                 }
 
                 $limit->fill(['amount_minor' => $amountMinor, 'pending_amount_minor' => null, 'pending_effective_at' => null])->save();
-                $this->record($user, ResponsiblePlayEventType::LimitLowered, ['period' => $period->value, 'from_minor' => $current, 'to_minor' => $amountMinor]);
+                $this->record($user, $kind->loweredEvent(), ['period' => $period->value, 'from_minor' => $current, 'to_minor' => $amountMinor]);
 
                 return $limit;
             }
@@ -90,7 +85,7 @@ class ResponsibleGamingService
             // Hausse ou suppression : le délai repart de zéro à chaque nouvelle demande.
             $effectiveAt = now()->addDays((int) config('compliance.limits.increase_delay_days'));
             $limit->fill(['pending_amount_minor' => $amountMinor, 'pending_effective_at' => $effectiveAt])->save();
-            $this->record($user, ResponsiblePlayEventType::LimitIncreaseScheduled, [
+            $this->record($user, $kind->increaseScheduledEvent(), [
                 'period' => $period->value,
                 'from_minor' => $current,
                 'to_minor' => $amountMinor,
@@ -178,7 +173,7 @@ class ResponsibleGamingService
         }
 
         foreach (LimitPeriod::cases() as $period) {
-            $limit = $this->applyDueChange($this->limitFor($user, $period));
+            $limit = $this->applyDueChange($this->limitFor($user, $period, LimitKind::Stake));
             if ($limit?->amount_minor === null) {
                 continue;
             }
@@ -187,6 +182,34 @@ class ResponsibleGamingService
             if ($used + $stakeMinor > $limit->amount_minor) {
                 throw new ResponsibleGamingException(ResponsiblePlayEventType::BetRefusedLimit, 'stake_limit_exceeded',
                     __('Cette mise dépasse votre limite de mise.'),
+                    ['period' => $period->value, 'limit_minor' => $limit->amount_minor, 'remaining_minor' => max(0, $limit->amount_minor - $used)]);
+            }
+        }
+    }
+
+    /**
+     * Contrôle avant d'enregistrer un dépôt (V2-B06), à appeler dans la transaction du dépôt : le verrou sur
+     * le joueur sérialise ses dépôts simultanés, qui ne peuvent donc pas dépasser ensemble une limite.
+     *
+     * $pendingMinor : dépôts ouverts chez un prestataire, pas encore confirmés. Ils comptent dans la limite, sinon
+     * plusieurs dépôts ouverts à la suite la dépasseraient ensemble une fois confirmés.
+     *
+     * @throws ResponsibleGamingException deposit_limit_exceeded
+     */
+    public function assertCanDeposit(User $user, int $amountMinor, int $pendingMinor = 0): void
+    {
+        User::whereKey($user->id)->lockForUpdate()->first();
+
+        foreach (LimitPeriod::cases() as $period) {
+            $limit = $this->applyDueChange($this->limitFor($user, $period, LimitKind::Deposit));
+            if ($limit?->amount_minor === null) {
+                continue;
+            }
+
+            $used = $this->deposits->depositedSince($user, now()->subMinutes($period->minutes())) + $pendingMinor;
+            if ($used + $amountMinor > $limit->amount_minor) {
+                throw new ResponsibleGamingException(ResponsiblePlayEventType::DepositRefusedLimit, 'deposit_limit_exceeded',
+                    __('Ce dépôt dépasse la limite de dépôt choisie par le joueur.'),
                     ['period' => $period->value, 'limit_minor' => $limit->amount_minor, 'remaining_minor' => max(0, $limit->amount_minor - $used)]);
             }
         }
@@ -252,6 +275,12 @@ class ResponsibleGamingService
         $this->record($user, $refusal->event, ['stake_minor' => $stakeMinor] + $refusal->details);
     }
 
+    /** Journalise un dépôt refusé, hors de la transaction annulée du dépôt ; $actor : l'admin qui l'enregistrait. */
+    public function recordDepositRefusal(User $user, ResponsibleGamingException $refusal, int $amountMinor, ?User $actor = null): void
+    {
+        $this->record($user, $refusal->event, ['amount_minor' => $amountMinor] + $refusal->details, $actor);
+    }
+
     public function activePause(User $user): ?ResponsibleGamingRestriction
     {
         return ResponsibleGamingRestriction::active()
@@ -261,9 +290,33 @@ class ResponsibleGamingService
             ->first();
     }
 
-    private function limitFor(User $user, LimitPeriod $period): ?BettingLimit
+    /** @return array<string, array<string, mixed>> */
+    private function limitsStatus(User $user, LimitKind $kind): array
     {
-        return BettingLimit::where('user_id', $user->id)->where('period', $period)->first();
+        $limits = [];
+        foreach (LimitPeriod::cases() as $period) {
+            $limit = $this->applyDueChange($this->limitFor($user, $period, $kind));
+            $since = now()->subMinutes($period->minutes());
+            $used = $kind === LimitKind::Stake
+                ? $this->stakes->stakedSince($user, $since)
+                : $this->deposits->depositedSince($user, $since);
+
+            $limits[$period->value] = [
+                'amount_minor' => $limit?->amount_minor,
+                'used_minor' => $used,
+                'remaining_minor' => $limit?->amount_minor === null ? null : max(0, $limit->amount_minor - $used),
+                'pending' => $limit?->hasPendingChange()
+                    ? ['amount_minor' => $limit->pending_amount_minor, 'effective_at' => $limit->pending_effective_at]
+                    : null,
+            ];
+        }
+
+        return $limits;
+    }
+
+    private function limitFor(User $user, LimitPeriod $period, LimitKind $kind): ?BettingLimit
+    {
+        return $kind->model()::where('user_id', $user->id)->where('period', $period)->first();
     }
 
     /** Applique une hausse ou une suppression arrivée à échéance. */
@@ -275,7 +328,7 @@ class ResponsibleGamingService
 
         $from = $limit->amount_minor;
         $limit->fill(['amount_minor' => $limit->pending_amount_minor, 'pending_amount_minor' => null, 'pending_effective_at' => null])->save();
-        $this->record($limit->user_id, ResponsiblePlayEventType::LimitChangeApplied, [
+        $this->record($limit->user_id, $limit->kind()->changeAppliedEvent(), [
             'period' => $limit->period->value,
             'from_minor' => $from,
             'to_minor' => $limit->amount_minor,
@@ -295,12 +348,13 @@ class ResponsibleGamingService
     }
 
     /** @param  array<string, mixed>  $data */
-    private function record(User|int $user, ResponsiblePlayEventType $type, array $data): void
+    private function record(User|int $user, ResponsiblePlayEventType $type, array $data, ?User $actor = null): void
     {
         ResponsiblePlayEvent::create([
             'user_id' => $user instanceof User ? $user->id : $user,
             'type' => $type,
             'data' => $data,
+            'actor_id' => $actor?->id,
             'created_at' => now(),
         ]);
     }

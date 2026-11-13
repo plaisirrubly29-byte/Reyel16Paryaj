@@ -8,6 +8,7 @@ import {
   EVENT_STATUS_LABELS, MARKET_STATUS_LABELS, dateTime, since, useAdminEvents,
   type AdminEvent, type EventStatus, type MarketStatus,
 } from '../api/events';
+import { awaitsManualResult } from '../api/results';
 import { EventStatusBadge } from '../components/MarketStatusBadge';
 import { PageHeader } from '../components/PageHeader';
 
@@ -35,6 +36,8 @@ const columns: Column<AdminEvent>[] = [
       <div className="cell-stack">
         <EventStatusBadge status={e.status} />
         {e.score && <span className="small">{e.score.home} – {e.score.away}</span>}
+        {/* V2-D04 : le fournisseur n'a rien publié, le résultat se saisit à la main sur la fiche du match. */}
+        {awaitsManualResult(e) && <Link to={`/admin/events/${e.id}#resultat`} className="badge status-suspended">Résultat manquant</Link>}
       </div>
     ),
   },

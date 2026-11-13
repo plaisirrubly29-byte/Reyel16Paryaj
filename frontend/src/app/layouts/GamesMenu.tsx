@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { useBetSlip } from '../../features/betting/slip/BetSlipContext';
 import { useLotteryAvailable } from '../../features/lottery/api/lottery';
+import { virtualGamesEnabled } from '../../features/virtual/api/virtualGames';
 import { Icon, type IconName } from '../../shared/components/Icon';
 
 type Game = { key: string; label: string; hint: string; icon: IconName; to?: string };
@@ -13,7 +14,7 @@ function useGames(): Game[] {
   return [
     { key: 'sport', label: 'Sport', hint: 'Football, basket, tennis…', icon: 'ball', to: '/sports' },
     { key: 'borlette', label: 'Borlette', hint: 'Tirages et boules du jour', icon: 'lottery', to: lottery ? '/borlette' : undefined },
-    { key: 'virtual', label: 'Jeux virtuels', hint: 'Football et courses virtuels', icon: 'gamepad' },
+    { key: 'virtual', label: 'Jeux virtuels', hint: 'Football et courses virtuels', icon: 'gamepad', to: virtualGamesEnabled() ? '/jeux-virtuels' : undefined },
     { key: 'casino', label: 'Casino', hint: 'Machines à sous, tables', icon: 'dice' },
   ];
 }
