@@ -94,6 +94,7 @@ class PermissionMatrixTest extends TestCase
         'Ledger / rapprochement — consulter' => [
             'GET api/v1/admin/ledger', 'GET api/v1/admin/finance/reconciliation', 'GET api/v1/admin/finance/corrections',
             'GET api/v1/admin/finance/corrections/{correction}', 'GET api/v1/admin/users/{user}/wallet',
+            'GET api/v1/admin/payments', 'GET api/v1/admin/payments/{payment}',
         ],
         'Correction financière' => [
             'POST api/v1/admin/finance/corrections', 'POST api/v1/admin/finance/corrections/{correction}/approve',
@@ -280,6 +281,8 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', 'finance/corrections', $allowed);
         $this->assertAccess('GET', 'finance/corrections/'.self::MISSING, $allowed);
         $this->assertAccess('GET', "users/{$this->player->id}/wallet", $allowed);
+        $this->assertAccess('GET', 'payments', $allowed);
+        $this->assertAccess('GET', 'payments/'.self::MISSING, $allowed);
     }
 
     public function test_row_player_wallet_deposit_and_withdrawal_are_reserved_to_super_admin(): void

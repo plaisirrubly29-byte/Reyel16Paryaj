@@ -175,3 +175,91 @@ describe('jeu responsable du joueur', () => {
     expect(currentQueryClient().getQueryData(['wallet'])).toBeUndefined();
   });
 });
+
+describe('limites de dépôt (V2-B06)', () => {
+  const withDeposits = (deposit: Record<string, unknown> = {}) => ({
+    data: { ...state().data, deposit_limits: { day: noLimit, week: noLimit, month: noLimit, ...deposit } },
+  });
+
+  it('affiche les limites de dépôt et les dépôts de la période, à côté des limites de mise', async () => {
+    mockApi({
+      ...base,
+      'GET /responsible-gaming': {
+        status: 200,
+        body: withDeposits({
+          day: { amount: htg(2_000_00), used: htg(500_00), remaining: htg(1_500_00), pending: null },
+          month: { amount: htg(20_000_00), used: htg(0), remaining: htg(20_000_00), pending: { amount: null, effective_at: '2026-11-17T18:00:00+00:00' } },
+        }),
+      },
+    });
+
+    renderApp('/responsible-gaming');
+
+    const deposits = await card('Limites de dépôt');
+    expect(text(deposits)).toMatch(/Le total de vos dépôts ne pourra pas dépasser ces montants.*7 jours de réflexion/);
+    expect(text(deposits)).toContain('refusé, en ligne comme en agence');
+    const [day, week, month] = within(deposits).getAllByRole('heading', { level: 3 }).map((h) => h.closest('.rg-limit') as HTMLElement);
+    expect(text(day)).toContain('2 000,00 HTG');
+    expect(text(day)).toContain('Déposé : 500,00 HTG · Reste : 1 500,00 HTG');
+    expect(within(day).getByRole('progressbar', { name: 'Dépôts sur 24 heures' })).toBeInTheDocument();
+    expect(text(week)).toContain('Aucune limite');
+    expect(text(month)).toMatch(/Limite supprimée le 17 novembre 2026/);
+    // Les limites de mise restent distinctes.
+    expect(text(await card('Limites de mise'))).toContain('Misé : 0,00 HTG');
+  });
+
+  it('fixe une limite de dépôt sur sa propre route, avec une clé d\'idempotence', async () => {
+    let request: { body: unknown; key: string | null } | null = null;
+    mockApi({
+      ...base,
+      'GET /responsible-gaming': { status: 200, body: withDeposits() },
+      'PUT /responsible-gaming/deposit-limits/week': (init) => {
+        request = { body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get('Idempotency-Key') };
+        return { status: 200, body: withDeposits({ week: { amount: htg(5_000_00), used: htg(0), remaining: htg(5_000_00), pending: null } }) };
+      },
+    });
+
+    renderApp('/responsible-gaming');
+    const deposits = await card('Limites de dépôt');
+    await userEvent.click(within(deposits).getAllByRole('button', { name: 'Fixer une limite' })[1]);
+    await userEvent.type(within(deposits).getByLabelText('Nouvelle limite de dépôt sur 7 jours (HTG)'), '5000');
+    await userEvent.click(within(deposits).getByRole('button', { name: 'Enregistrer' }));
+
+    expect(await within(deposits).findByText('Limite appliquée.')).toBeInTheDocument();
+    expect(request).toEqual({ body: { amount_minor: 5_000_00 }, key: expect.any(String) });
+    expect(text(deposits)).toContain('5 000,00 HTG');
+    // La limite de mise de la même période n'a pas bougé.
+    expect(text(await card('Limites de mise'))).not.toContain('5 000,00 HTG');
+  });
+
+  it('annonce la hausse d\'une limite de dépôt après le délai de réflexion', async () => {
+    const day = { amount: htg(1_000_00), used: htg(0), remaining: htg(1_000_00), pending: null };
+    mockApi({
+      ...base,
+      'GET /responsible-gaming': { status: 200, body: withDeposits({ day }) },
+      'PUT /responsible-gaming/deposit-limits/day': {
+        status: 200,
+        body: withDeposits({ day: { ...day, pending: { amount: htg(3_000_00), effective_at: '2026-11-17T18:00:00+00:00' } } }),
+      },
+    });
+
+    renderApp('/responsible-gaming');
+    const deposits = await card('Limites de dépôt');
+    await userEvent.click(within(deposits).getByRole('button', { name: 'Modifier' }));
+    await userEvent.type(within(deposits).getByLabelText('Nouvelle limite de dépôt sur 24 heures (HTG)'), '3000');
+    await userEvent.click(within(deposits).getByRole('button', { name: 'Enregistrer' }));
+
+    expect(await within(deposits).findByText('Hausse enregistrée, après le délai de réflexion.')).toBeInTheDocument();
+    expect(text(deposits)).toMatch(/Passera à 3 000,00 HTG le 17 novembre 2026/);
+    expect(text(deposits)).toContain('1 000,00 HTG');
+  });
+
+  it('ne montre pas la carte quand le serveur ne gère pas encore les limites de dépôt', async () => {
+    mockApi({ ...base, 'GET /responsible-gaming': { status: 200, body: state() } });
+
+    renderApp('/responsible-gaming');
+
+    expect(await card('Limites de mise')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Limites de dépôt' })).toBeNull();
+  });
+});

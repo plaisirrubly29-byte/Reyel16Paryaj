@@ -269,9 +269,12 @@ class ResponsibleGamingService
      * Contrôle avant d'enregistrer un dépôt (V2-B06), à appeler dans la transaction du dépôt : le verrou sur
      * le joueur sérialise ses dépôts simultanés, qui ne peuvent donc pas dépasser ensemble une limite.
      *
+     * $pendingMinor : dépôts ouverts chez un prestataire, pas encore confirmés. Ils comptent dans la limite, sinon
+     * plusieurs dépôts ouverts à la suite la dépasseraient ensemble une fois confirmés.
+     *
      * @throws ResponsibleGamingException deposit_limit_exceeded
      */
-    public function assertCanDeposit(User $user, int $amountMinor): void
+    public function assertCanDeposit(User $user, int $amountMinor, int $pendingMinor = 0): void
     {
         User::whereKey($user->id)->lockForUpdate()->first();
 
@@ -281,7 +284,7 @@ class ResponsibleGamingService
                 continue;
             }
 
-            $used = $this->deposits->depositedSince($user, now()->subMinutes($period->minutes()));
+            $used = $this->deposits->depositedSince($user, now()->subMinutes($period->minutes())) + $pendingMinor;
             if ($used + $amountMinor > $limit->amount_minor) {
                 throw new ResponsibleGamingException(ResponsiblePlayEventType::DepositRefusedLimit, 'deposit_limit_exceeded',
                     __('Ce dépôt dépasse la limite de dépôt choisie par le joueur.'),

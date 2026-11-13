@@ -11,6 +11,7 @@ import { virtualGamesEnabled } from '../../features/virtual/api/virtualGames';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
 import { CookieBanner } from '../../features/legal/components/CookieBanner';
+import { SessionReminder } from '../../features/responsible/components/SessionReminder';
 import { BrandLogo } from './BrandLogo';
 import { GamesTab } from './GamesMenu';
 import { SiteFooter } from './SiteFooter';
@@ -138,6 +139,7 @@ function PublicShell() {
       </main>
       <SiteFooter />
       <CookieBanner />
+      <SessionReminder />
 
       {/* Panier : sur ordinateur, bouton flottant qui ouvre le panneau à droite ; sur mobile, onglet de la barre du bas. */}
       <BetSlipPanel />

@@ -37,6 +37,15 @@ final class ProductionSafety
             $problems[] = 'SANCTUM_STATEFUL_DOMAINS ne doit pas contenir "*" (session ouverte à n\'importe quel domaine).';
         }
 
+        if (config('payments.providers.fake.enabled')) {
+            $problems[] = 'PAYMENTS_FAKE_ENABLED doit valoir false (le faux prestataire de paiement créditerait des dépôts sans argent réel).';
+        }
+
+        if (config('payments.providers.plopplop.enabled')
+            && (blank(config('payments.providers.plopplop.client_id')) || blank(config('payments.providers.plopplop.client_secret')))) {
+            $problems[] = 'PAYMENTS_PLOPPLOP_CLIENT_ID et PAYMENTS_PLOPPLOP_CLIENT_SECRET sont obligatoires quand Plop Plop est activé (sans le secret, aucun webhook ne peut être vérifié).';
+        }
+
         return $problems;
     }
 

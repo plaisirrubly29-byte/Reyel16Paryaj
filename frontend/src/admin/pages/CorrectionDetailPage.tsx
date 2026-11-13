@@ -5,7 +5,7 @@ import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { MoneyText } from '../../shared/components/MoneyText';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
-import { outcomeLabel, sourceLabel, useDecideCorrection, useResultCorrection, type CorrectionImpact, type ResultCorrection } from '../api/results';
+import { isFirstResult, outcomeLabel, sourceLabel, useDecideCorrection, useResultCorrection, type CorrectionImpact, type ResultCorrection } from '../api/results';
 import { PageHeader } from '../components/PageHeader';
 import { ReasonForm } from '../components/ReasonForm';
 import { TicketStatusBadge } from '../components/TicketStatusBadge';
@@ -34,7 +34,7 @@ export function CorrectionDetailPage() {
     <section className="admin-page">
       <PageHeader
         back={{ to: '/admin/settlements', label: 'Résultats & règlement' }}
-        title={c ? `Correction n° ${c.id}` : 'Correction de résultat'}
+        title={c ? `${isFirstResult(c) ? 'Résultat saisi à la main' : 'Correction'} n° ${c.id}` : 'Demande de résultat'}
         subtitle={c && <Link to={`/admin/events/${c.event.id}`}>{c.event.name}</Link>}
         actions={c && <CorrectionStatusBadge status={c.status} />}
       />
@@ -46,8 +46,8 @@ export function CorrectionDetailPage() {
         <>
           <dl className="summary-grid">
             <div className="summary-item">
-              <dt>Résultat en vigueur</dt>
-              <dd>{c.current ? <>{outcomeLabel(c.current)} <span className="muted small">(version {c.current.version})</span></> : 'Aucun : premier résultat saisi à la main'}</dd>
+              <dt>{c.current ? 'Résultat en vigueur' : 'Résultat avant la saisie'}</dt>
+              <dd>{c.current ? <>{outcomeLabel(c.current)} <span className="muted small">(version {c.current.version})</span></> : 'Aucun : rien de publié par le fournisseur'}</dd>
             </div>
             <div className="summary-item"><dt>Proposé</dt><dd><strong>{outcomeLabel(c.proposed)}</strong></dd></div>
             <div className="summary-item"><dt>Demandée par</dt><dd>{c.requested_by ? c.requested_by.name : sourceLabel(c.source)}</dd></div>
@@ -73,6 +73,28 @@ export function CorrectionDetailPage() {
 
 function Impact({ correction }: { correction: ResultCorrection }) {
   const impact = correction.status === 'pending' ? correction.preview : correction.impact;
+
+  // Premier résultat (V2-D04) : aucun ticket n'est encore réglé sur ce match, il n'y a rien à réévaluer.
+  if (isFirstResult(correction)) {
+    if (correction.status === 'rejected') return null;
+    const settled = impact?.pending_tickets_count;
+
+    return (
+      <>
+        <h2 className="card-title">{correction.status === 'pending' ? 'Effet si la saisie est validée' : 'Effet appliqué'}</h2>
+        <p className="small">
+          {correction.status === 'pending'
+            ? 'Le résultat est enregistré comme premier résultat du match, puis les tickets en attente sur ce match sont réglés (gains versés, mises remboursées si le match est annulé).'
+            : settled === undefined
+              ? 'Résultat enregistré ; les tickets en attente sur ce match ont été envoyés au règlement.'
+              : settled === 0
+                ? 'Résultat enregistré ; aucun ticket n\'était en attente sur ce match.'
+                : `Résultat enregistré ; ${settled} ticket${settled > 1 ? 's' : ''} en attente envoyé${settled > 1 ? 's' : ''} au règlement.`}
+        </p>
+      </>
+    );
+  }
+
   if (!impact) return null;
 
   return (
@@ -97,6 +119,7 @@ function Decision({ correction }: { correction: ResultCorrection }) {
   const isRequester = correction.requested_by?.id === me?.id;
   const canApprove = Boolean(me?.permissions.includes('results.approve')) && !isRequester;
   const canReject = isRequester || Boolean(me?.permissions.includes('results.approve'));
+  const first = isFirstResult(correction);
 
   return (
     <>
@@ -107,8 +130,10 @@ function Decision({ correction }: { correction: ResultCorrection }) {
       {canApprove && (
         <ReasonForm
           id="approve"
-          title="Valider la correction"
-          description="Crée la nouvelle version du résultat et réévalue les tickets ci-contre (écritures compensatoires)."
+          title={first ? 'Valider le résultat' : 'Valider la correction'}
+          description={first
+            ? 'Vérifiez le score sur une source officielle (football : score à la fin du temps réglementaire, sans prolongation ni tirs au but). La validation enregistre le résultat et règle les tickets en attente.'
+            : 'Crée la nouvelle version du résultat et réévalue les tickets ci-contre (écritures compensatoires).'}
           submitLabel="Valider"
           onSubmit={(reason, idempotencyKey) => decide.mutateAsync({ decision: 'approve', reason, idempotencyKey })}
         />
