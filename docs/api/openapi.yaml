@@ -2013,6 +2013,118 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/withdrawals:
+    get:
+      tags: [Admin]
+      summary: File des retraits des joueurs (permission withdrawals.view, proposée)
+      description: |
+        V2-B03. Plus anciens d'abord pour les statuts à traiter (`requested`, `first_approved`), plus récents d'abord
+        sinon. Rôles proposés (ligne « Retraits » de la matrice, à valider) : Super Admin et Finance, Conformité en
+        lecture. Numéro du destinataire masqué sans `users.view_personal_data`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [requested, first_approved, processing, paid, failed, rejected, cancelled, review] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: reference, in: query, description: "Notre référence (pay_…) ou celle du prestataire", schema: { type: string } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminWithdrawal" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/withdrawals/{id}:
+    get:
+      tags: [Admin]
+      summary: Fiche d'un retrait — joueur, KYC, alertes AML ouvertes, historique (permission withdrawals.view, proposée)
+      description: Chaque ouverture de la fiche est auditée (`withdrawal.viewed`), comme les données personnelles.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminWithdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/withdrawals/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider un retrait — à 4 yeux (permission withdrawals.approve, proposée)
+      description: |
+        Double validation, comme les corrections financières :
+        - première validation : `requested` → `first_approved` ;
+        - seconde validation, par un **autre** administrateur (`403 self_approval_forbidden`) dont le rôle n'a pas été
+          attribué depuis moins de 24 h (`403 approver_role_too_recent`) : `first_approved` → `processing`, puis envoi
+          du versement au prestataire.
+        Un administrateur ne valide jamais son propre retrait (`403 own_withdrawal`). Le KYC est contrôlé de nouveau
+        (`422 kyc_required`). Échec de l'envoi au prestataire : `failed` et montant rendu au joueur. Le résultat final
+        arrive par webhook ou par vérification périodique. Audit : `withdrawal.approved` (étape 1 ou 2).
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content: { application/json: { schema: { type: object, properties: { note: { type: string, maxLength: 500, description: Facultatif } } } } }
+      responses:
+        "200":
+          description: Retrait validé (first_approved), ou envoyé au prestataire (processing), ou échoué à l'envoi (failed)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminWithdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: "Permission refusée, `self_approval_forbidden`, `approver_role_too_recent` ou `own_withdrawal`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`withdrawal_not_pending` : annulé, refusé ou déjà envoyé"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: "`kyc_required` : KYC du joueur retiré ou refusé depuis la demande"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /admin/withdrawals/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser un retrait — montant rendu au joueur (permission withdrawals.approve, proposée, motif requis)
+      description: |
+        Possible aux statuts `requested` et `first_approved`. Écriture `reversal` qui rend le montant, une seule fois. Le
+        motif est interne ; le joueur voit seulement que son retrait est refusé. Audit : `withdrawal.rejected`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Retrait refusé (status rejected), montant rendu
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminWithdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`withdrawal_not_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /payments/methods:
     get:
       tags: [Payments]
@@ -2040,6 +2152,20 @@ paths:
                             label: { type: string, example: Paiement test }
                       min_amount: { $ref: "#/components/schemas/Money" }
                       max_amount: { $ref: "#/components/schemas/Money" }
+                      withdrawal:
+                        type: object
+                        description: "V2-B03 : moyens et bornes des retraits (methods vide : aucun retrait en ligne)"
+                        properties:
+                          methods:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                provider: { type: string, example: plopplop }
+                                method: { type: string, example: moncash }
+                                label: { type: string, example: MonCash }
+                          min_amount: { $ref: "#/components/schemas/Money" }
+                          max_amount: { $ref: "#/components/schemas/Money" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
   /payments/deposits:
     get:
@@ -2115,6 +2241,107 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Deposit" } } } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /payments/withdrawals:
+    get:
+      tags: [Payments]
+      summary: Retraits du joueur connecté (plus récents d'abord)
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Withdrawal" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Payments]
+      summary: Demander un retrait vers un compte de paiement mobile
+      description: |
+        Le montant est **réservé tout de suite** : une écriture `withdrawal` débite le solde dans la même transaction que
+        la demande, sous le verrou du portefeuille (découvert refusé). Rien n'est envoyé au prestataire avant la double
+        validation par deux administrateurs (`/admin/withdrawals/{id}/approve`). Annulation par le joueur, refus d'un
+        administrateur ou échec du versement : écriture `reversal` qui rend le montant, une seule fois.
+
+        Contrôles avant la réservation : compte joueur, portefeuille actif, **KYC validé** (V2-C03), moyen de retrait
+        activé, montant dans les bornes de `GET /payments/methods` (`withdrawal`), au plus un retrait en cours par joueur
+        (proposition, à valider). 5 demandes par minute. Audit : `withdrawal.requested`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, method, recipient, amount_minor]
+              properties:
+                provider: { type: string, example: plopplop }
+                method: { type: string, example: moncash, description: "Un des moyens de retrait du prestataire (GET /payments/methods)" }
+                recipient: { type: string, pattern: "^[0-9]{8}$", example: "34123456", description: "Numéro qui reçoit l'argent (8 chiffres). Doit-il être celui du compte ? À valider" }
+                amount_minor: { type: integer, example: 250000, description: "Unité mineure ; bornes de GET /payments/methods (withdrawal)" }
+      responses:
+        "201":
+          description: Retrait demandé (status requested), montant réservé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Withdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: "`withdrawal_already_pending` : un retrait est déjà en cours (details.reference)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: |
+            validation_failed ; not_a_player ; kyc_required (KYC absent, en attente ou refusé) ;
+            payment_provider_unavailable ; insufficient_funds (details.balance_minor)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423": { description: "`wallet_frozen` : portefeuille gelé", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /payments/withdrawals/{reference}:
+    get:
+      tags: [Payments]
+      summary: Suivre un retrait du joueur connecté
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string, example: pay_01jc7a2b3c4d5e6f7g8h9j0k1m } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Withdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /payments/withdrawals/{reference}/cancel:
+    post:
+      tags: [Payments]
+      summary: Annuler son retrait tant qu'il n'est pas envoyé au prestataire
+      description: |
+        Possible aux statuts `requested` et `first_approved` ; le montant réservé est rendu (écriture `reversal`).
+        Rejoué, renvoie le même résultat. Audit : `withdrawal.cancelled`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Retrait annulé (status cancelled), montant rendu
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Withdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`withdrawal_not_cancellable` : déjà envoyé au prestataire, versé, refusé ou annulé"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /payments/webhooks/{provider}:
     post:
       tags: [Payments]
@@ -2128,6 +2355,8 @@ paths:
         journalisé. Un même événement n'a qu'un effet : rejoué, il renvoie le même résultat. Un dépôt réussi est crédité
         une seule fois, si le montant et la devise correspondent (sinon `review`, sans crédit) ; reçu après
         l'expiration du dépôt, il est crédité quand même (`applied_late`).
+        Versement d'un retrait (V2-B03) : succès → retrait `paid` ; échec → `failed` et montant rendu au joueur (écriture
+        `reversal`, une seule fois) ; montant ou devise différents → `review`, sans rien rendre.
       x-task: V2-B01
       parameters:
         - { name: provider, in: path, required: true, schema: { type: string, example: moncash } }
@@ -2677,6 +2906,24 @@ components:
         created_at: { type: string, format: date-time }
         expires_at: { type: [string, "null"], format: date-time }
         completed_at: { type: [string, "null"], format: date-time }
+    Withdrawal:
+      type: object
+      description: |
+        Retrait vu par le joueur (V2-B03). Statuts : requested (montant réservé) → first_approved → processing (envoyé
+        au prestataire) → paid ou failed ; rejected (refusé par l'administration) et cancelled (annulé par le joueur)
+        rendent le montant, comme failed ; review : anomalie du prestataire en cours de vérification. Les motifs de
+        refus et de revue restent internes.
+      properties:
+        reference: { type: string, example: pay_01jc7a2b3c4d5e6f7g8h9j0k1m }
+        provider: { type: string, example: plopplop }
+        method: { type: string, example: moncash }
+        method_label: { type: string, example: MonCash }
+        recipient: { type: string, example: "****3456", description: "Numéro du destinataire, masqué sauf les 4 derniers chiffres" }
+        status: { type: string, enum: [requested, first_approved, processing, paid, failed, rejected, cancelled, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        cancellable: { type: boolean, description: "Vrai aux statuts requested et first_approved" }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time, description: "Versé, échoué, refusé ou annulé" }
     LedgerEntry:
       type: object
       properties:
@@ -3154,6 +3401,43 @@ components:
               outcome: { type: string, enum: [applied, applied_late, review, ignored, unknown_transaction, invalid_signature, invalid_payload] }
               payload: { type: string, description: Corps brut reçu }
               ip_address: { type: [string, "null"] }
+              created_at: { type: string, format: date-time }
+    AdminWithdrawal:
+      type: object
+      description: Retrait vu par l'administration (V2-B03). Champs du détail seulement marqués comme tels.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: pay_01jc7a2b3c4d5e6f7g8h9j0k1m }
+        provider_reference: { type: [string, "null"] }
+        user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        provider: { type: string, example: plopplop }
+        method: { type: string, example: moncash }
+        recipient: { type: string, example: "34123456", description: "Masqué (****3456) sans users.view_personal_data" }
+        recipient_is_account_phone: { type: boolean, description: Le numéro du destinataire est celui du compte du joueur }
+        status: { type: string, enum: [requested, first_approved, processing, paid, failed, rejected, cancelled, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "KYC du joueur au moment de la lecture (V2-C03)" }
+        open_aml_alerts: { type: integer, description: "Alertes AML ouvertes du joueur (V2-C04)" }
+        reservation_entry_id: { type: string, description: Écriture withdrawal qui a réservé le montant }
+        refund_entry_id: { type: [string, "null"], description: "Écriture reversal qui l'a rendu (annulé, refusé, échoué)" }
+        first_approved_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        first_approved_at: { type: [string, "null"], format: date-time }
+        second_approved_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        second_approved_at: { type: [string, "null"], format: date-time }
+        rejected_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        rejection_reason: { type: [string, "null"] }
+        review_reason: { type: [string, "null"], example: amount_mismatch }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        history:
+          type: array
+          description: Détail seulement — chaque étape, de la plus ancienne à la plus récente
+          items:
+            type: object
+            properties:
+              action: { type: string, enum: [requested, first_approved, second_approved, sent, paid, failed, rejected, cancelled, review] }
+              actor: { type: [object, "null"], description: "null : le prestataire ou le système", properties: { id: { type: string }, name: { type: string } } }
+              note: { type: [string, "null"] }
               created_at: { type: string, format: date-time }
     AdminLedgerEntry:
       type: object
