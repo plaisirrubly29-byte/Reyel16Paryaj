@@ -22,6 +22,7 @@ Leur proposition, ou la valeur par défaut la plus protectrice, s'applique jusqu
 | D-11 | Jeux virtuels : football et courses | V2-D08 | 🟡 À décider — périmètre fixé ([détail](decisions/D-11-jeux-virtuels.md)) | Football virtuel et courses virtuelles ; prestataire tiers certifié ; avis juridique, prestataire et règles à obtenir ; jeux absents du site d'ici là | | |
 | D-12 | Borlette : cadre juridique, règles des jeux, barème des gains, limites par boule | V2-D09 | 🟡 À décider — brouillon ([détail](decisions/D-12-borlette.md)) | Tirages et résultats déjà affichés (étape 1) ; vente de tickets désactivée tant que l'avis juridique, le barème et les limites ne sont pas validés par écrit | | |
 | D-13 | Agents : rôle, portefeuille, documents, limites et commissions | V2-G01, V2-G02 | 🟡 À décider — options proposées ([détail](decisions/D-13-agents.md)) | Proposition : parrain (apporteur) seul au lancement, sans maniement d'argent ; encaissement en espèces après licence et D-08 ; point de vente reporté | | |
+| D-17 | Protection du site : bouclier réseau, robots, limites de fréquence | V2-F04 | 🟡 À décider — comparatif proposé ([détail](decisions/D-17-protection-site.md)) | Proposition : Cloudflare gratuit ; Turnstile sur l'inscription, le mot de passe oublié et la connexion après 3 échecs ; 300 requêtes/min par IP pour les visiteurs | | |
 
 ## Décisions techniques déjà prises
 
