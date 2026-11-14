@@ -19,6 +19,12 @@ enum AuditAction: string
     case MfaFailed = 'mfa.failed';
     case MfaRecoveryCodesRegenerated = 'mfa.recovery_codes_regenerated';
     case SessionsRevoked = 'sessions.revoked'; // le titulaire déconnecte un ou tous ses autres appareils (V2-C06)
+
+    // KYC (V2-C03)
+    case KycSubmitted = 'kyc.submitted'; // dossier envoyé par le joueur
+    case KycApproved = 'kyc.approved';
+    case KycRejected = 'kyc.rejected';
+    case KycDocumentViewed = 'kyc.document_viewed'; // pièce ou selfie ouvert par un administrateur
     case UserPersonalDataViewed = 'user.personal_data_viewed';
 
     // Admin — événements et marchés (P6-02)
@@ -57,6 +63,7 @@ enum AuditAction: string
     {
         return match ($this) {
             self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::MfaRecoveryCodesRegenerated, self::UserSelfExcluded,
+            self::KycSubmitted, self::KycDocumentViewed,
             self::ResponsibleGamingViewed, self::SessionsRevoked => false,
             default => true,
         };

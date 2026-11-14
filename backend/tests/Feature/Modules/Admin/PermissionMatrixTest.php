@@ -57,18 +57,20 @@ class PermissionMatrixTest extends TestCase
             'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'settlement.run',
             'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
             'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
-            'audit.view', 'audit.export', 'roles.manage',
+            'audit.view', 'audit.export', 'roles.manage', 'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
         self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view'],
         self::FINANCE => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data',
             'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'audit.view', 'audit.export',
         ],
-        // Support : utilisateurs en données minimales (pas users.view_personal_data).
-        self::SUPPORT => ['dashboard.view', 'events.view', 'users.view', 'users.suspend', 'tickets.view'],
+        // Support : utilisateurs en données minimales (pas users.view_personal_data) ; examine et valide les dossiers KYC
+        // (V2-C03), sans pouvoir les refuser.
+        self::SUPPORT => ['dashboard.view', 'events.view', 'users.view', 'users.suspend', 'tickets.view', 'kyc.view', 'kyc.approve'],
         self::COMPLIANCE => [
             'dashboard.view', 'events.view', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view',
             'ledger.view', 'settings.view', 'responsible_gaming.view', 'responsible_gaming.manage', 'audit.view', 'audit.export',
+            'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
     ];
 
@@ -103,6 +105,11 @@ class PermissionMatrixTest extends TestCase
         'Solde joueur — dépôt / retrait' => ['POST api/v1/admin/users/{user}/wallet/adjustments'],
         'Paramètres' => ['GET api/v1/admin/settings', 'GET api/v1/admin/settings/versions', 'GET api/v1/admin/system', 'PUT api/v1/admin/settings'],
         'Limites jeu responsable' => ['GET api/v1/admin/users/{user}/responsible-gaming', 'POST api/v1/admin/users/{user}/responsible-gaming/reopen'],
+        'KYC — consulter / valider' => [
+            'GET api/v1/admin/kyc', 'GET api/v1/admin/kyc/{submission}', 'GET api/v1/admin/kyc/{submission}/files/{file}',
+            'POST api/v1/admin/kyc/{submission}/approve',
+        ],
+        'KYC — refuser' => ['POST api/v1/admin/kyc/{submission}/reject'],
         'Audit & exports' => ['GET api/v1/admin/audit-logs', 'POST api/v1/admin/audit-logs/export'],
         'Gérer les rôles des autres' => ['PUT api/v1/admin/users/{user}/roles', 'DELETE api/v1/admin/users/{user}/mfa'],
     ];
@@ -327,6 +334,16 @@ class PermissionMatrixTest extends TestCase
     {
         $this->assertAccess('GET', "users/{$this->player->id}/responsible-gaming", [self::SUPER_ADMIN, self::COMPLIANCE]);
         $this->assertAccess('POST', "users/{$this->player->id}/responsible-gaming/reopen", [self::COMPLIANCE]);
+    }
+
+    public function test_row_kyc_is_reviewed_by_super_admin_support_and_compliance_and_rejected_by_compliance(): void
+    {
+        $reviewers = [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE];
+        $this->assertAccess('GET', 'kyc', $reviewers);
+        $this->assertAccess('GET', 'kyc/'.self::MISSING, $reviewers);
+        $this->assertAccess('GET', 'kyc/'.self::MISSING.'/files/'.self::MISSING, $reviewers);
+        $this->assertAccess('POST', 'kyc/'.self::MISSING.'/approve', $reviewers);
+        $this->assertAccess('POST', 'kyc/'.self::MISSING.'/reject', [self::SUPER_ADMIN, self::COMPLIANCE]);
     }
 
     public function test_row_audit_and_exports_are_reserved_to_super_admin_finance_and_compliance(): void

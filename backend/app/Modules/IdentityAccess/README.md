@@ -23,6 +23,7 @@
 | `users` | Compte : téléphone (identifiant de connexion, 8 chiffres), email optionnel, mot de passe haché, `status` (`AccountStatus` : active, suspended, excluded, closed) |
 | `user_profiles` | Données personnelles (nom, date de naissance, pays) — 1-1 avec `users` |
 | `terms_acceptances` | Acceptation des textes d'information à l'inscription (V2-E01) : version, date, IP, navigateur. Ajout seul |
+| `kyc_submissions` / `kyc_files` | Dossiers KYC (V2-C03) : pièce d'identité + selfie, décision ; fichiers chiffrés sur le disque `kyc` |
 | `roles` | Rôles administratifs (`RoleSlug`) — seedés par `RoleSeeder` |
 | `permissions` | Permissions unitaires (`ressource.action`) |
 | `role_permissions` | Rôle → permissions |
@@ -31,6 +32,20 @@
 Inscription (V2-E01) : `terms_accepted: true` et `terms_version` égale à `identity.terms_version`
 (`IDENTITY_TERMS_VERSION`, à garder égale à `LEGAL_VERSION` du frontend), sinon 422 ; l'acceptation est enregistrée
 dans la transaction de l'inscription.
+
+## KYC (V2-C03)
+
+- **Joueur** : `GET /me/kyc` (statut, dernier dossier, motif d'un refus) ; `POST /me/kyc` (multipart : `document_type`
+  cin | passport | driving_licence | nif, `front`, `back` exigé pour cin et driving_licence, `selfie`). Un seul dossier
+  en attente ; après un refus, un nouveau dossier.
+- **Fichiers** : chiffrés par l'application (`Crypt`, clé `APP_KEY`) avant écriture sur le disque privé `kyc`
+  (`storage/app/kyc`, volume `kyc_documents` en Staging) ; empreinte SHA-256 de l'original en base. **Changer `APP_KEY`
+  rend les documents illisibles** ; le volume est à sauvegarder avec la base (V2-F02).
+- **Revue** : `kyc.view` et `kyc.approve` (Super Admin, Conformité, Support), `kyc.reject` (Super Admin, Conformité),
+  motif obligatoire ; chaque ouverture d'un fichier est auditée (`kyc.document_viewed`).
+- **Contrôles** (`KycService`) : tout retrait exige un KYC validé ; dépôts libres jusqu'à `KYC_DEPOSIT_THRESHOLD_MINOR`
+  cumulés (paramètre « KYC » de l'admin) ; sinon `422 kyc_required`. Branchés sur les dépôts / retraits enregistrés par
+  l'admin, à brancher aussi sur les paiements (V2-B02, V2-B03).
 
 Un joueur n’a aucun rôle. Le statut ne change jamais par affectation de masse (non `fillable`).
 Comptes de démonstration (local) : `php artisan db:seed` — `joueur@example.com`, `super-admin@example.com`,

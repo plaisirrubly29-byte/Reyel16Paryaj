@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\Compliance;
 use App\Models\User;
 use App\Modules\Compliance\Enums\ResponsiblePlayEventType;
 use App\Modules\Compliance\Models\ResponsiblePlayEvent;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
@@ -119,6 +120,8 @@ class DepositLimitTest extends TestCase
     {
         $this->deposit(500_00)->assertCreated();
         $this->setDepositLimit('day', 100_00)->assertOk();
+        // Un retrait exige un KYC validé (V2-C03) : ce test porte sur les limites de dépôt, pas sur le KYC.
+        $this->player->forceFill(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()])->save();
 
         $this->actingAsVerifiedAdmin($this->superAdmin)->postJson("/api/v1/admin/users/{$this->player->id}/wallet/adjustments",
             ['type' => 'withdrawal', 'amount_minor' => 400_00, 'reason' => 'Retrait remis en agence'],
