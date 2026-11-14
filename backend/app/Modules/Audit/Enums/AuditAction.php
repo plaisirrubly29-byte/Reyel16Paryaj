@@ -8,6 +8,8 @@ namespace App\Modules\Audit\Enums;
 enum AuditAction: string
 {
     // Identity & Access
+    case LoginSucceeded = 'auth.login_succeeded'; // connexion réussie, tout compte (revue P8-02, F12)
+    case LoginFailed = 'auth.login_failed'; // échec : mauvais identifiants, compte suspendu ou exclu (F12)
     case RolesUpdated = 'roles.updated';
     case UserSuspended = 'user.suspended';
     case UserReactivated = 'user.reactivated';
@@ -57,7 +59,7 @@ enum AuditAction: string
     {
         return match ($this) {
             self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::MfaRecoveryCodesRegenerated, self::UserSelfExcluded,
-            self::ResponsibleGamingViewed, self::SessionsRevoked => false,
+            self::ResponsibleGamingViewed, self::SessionsRevoked, self::LoginSucceeded, self::LoginFailed => false,
             default => true,
         };
     }

@@ -1176,7 +1176,8 @@ paths:
       description: |
         Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
         Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
-        settlement_overdue, finance_corrections, reconciliation, failed_jobs, mfa_failures.
+        settlement_overdue, finance_corrections, reconciliation, failed_jobs, mfa_failures, role_changes,
+        login_failures (échecs de connexion répétés sur 1 h, par compte ou par adresse IP, revue P8-02 F12).
       security: [{ sessionCookie: [] }]
       responses:
         "200":

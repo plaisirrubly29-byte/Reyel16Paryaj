@@ -31,6 +31,16 @@ class AlertService
     /** Seuil d'échecs MFA sur 24 h signalé aux auditeurs. */
     public const MFA_FAILURES_THRESHOLD = 5;
 
+    /**
+     * Échecs de connexion répétés sur 1 h (revue P8-02, F12) : par compte visé, ou par adresse IP. Le limiteur « login »
+     * plafonne déjà à 30 essais par heure et par compte ; le seuil par IP reste large pour les cybercafés.
+     */
+    public const LOGIN_FAILURES_WINDOW_MINUTES = 60;
+
+    public const LOGIN_FAILURES_PER_ACCOUNT = 10;
+
+    public const LOGIN_FAILURES_PER_IP = 30;
+
     /** Période pendant laquelle un changement de rôle administratif reste signalé (M3, décision D-07). */
     public const ROLE_CHANGES_HOURS = 72;
 
@@ -197,6 +207,15 @@ class AlertService
             'Tentatives de connexion administrative inhabituelles possibles.',
             '/admin/audit')];
 
+        $accounts = $this->repeatedLoginFailures('subject_id', self::LOGIN_FAILURES_PER_ACCOUNT);
+        $addresses = $this->repeatedLoginFailures('ip_address', self::LOGIN_FAILURES_PER_IP);
+        if ($accounts > 0 || $addresses > 0) {
+            $alerts[] = $this->alert('login_failures', 'warning', 'Sécurité',
+                "Échecs de connexion répétés : {$accounts} compte(s), {$addresses} adresse(s) IP sur ".self::LOGIN_FAILURES_WINDOW_MINUTES.' min',
+                'Au moins '.self::LOGIN_FAILURES_PER_ACCOUNT.' échecs sur un même compte, ou '.self::LOGIN_FAILURES_PER_IP.' depuis une même adresse : essais de mots de passe possibles. Détail dans le journal d\'audit (auth.login_failed).',
+                '/admin/audit');
+        }
+
         // M3 (D-07) : tout Super Admin voit qu'un rôle a été donné ou retiré, y compris par un autre Super Admin.
         $roleChanges = AuditLog::query()
             ->where('action', AuditAction::RolesUpdated)
@@ -210,6 +229,20 @@ class AlertService
         }
 
         return $alerts;
+    }
+
+    /** Nombre de comptes visés (subject_id) ou d'adresses (ip_address) ayant atteint $threshold échecs de connexion. */
+    private function repeatedLoginFailures(string $column, int $threshold): int
+    {
+        return AuditLog::query()
+            ->where('action', AuditAction::LoginFailed)
+            ->where('created_at', '>=', now()->subMinutes(self::LOGIN_FAILURES_WINDOW_MINUTES))
+            ->whereNotNull($column)
+            ->groupBy($column)
+            ->havingRaw('count(*) >= ?', [$threshold])
+            ->select($column)
+            ->get()
+            ->count();
     }
 
     /** @return array{key: string, severity: string, category: string, title: string, detail: string, link: string|null} */

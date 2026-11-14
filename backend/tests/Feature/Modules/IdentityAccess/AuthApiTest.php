@@ -3,6 +3,8 @@
 namespace Tests\Feature\Modules\IdentityAccess;
 
 use App\Models\User;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Models\AuditLog;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\IdentityAccess\Models\TermsAcceptance;
@@ -262,6 +264,45 @@ class AuthApiTest extends TestCase
             ->assertJsonPath('error.code', 'account_suspended');
 
         $this->assertGuest('web');
+    }
+
+    public function test_a_successful_login_is_audited(): void
+    {
+        $user = User::factory()->create(['phone' => '34123456', 'password' => 'motdepasse123']);
+
+        $this->postJson('/api/v1/auth/login', ['phone' => '34123456', 'password' => 'motdepasse123'])->assertOk();
+
+        $log = AuditLog::where('action', AuditAction::LoginSucceeded)->sole();
+        $this->assertSame((string) $user->id, $log->subject_id);
+        $this->assertSame($user->id, $log->actor_id);
+        $this->assertNotNull($log->ip_address);
+    }
+
+    /** Revue P8-02, F12 : chaque échec est tracé, sans mot de passe ni identifiant en clair, sans rien changer à la réponse. */
+    public function test_failed_logins_are_audited_without_the_password_or_the_identifier_in_clear(): void
+    {
+        $player = User::factory()->create(['phone' => '34123456', 'email' => 'chef@example.com', 'password' => 'motdepasse123']);
+        User::factory()->withStatus(AccountStatus::Suspended)->create(['phone' => '37654321', 'password' => 'motdepasse123']);
+
+        $this->postJson('/api/v1/auth/login', ['phone' => '34999999', 'password' => 'secret-tente-1'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/login', ['email' => 'chef@example.com', 'password' => 'secret-tente-2'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/login', ['phone' => '37654321', 'password' => 'motdepasse123'])->assertStatus(423);
+
+        $logs = AuditLog::where('action', AuditAction::LoginFailed)->orderBy('id')->get();
+        $this->assertCount(3, $logs);
+
+        [$unknown, $wrongPassword, $suspended] = $logs;
+        $this->assertNull($unknown->subject_id);
+        $this->assertSame(['reason' => 'unknown_account', 'field' => 'phone', 'login' => '****9999'], $unknown->metadata);
+        $this->assertSame((string) $player->id, $wrongPassword->subject_id);
+        $this->assertSame(['reason' => 'wrong_password', 'field' => 'email', 'login' => 'c***@example.com'], $wrongPassword->metadata);
+        $this->assertSame('account_suspended', $suspended->metadata['reason']);
+        $this->assertNull($unknown->actor_id);
+
+        $journal = $logs->toJson();
+        foreach (['secret-tente-1', 'secret-tente-2', 'motdepasse123', '34999999', 'chef@example.com'] as $secret) {
+            $this->assertStringNotContainsString($secret, $journal);
+        }
     }
 
     public function test_login_is_rate_limited(): void
