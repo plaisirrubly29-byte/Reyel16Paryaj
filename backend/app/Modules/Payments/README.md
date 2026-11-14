@@ -37,7 +37,9 @@
     page du prestataire où le joueur confirme. Refusé pour un compte admin, un portefeuille gelé ou une limite de
     dépôt dépassée (les dépôts encore en attente comptent dans la limite) ;
   - `GET /api/v1/payments/deposits`, `GET /api/v1/payments/deposits/{reference}` : suivi de ses dépôts.
-  - Retraits : V2-B03.
+  - Retraits (V2-B03) : `POST /api/v1/payments/withdrawals` (Idempotency-Key, 5 par minute ; `provider`, `method`
+    moncash ou natcash, `recipient` à 8 chiffres, `amount_minor`), `GET /api/v1/payments/withdrawals`,
+    `GET /api/v1/payments/withdrawals/{reference}`, `POST /api/v1/payments/withdrawals/{reference}/cancel` (avant envoi).
 - Prestataire simulé (seulement si `fake` est activé, 404 sinon) : `GET|POST /api/v1/payments/fake/checkout/{reference}`,
   page où le joueur paie ou refuse. La décision part en webhook signé traité par `PaymentService` (même chemin qu'un
   vrai webhook), puis le joueur revient sur `FRONTEND_URL/wallet?depot={reference}`.
@@ -64,10 +66,35 @@
   démarrer (`ProductionSafety`).
 - Espace marchand Plop Plop : `webhook_url` = `https://<site>/api/v1/payments/webhooks/plopplop`, `lien_retour` =
   `https://<site>/wallet`, `client_secret` configuré (sinon aucun webhook n'est signé, donc aucun n'est accepté).
-- Le scheduler doit tourner (`payments:reconcile`, `payments:expire`).
+- Le scheduler doit tourner (`payments:reconcile`, `payments:expire`, `payments:payouts`).
 
-Retraits Plop Plop (jeton marchand, jeton de retrait signé `amount|method|recipient|reference|timestamp`, exécution,
-vérification) : avec V2-B03.
+## Retraits (`PayoutService`, `PayoutProvider`)
+
+Versés **automatiquement**, sans validation manuelle (décision de Rubly du 2026-11-13, à la place de la double
+validation du contrat V2-B03) :
+
+1. Demande du joueur : compte joueur, KYC si `PAYMENTS_WITHDRAWALS_REQUIRE_KYC=true` (contrat `KycVerifier`, fourni par
+   le module KYC ; en attendant, personne n'est vérifié), un seul retrait en cours, plafond sur 24 h glissantes, solde
+   suffisant. Le montant est réservé par une écriture `withdrawal` (`payout:<référence>`). Statut joueur : `requested`.
+2. `payments:payouts` (chaque minute) : passe le plus ancien retrait en `processing` **avant** l'appel, vérifie le solde
+   du portefeuille marchand (`api/marchand/balance`), puis verse chez Plop Plop : jeton marchand (`api/auth/marchand`),
+   jeton de retrait signé HMAC-SHA256 de `amount|method|recipient|reference|timestamp` avec le `client_secret`
+   (`api/auth/marchand/withdrawal-token`), exécution (`api/withdraw/marchand`). Un versement toutes les 125 s
+   (Plop Plop impose 120 s entre deux retraits par IP).
+3. Résultat : versé → `paid` ; refusé par MonCash / NatCash → `failed` et montant rendu par une écriture `reversal` ;
+   non exécuté (solde marchand insuffisant, délai, configuration) → remis en file ; sans réponse → reste `processing`
+   et vérifié par sa référence (`api/withdraw/marchand/verify`) ; inconnu de Plop Plop → remis en file, sans risque de
+   double versement (la référence est unique chez Plop Plop).
+4. Annulation par le joueur tant qu'il est `requested` : montant rendu (`reversal`). Audit : `withdrawal.requested`,
+   `withdrawal.cancelled`, `withdrawal.paid`, `withdrawal.failed`.
+
+Les identifiants du versement (`provider_transaction_id`, référence MonCash / NatCash, frais) sont dans `metadata`, pas
+dans `provider_reference` (même format que ceux des dépôts chez Plop Plop). Le faux prestataire verse aussitôt, sauf
+vers un numéro qui finit par `0000` (refusé).
+
+**Mise en service** : `PAYMENTS_WITHDRAWALS_ENABLED=true`, `PAYMENTS_WITHDRAWALS_PROVIDER=plopplop` (Plop Plop activé et
+configuré), portefeuille marchand approvisionné ; bornes et plafond : `PAYMENTS_WITHDRAWAL_MIN_MINOR`,
+`PAYMENTS_WITHDRAWAL_MAX_MINOR`, `PAYMENTS_WITHDRAWAL_DAILY_MAX_MINOR`.
 
 ## Règles à respecter
 

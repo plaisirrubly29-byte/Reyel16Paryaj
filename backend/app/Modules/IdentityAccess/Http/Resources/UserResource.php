@@ -23,6 +23,8 @@ class UserResource extends JsonResource
             'phone' => $this->phone,
             'email' => $this->email,
             'status' => $this->status->value,
+            // Vérification d'identité (V2-C03) : détail par GET /me/kyc.
+            'kyc_status' => $this->kyc_status->value,
             'roles' => $this->roles->pluck('slug')->values(),
             // Permissions effectives (via les rôles) : le frontend s'en sert pour afficher le menu admin.
             // Confort d'affichage uniquement — chaque route reste protégée par le middleware "permission".

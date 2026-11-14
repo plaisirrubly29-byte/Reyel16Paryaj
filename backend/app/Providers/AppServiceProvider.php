@@ -12,6 +12,8 @@ use App\Modules\Lottery\Contracts\LotteryProvider;
 use App\Modules\Lottery\Providers\FakeLotteryProvider;
 use App\Modules\Lottery\Providers\UnitySoftConnectLotteryProvider;
 use App\Modules\Monitoring\Services\QueueHeartbeat;
+use App\Modules\Payments\Contracts\KycVerifier;
+use App\Modules\Payments\Support\PendingKycVerifier;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
@@ -65,6 +67,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
         // Dépôts d'un joueur pour ses limites de dépôt : fournis par Wallet à Compliance (V2-B06).
         $this->app->bind(DepositHistory::class, LedgerDepositHistory::class);
+        // KYC exigé avant un retrait (V2-B03) : le module KYC (V2-C03) remplacera cette liaison.
+        $this->app->bindIf(KycVerifier::class, PendingKycVerifier::class);
 
         // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
         $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(
@@ -152,6 +156,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('bets', fn (Request $request) => Limit::perMinute(config('betting.max_bets_per_minute'))
             ->by('bets:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
 
+        // Envoi d'un dossier KYC (V2-C03), par joueur : jusqu’à 3 fichiers de 5 Mo à chiffrer, pas de rafale.
+        RateLimiter::for('kyc', fn (Request $request) => Limit::perHour(10)
+            ->by('kyc:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
         // MFA, par compte : sans plafond long, 5 essais/min laissent 7 200 essais par jour (revue P8-02, M2).
         RateLimiter::for('mfa', function (Request $request) {
             $id = $request->user()?->getAuthIdentifier() ?? $request->ip();
@@ -174,6 +182,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('payments-webhook', fn (Request $request) => Limit::perMinute(300)->by('payments-webhook:'.$request->ip()));
         // Dépôts ouverts par un joueur (V2-B02) : 10 par minute, chaque ouverture appelle le prestataire.
         RateLimiter::for('payments-deposit', fn (Request $request) => Limit::perMinute(10)->by('payments-deposit:'.$request->user()?->id));
+        // Demandes de retrait d'un joueur (V2-B03) : 5 par minute.
+        RateLimiter::for('payments-withdrawal', fn (Request $request) => Limit::perMinute(5)->by('payments-withdrawal:'.$request->user()?->id));
 
         RateLimiter::for('catalogue', fn (Request $request) => Limit::perMinute(120)->by('catalogue:'.$request->ip()));
     }

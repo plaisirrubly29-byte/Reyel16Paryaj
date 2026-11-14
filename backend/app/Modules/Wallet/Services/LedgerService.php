@@ -66,6 +66,18 @@ class LedgerService
     }
 
     /**
+     * Retrait demandé par le joueur et versé par un prestataire (V2-B03) : le montant est débité (réservé) dès la
+     * demande. Référence unique payout:<référence>.
+     *
+     * @throws ApiException insufficient_funds, wallet_frozen
+     */
+    public function providerWithdrawal(Wallet $wallet, Money $amount, string $reference, string $paymentId, string $methodLabel): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Withdrawal, $amount, $reference, 'payment', $paymentId,
+            description: __('Retrait :method', ['method' => $methodLabel]));
+    }
+
+    /**
      * Retrait remis hors plateforme, enregistré par le Super Admin. Refusé si le solde est insuffisant ou gelé.
      *
      * @throws ApiException insufficient_funds, wallet_frozen

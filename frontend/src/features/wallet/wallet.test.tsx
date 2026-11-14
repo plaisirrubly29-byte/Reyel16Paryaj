@@ -96,6 +96,7 @@ describe('espace joueur', () => {
       'GET /wallet/transactions': { status: 200, body: page([entry('2', 'withdrawal', -1_000_00, 4_000_00), entry('1', 'deposit', 5_000_00, 5_000_00)]) },
       'GET /payments/methods': { status: 200, body: { data: { methods: [], min_amount: htg(100_00), max_amount: htg(100_000_00) } } },
       'GET /payments/deposits': { status: 200, body: page([]) },
+      'GET /payments/withdrawals': { status: 200, body: page([]) },
     });
 
     renderApp('/wallet');

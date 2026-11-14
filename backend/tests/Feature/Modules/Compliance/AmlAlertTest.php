@@ -10,6 +10,7 @@ use App\Modules\Compliance\Enums\AmlMovement;
 use App\Modules\Compliance\Enums\AmlRule;
 use App\Modules\Compliance\Models\AmlAlert;
 use App\Modules\Compliance\Services\AmlMonitor;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
@@ -41,7 +42,8 @@ class AmlAlertTest extends TestCase
         $this->freezeSecond();
 
         $this->seed(PermissionSeeder::class);
-        $this->player = User::factory()->create();
+        // Identité vérifiée (V2-C03) : sans KYC, les dépôts s'arrêtent à kyc.deposit_threshold_minor, sous les seuils AML.
+        $this->player = User::factory()->create(['kyc_status' => KycStatus::Approved]);
         $this->superAdmin = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
         $this->compliance = User::factory()->withRole(RoleSlug::Compliance)->create();
     }
