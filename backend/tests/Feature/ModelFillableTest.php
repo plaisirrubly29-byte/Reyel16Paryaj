@@ -35,7 +35,7 @@ class ModelFillableTest extends TestCase
     public function test_every_explicit_fillable_list_matches_the_table_columns(): void
     {
         $models = $this->models();
-        $this->assertCount(21, $models, 'Modèles en $fillable explicite trouvés : '.implode(', ', $models));
+        $this->assertCount(22, $models, 'Modèles en $fillable explicite trouvés : '.implode(', ', $models));
 
         foreach ($models as $class) {
             $model = new $class;

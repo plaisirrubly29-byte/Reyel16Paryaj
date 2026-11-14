@@ -1226,7 +1226,7 @@ paths:
       description: |
         Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
         Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
-        settlement_overdue, finance_corrections, reconciliation, failed_jobs, mfa_failures.
+        settlement_overdue, finance_corrections, reconciliation, aml_alerts (aml.view), failed_jobs, mfa_failures.
       security: [{ sessionCookie: [] }]
       responses:
         "200":
@@ -1963,6 +1963,90 @@ paths:
         "422":
           description: "Validation (motif), ou `export_too_large` (details.count, details.max)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/aml/alerts:
+    get:
+      tags: [Admin]
+      summary: File des alertes AML (permission aml.view)
+      description: |
+        Chaque dépôt et retrait passé au ledger est contrôlé, en file, après sa validation ; une règle déclenchée crée une
+        alerte sans rien bloquer. Règles : `large_deposit` (un dépôt d'au moins 50 000 HTG), `cumulative_deposits` (ce dépôt
+        porte les dépôts des 7 derniers jours à 150 000 HTG ou plus), `withdrawal_without_play` (retrait alors que les dépôts
+        des 72 dernières heures ont été misés à moins de 10 %). Seuils provisoires (config/compliance.php, aml).
+        Conformité : traite ; Super Admin et Finance : lecture seule.
+      x-task: V2-C04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, dismissed, reported] } }
+        - { name: rule, in: query, schema: { type: string, enum: [large_deposit, cumulative_deposits, withdrawal_without_play] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Alertes, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AmlAlert" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/aml/alerts/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une alerte AML (permission aml.view)
+      x-task: V2-C04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AmlAlert" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/aml/alerts/{id}/review:
+    post:
+      tags: [Admin]
+      summary: Classer ou signaler une alerte AML (permission aml.review, motif requis)
+      description: |
+        `dismissed` : fausse alerte ou activité justifiée ; `reported` : soupçon, à déclarer. Une seule décision par alerte,
+        auditée avec le motif (`aml.alert_reviewed`). Une alerte sur son propre compte est traitée par un autre administrateur.
+      x-task: V2-C04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, reason]
+              properties:
+                decision: { type: string, enum: [dismissed, reported] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Alerte traitée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AmlAlert" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: "Permission refusée, ou `self_review_forbidden`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`alert_not_open` : déjà classée ou signalée"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/settings:
     get:
       tags: [Admin]
@@ -3683,6 +3767,29 @@ components:
         applied_result_id: { type: [string, "null"] }
         impact: { oneOf: [{ $ref: "#/components/schemas/ResultCorrectionImpact" }, { type: "null" }], description: "Réévaluation appliquée (validée)" }
         preview: { $ref: "#/components/schemas/ResultCorrectionImpact" }
+        created_at: { type: string, format: date-time }
+    AmlAlert:
+      type: object
+      properties:
+        id: { type: string }
+        rule: { type: string, enum: [large_deposit, cumulative_deposits, withdrawal_without_play] }
+        status: { type: string, enum: [open, dismissed, reported] }
+        user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        ledger_entry_id: { type: string, description: Dépôt ou retrait qui a déclenché la règle }
+        amount: { $ref: "#/components/schemas/Money" }
+        details:
+          type: object
+          description: Seuil appliqué et totaux constatés, selon la règle
+          properties:
+            threshold_minor: { type: integer }
+            window_days: { type: integer }
+            window_hours: { type: integer }
+            min_stake_percent: { type: integer }
+            deposited_minor: { type: integer }
+            staked_minor: { type: integer }
+        reviewed_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        review_reason: { type: [string, "null"] }
+        reviewed_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
     FinanceCorrection:
       type: object

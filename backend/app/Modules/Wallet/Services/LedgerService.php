@@ -3,6 +3,8 @@
 namespace App\Modules\Wallet\Services;
 
 use App\Models\User;
+use App\Modules\Compliance\Enums\AmlMovement;
+use App\Modules\Compliance\Jobs\CheckAmlRules;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Models\Wallet;
@@ -186,7 +188,7 @@ class LedgerService
                 ]);
             }
 
-            return LedgerEntry::create([
+            $entry = LedgerEntry::create([
                 'wallet_id' => $locked->id,
                 'type' => $type,
                 'amount_minor' => $signed,
@@ -200,6 +202,18 @@ class LedgerService
                 'metadata' => $metadata,
                 'created_by' => $actor?->id,
             ]);
+
+            // Contrôle AML de chaque dépôt et retrait (V2-C04), après la validation : jamais pour une écriture annulée.
+            $movement = match ($type) {
+                LedgerEntryType::Deposit => AmlMovement::Deposit,
+                LedgerEntryType::Withdrawal => AmlMovement::Withdrawal,
+                default => null,
+            };
+            if ($movement !== null) {
+                CheckAmlRules::dispatch($locked->user_id, $entry->id, $movement, abs($signed), $locked->currency, $entry->created_at)->afterCommit();
+            }
+
+            return $entry;
         });
     }
 
