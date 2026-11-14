@@ -25,6 +25,13 @@ export type DepositMethods = {
   methods: { provider: string; label: string }[];
   min_amount: Money;
   max_amount: Money;
+  /** Retraits (V2-B03) : absents des anciennes réponses. */
+  /** Retraits (contrat V2-B03) : methods vide quand les retraits en ligne sont fermés. */
+  withdrawal?: {
+    methods: { provider: string; method: string; label: string }[];
+    min_amount: Money;
+    max_amount: Money;
+  };
 };
 
 export const DEPOSIT_STATUS_LABELS: Record<DepositStatus, string> = {

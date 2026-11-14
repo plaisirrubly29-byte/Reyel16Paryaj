@@ -9,6 +9,7 @@ use App\Modules\Payments\Http\Resources\DepositResource;
 use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Payments\Services\PaymentProviderRegistry;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Payments\Services\PayoutService;
 use App\Support\Http\ApiException;
 use App\Support\Http\Pagination;
 use App\Support\Money;
@@ -26,7 +27,7 @@ class DepositController extends Controller
     public function __construct(private readonly PaymentService $payments) {}
 
     /** Moyens de paiement activés et montants acceptés. Liste vide : aucun dépôt en ligne possible. */
-    public function methods(PaymentProviderRegistry $providers): JsonResponse
+    public function methods(PaymentProviderRegistry $providers, PayoutService $payouts): JsonResponse
     {
         $methods = collect(array_keys((array) config('payments.providers')))
             ->filter(fn (string $name) => $providers->find($name) !== null)
@@ -39,6 +40,13 @@ class DepositController extends Controller
             'methods' => $methods,
             'min_amount' => ['minor' => (int) config('payments.deposit_min_minor'), 'currency' => $currency],
             'max_amount' => ['minor' => (int) config('payments.deposit_max_minor'), 'currency' => $currency],
+            // Retraits (contrat V2-B03) : methods vide quand aucun prestataire de versement n'est activé.
+            'withdrawal' => [
+                'methods' => ($payout = $payouts->provider()) === null ? [] : collect((array) config('payments.withdrawals.methods'))
+                    ->map(fn (string $label, string $method) => ['provider' => $payout->name(), 'method' => $method, 'label' => $label])->values(),
+                'min_amount' => ['minor' => (int) config('payments.withdrawals.min_minor'), 'currency' => $currency],
+                'max_amount' => ['minor' => (int) config('payments.withdrawals.max_minor'), 'currency' => $currency],
+            ],
         ]]);
     }
 

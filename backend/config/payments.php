@@ -48,4 +48,24 @@ return [
     'deposit_min_minor' => (int) env('PAYMENTS_DEPOSIT_MIN_MINOR', 100_00),
     'deposit_max_minor' => (int) env('PAYMENTS_DEPOSIT_MAX_MINOR', 100_000_00),
 
+    /*
+    | Retraits des joueurs (V2-B03) : le montant est réservé au ledger à la demande, puis versé automatiquement par le
+    | prestataire (commande payments:payouts, chaque minute) depuis son portefeuille marchand, sans validation manuelle
+    | (choix de Rubly du 2026-11-13). Désactivés par défaut.
+    */
+    'withdrawals' => [
+        'enabled' => (bool) env('PAYMENTS_WITHDRAWALS_ENABLED', false),
+        // KYC validé exigé (contrat V2-B03). À activer quand le module KYC (V2-C03) est branché : avant, aucun compte
+        // n'est vérifié, donc plus aucun retrait n'est possible.
+        'require_kyc' => (bool) env('PAYMENTS_WITHDRAWALS_REQUIRE_KYC', false),
+        // Prestataire qui verse (doit être activé ci-dessus) : plopplop, ou fake en développement.
+        'provider' => env('PAYMENTS_WITHDRAWALS_PROVIDER', 'plopplop'),
+        // Portefeuilles mobiles acceptés (libellé vu par le joueur).
+        'methods' => ['moncash' => 'MonCash', 'natcash' => 'NatCash'],
+        // Bornes d'un retrait et plafond par joueur sur 24 heures glissantes, en unité mineure.
+        'min_minor' => (int) env('PAYMENTS_WITHDRAWAL_MIN_MINOR', 100_00),
+        'max_minor' => (int) env('PAYMENTS_WITHDRAWAL_MAX_MINOR', 50_000_00),
+        'daily_max_minor' => (int) env('PAYMENTS_WITHDRAWAL_DAILY_MAX_MINOR', 100_000_00),
+    ],
+
 ];

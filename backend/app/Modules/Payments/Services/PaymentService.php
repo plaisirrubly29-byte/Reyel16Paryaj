@@ -134,7 +134,7 @@ class PaymentService
     public function reconcile(PaymentTransaction $transaction): ?WebhookOutcome
     {
         $provider = $this->providers->find($transaction->provider);
-        if (! $provider instanceof ChecksPaymentStatus || $transaction->status->isFinal()) {
+        if (! $provider instanceof ChecksPaymentStatus || $transaction->direction !== PaymentDirection::Deposit || $transaction->status->isFinal()) {
             return null;
         }
 
@@ -157,7 +157,7 @@ class PaymentService
     {
         $changed = 0;
 
-        PaymentTransaction::whereIn('status', [PaymentStatus::Pending, PaymentStatus::Expired])
+        PaymentTransaction::where('direction', PaymentDirection::Deposit)->whereIn('status', [PaymentStatus::Pending, PaymentStatus::Expired])
             ->where('created_at', '>=', now()->subHours($hours))
             ->orderBy('id')
             ->each(function (PaymentTransaction $transaction) use (&$changed) {
@@ -181,7 +181,7 @@ class PaymentService
         try {
             return DB::transaction(function () use ($provider, $notification, $payload, $ip) {
                 // Verrou sur la transaction : deux webhooks d'un même paiement passent un par un.
-                $transaction = PaymentTransaction::where('provider', $provider->name())
+                $transaction = PaymentTransaction::where('provider', $provider->name())->where('direction', PaymentDirection::Deposit)
                     ->where('reference', $notification->reference)
                     ->lockForUpdate()
                     ->first();
@@ -209,7 +209,7 @@ class PaymentService
     /** Dépôts jamais confirmés dans le délai : « expired » (commande payments:expire). */
     public function expirePending(): int
     {
-        return PaymentTransaction::where('status', PaymentStatus::Pending)
+        return PaymentTransaction::where('direction', PaymentDirection::Deposit)->where('status', PaymentStatus::Pending)
             ->where('expires_at', '<=', now())
             ->update(['status' => PaymentStatus::Expired, 'updated_at' => now()]);
     }
