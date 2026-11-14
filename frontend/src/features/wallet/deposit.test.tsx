@@ -29,6 +29,7 @@ const base = {
   'GET /wallet/transactions': { status: 200, body: page([]) },
   'GET /payments/methods': { status: 200, body: { data: { methods: [{ provider: 'fake', label: 'Paiement test' }], min_amount: htg(100_00), max_amount: htg(100_000_00) } } },
   'GET /payments/deposits': { status: 200, body: page([]) },
+  'GET /payments/withdrawals': { status: 200, body: page([]) },
 };
 
 describe('dépôt en ligne', () => {

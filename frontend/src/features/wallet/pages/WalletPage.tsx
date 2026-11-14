@@ -1,40 +1,20 @@
 import { Link } from 'react-router-dom';
 import { Alert } from '../../../shared/components/Alert';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
-import { Icon, type IconName } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
 import { Spinner } from '../../../shared/components/Spinner';
 import { useMe } from '../../auth/api/auth';
 import { ENTRY_LABELS, useWallet, useWalletTransactions } from '../api/wallet';
 import { DepositCard } from '../components/DepositCard';
+import { WithdrawalCard } from '../components/WithdrawalCard';
 
-/**
- * Retrait : pas encore de retrait en ligne (V2-B03), le joueur est payé auprès de REYEL 16 PARYAJ avec son
- * numéro de compte, puis l'opération est enregistrée par l'administration. Le dépôt est dans DepositCard.
- */
-function MoneyMovement({ id, icon, title, intro, steps, accountId }: { id: string; icon: IconName; title: string; intro: string; steps: string; accountId?: string }) {
-  return (
-    <section className="money-card" aria-labelledby={id}>
-      <header className="money-card-head">
-        <span className="money-card-icon" aria-hidden="true"><Icon name={icon} size={22} /></span>
-        <div>
-          <h2 id={id}>{title}</h2>
-          <p className="muted small">{intro}</p>
-        </div>
-      </header>
-      <div className="money-card-body">
-        <p>{steps}</p>
-        {accountId && <p className="small">Votre numéro de compte : <strong className="mono">{accountId}</strong></p>}
-      </div>
-    </section>
-  );
-}
-
-/** Solde du joueur connecté. Aucun calcul de solde côté client : tout vient de l'API. */
+/** Solde du joueur connecté, dépôt et retrait. Aucun calcul de solde côté client : tout vient de l'API. */
 export function WalletPage() {
   const wallet = useWallet();
   const recent = useWalletTransactions({ page: 1 });
   const { data: me } = useMe();
+  const frozen = wallet.data?.status === 'frozen';
+  const currency = wallet.data?.currency ?? 'HTG';
 
   return (
     <section className="stack">
@@ -48,14 +28,13 @@ export function WalletPage() {
           <strong className="balance"><MoneyText value={wallet.data.balance} /></strong>
         </div>
       )}
-      {wallet.data?.status === 'frozen' && (
+      {frozen && (
         <Alert tone="warning" title="Solde gelé">Aucune mise n'est possible pour le moment. Contactez le support.</Alert>
       )}
 
       <div className="money-grid">
-        <DepositCard accountId={me?.id} currency={wallet.data?.currency ?? 'HTG'} frozen={wallet.data?.status === 'frozen'} />
-        <MoneyMovement id="withdraw" icon="withdraw" title="Retrait" intro="Retirer vos gains." accountId={me?.id}
-          steps="Demandez votre retrait auprès de REYEL 16 PARYAJ avec votre numéro de compte. Le montant est débité de votre solde puis vous est remis." />
+        <DepositCard accountId={me?.id} currency={currency} frozen={frozen} />
+        <WithdrawalCard accountId={me?.id} phone={me?.phone} currency={currency} balance={wallet.data?.balance} frozen={frozen} />
       </div>
 
       <section className="stack-sm" aria-labelledby="recent-ops">

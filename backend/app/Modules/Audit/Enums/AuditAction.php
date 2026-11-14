@@ -34,6 +34,12 @@ enum AuditAction: string
     case WalletDeposited = 'wallet.deposited';
     case WalletWithdrawn = 'wallet.withdrawn';
 
+    // Payments — retraits des joueurs versés par le prestataire (V2-B03)
+    case WithdrawalRequested = 'withdrawal.requested';
+    case WithdrawalCancelled = 'withdrawal.cancelled';
+    case WithdrawalPaid = 'withdrawal.paid';
+    case WithdrawalFailed = 'withdrawal.failed';
+
     // Settlement — correction de résultat à double contrôle (P5-06)
     case ResultCorrectionRequested = 'result.correction_requested';
     case ResultCorrectionApproved = 'result.correction_approved';
