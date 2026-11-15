@@ -18,4 +18,21 @@ class PaymentProviderRegistry
 
         return $provider instanceof PaymentProvider ? $provider : null;
     }
+
+    /**
+     * Moyens de dépôt que le joueur choisit chez ce prestataire (ex. Plop Plop : moncash, natcash), code => libellé.
+     * Vide : le prestataire n'a qu'un moyen, sans choix.
+     *
+     * @return array<string, string>
+     */
+    public function methods(string $name): array
+    {
+        return array_map('strval', (array) config("payments.providers.{$name}.methods", []));
+    }
+
+    /** Libellé vu par le joueur (formulaire, historique, écriture du ledger) : celui du moyen choisi s'il y en a un. */
+    public function label(string $name, ?string $method = null): string
+    {
+        return $this->methods($name)[$method ?? ''] ?? (string) config("payments.providers.{$name}.label", $name);
+    }
 }

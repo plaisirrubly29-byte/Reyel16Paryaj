@@ -46,6 +46,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Sanctum en mode SPA : session par cookie + CSRF pour le frontend first-party (SANCTUM_STATEFUL_DOMAINS).
         $middleware->statefulApi();
 
+        // Limite globale par compte connecté, limiteur « api » (AppServiceProvider, revue P8-02 F12).
+        $middleware->throttleApi();
+
         // Compteurs des réponses de l'API et des 5xx pour l'alerte « erreurs API » (P9-02, monitoring:check).
         $middleware->appendToGroup('api', CountApiResponses::class);
 

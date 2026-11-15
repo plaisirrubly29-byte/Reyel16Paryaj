@@ -22,6 +22,15 @@ return [
         'max_amount_minor' => 1_000_000_000_00,
     ],
 
+    // Rappel de durée de session proposé au joueur (V2-E06), en minutes ; désactivé par défaut.
+    'session_reminder_minutes' => [15, 30, 60],
+
+    // Historique des dépenses du joueur (V2-E06) : jours et mois affichés, dans le fuseau d'affichage.
+    'history' => [
+        'days' => 30,
+        'months' => 12,
+    ],
+
     // Pause : irrévocable avant son terme ; le joueur peut se connecter mais pas parier.
     'pause_durations' => [
         '24h' => '24 hours',
@@ -35,6 +44,25 @@ return [
         '6m' => '6 months',
         '1y' => '1 year',
         '5y' => '5 years',
+    ],
+
+    // Règles AML (V2-C04) : une règle déclenchée crée une alerte pour la Conformité, sans rien bloquer.
+    // Seuils PROVISOIRES, prudents, en attendant l'avis juridique (D-01, question J-6).
+    'aml' => [
+        // Un dépôt d'au moins ce montant.
+        'large_deposit_minor' => 50_000_00,
+
+        // Les dépôts des derniers jours atteignent ce cumul (une alerte au franchissement du seuil).
+        'cumulative_deposits' => [
+            'threshold_minor' => 150_000_00,
+            'days' => 7,
+        ],
+
+        // Un retrait alors que les dépôts des dernières heures ont été misés à moins de ce pourcentage.
+        'withdrawal_without_play' => [
+            'hours' => 72,
+            'min_stake_percent' => 10,
+        ],
     ],
 
 ];

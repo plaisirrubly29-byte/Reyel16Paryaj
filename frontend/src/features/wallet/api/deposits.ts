@@ -11,6 +11,9 @@ export type DepositStatus = 'pending' | 'succeeded' | 'failed' | 'expired' | 're
 export type Deposit = {
   reference: string;
   provider: string;
+  /** Moyen choisi par le joueur (moncash, natcash). */
+  method?: string | null;
+  /** Libellé du moyen choisi (« MonCash »), sinon du prestataire. */
   provider_label: string;
   status: DepositStatus;
   amount: Money;
@@ -21,10 +24,20 @@ export type Deposit = {
   completed_at: string | null;
 };
 
+export type DepositMethod = { provider: string; method?: string | null; label: string };
+
 export type DepositMethods = {
-  methods: { provider: string; label: string }[];
+  /** Un choix par moyen (Plop Plop : MonCash, NatCash) ; method null pour un prestataire sans choix. */
+  methods: DepositMethod[];
   min_amount: Money;
   max_amount: Money;
+  /** Retraits (V2-B03) : absents des anciennes réponses. */
+  /** Retraits (contrat V2-B03) : methods vide quand les retraits en ligne sont fermés. */
+  withdrawal?: {
+    methods: { provider: string; method: string; label: string }[];
+    min_amount: Money;
+    max_amount: Money;
+  };
 };
 
 export const DEPOSIT_STATUS_LABELS: Record<DepositStatus, string> = {
@@ -76,11 +89,11 @@ export function useStartDeposit() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: { provider: string; amountMinor: number; idempotencyKey: string }) =>
+    mutationFn: async (input: { provider: string; method?: string | null; amountMinor: number; idempotencyKey: string }) =>
       (await api<Envelope<Deposit>>('/payments/deposits', {
         method: 'POST',
         idempotencyKey: input.idempotencyKey,
-        body: { provider: input.provider, amount_minor: input.amountMinor },
+        body: { provider: input.provider, ...(input.method ? { method: input.method } : {}), amount_minor: input.amountMinor },
       })).data,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: [...DEPOSITS_KEY, 'list'] }),
   });

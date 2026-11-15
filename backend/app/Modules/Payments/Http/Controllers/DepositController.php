@@ -9,6 +9,7 @@ use App\Modules\Payments\Http\Resources\DepositResource;
 use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Payments\Services\PaymentProviderRegistry;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Payments\Services\PayoutService;
 use App\Support\Http\ApiException;
 use App\Support\Http\Pagination;
 use App\Support\Money;
@@ -25,12 +26,17 @@ class DepositController extends Controller
 {
     public function __construct(private readonly PaymentService $payments) {}
 
-    /** Moyens de paiement activés et montants acceptés. Liste vide : aucun dépôt en ligne possible. */
-    public function methods(PaymentProviderRegistry $providers): JsonResponse
+    /**
+     * Moyens de paiement activés et montants acceptés : une entrée par moyen que le joueur choisit (Plop Plop :
+     * MonCash, NatCash), method null pour un prestataire sans choix. Liste vide : aucun dépôt en ligne possible.
+     */
+    public function methods(PaymentProviderRegistry $providers, PayoutService $payouts): JsonResponse
     {
         $methods = collect(array_keys((array) config('payments.providers')))
             ->filter(fn (string $name) => $providers->find($name) !== null)
-            ->map(fn (string $name) => ['provider' => $name, 'label' => (string) config("payments.providers.{$name}.label", $name)])
+            ->flatMap(fn (string $name) => $providers->methods($name) === []
+                ? [['provider' => $name, 'method' => null, 'label' => $providers->label($name)]]
+                : collect($providers->methods($name))->map(fn (string $label, string $method) => ['provider' => $name, 'method' => $method, 'label' => $label])->values())
             ->values();
 
         $currency = (string) config('wallet.currency');
@@ -39,6 +45,13 @@ class DepositController extends Controller
             'methods' => $methods,
             'min_amount' => ['minor' => (int) config('payments.deposit_min_minor'), 'currency' => $currency],
             'max_amount' => ['minor' => (int) config('payments.deposit_max_minor'), 'currency' => $currency],
+            // Retraits (contrat V2-B03) : methods vide quand aucun prestataire de versement n'est activé.
+            'withdrawal' => [
+                'methods' => ($payout = $payouts->provider()) === null ? [] : collect((array) config('payments.withdrawals.methods'))
+                    ->map(fn (string $label, string $method) => ['provider' => $payout->name(), 'method' => $method, 'label' => $label])->values(),
+                'min_amount' => ['minor' => (int) config('payments.withdrawals.min_minor'), 'currency' => $currency],
+                'max_amount' => ['minor' => (int) config('payments.withdrawals.max_minor'), 'currency' => $currency],
+            ],
         ]]);
     }
 
@@ -57,6 +70,8 @@ class DepositController extends Controller
     {
         $data = $request->validate([
             'provider' => ['required', 'string', 'max:40'],
+            // Moyen choisi (GET /payments/methods) ; contrôlé par PaymentService selon le prestataire.
+            'method' => ['nullable', 'string', 'max:40'],
             'amount_minor' => ['required', 'integer', 'min:'.(int) config('payments.deposit_min_minor'), 'max:'.(int) config('payments.deposit_max_minor')],
         ]);
 
@@ -64,6 +79,7 @@ class DepositController extends Controller
             $request->user(),
             Money::ofMinor($data['amount_minor'], (string) config('wallet.currency')),
             $data['provider'],
+            $data['method'] ?? null,
         );
 
         return (new DepositResource($transaction))->response()->setStatusCode(201);
