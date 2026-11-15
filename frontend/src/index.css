@@ -1151,6 +1151,25 @@ a.match-card-teams:hover .team-name { text-decoration: underline; text-underline
 
 /* Liste des matchs : une ligne par match */
 .match-groups { display: flex; flex-direction: column; padding: 0.5rem 0.5rem 0.75rem; }
+
+/* Page Sports, filtre « Tous » : une section par sport, titre en bandeau sombre */
+.sport-sections { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0.5rem 0.75rem; }
+.sport-section { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.sport-section-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.65rem 0.85rem;
+  background: linear-gradient(90deg, var(--navy, #0b1847), #13286e); color: #fff;
+}
+.sport-section-title { display: flex; align-items: center; gap: 0.55rem; margin: 0; font-size: 1.05rem; font-weight: 800; }
+.sport-section-icon {
+  display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 9px; background: var(--accent);
+}
+.sport-section-count {
+  padding: 0.05rem 0.5rem; border-radius: 999px; background: rgba(255, 255, 255, 0.16); font-size: 0.78rem; font-weight: 700;
+}
+.sport-section-all { display: inline-flex; align-items: center; gap: 0.2rem; color: rgba(255, 255, 255, 0.85); font-size: 0.86rem; font-weight: 700; white-space: nowrap; }
+.sport-section-all:hover { color: #fff; }
+.sport-section .match-groups { padding: 0.25rem; }
+.sport-section-more { display: flex; justify-content: center; margin: 0; padding: 0 0.75rem 0.85rem; }
 .match-lines { list-style: none; margin: 0; padding: 0; }
 .match-line { padding: 1rem 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; border-radius: 8px; transition: background-color 0.15s; }
 .match-line:nth-child(even) { background: #f6f7f9; }
@@ -1606,6 +1625,24 @@ a.match-line-teams:hover { color: var(--brand); }
   }
   .betslip .betslip-body { max-height: 55vh; min-height: 0; }
 
+  /* Panier flottant : bouton rond au-dessus de la barre d'onglets, compteur en pastille ; masqué quand le panneau
+     est ouvert (le panneau a son propre bouton de fermeture et son bouton de validation en bas). */
+  .slip-fab {
+    right: 1rem; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 37;
+    width: 3.5rem; height: 3.5rem; padding: 0; justify-content: center; gap: 0;
+    background: linear-gradient(160deg, #1f3fd6, var(--slate)); box-shadow: 0 10px 24px rgba(11, 26, 74, 0.4);
+  }
+  .slip-fab.has-items { background: linear-gradient(160deg, #ff4357, var(--accent)); }
+  .slip-fab[aria-expanded='true'] { display: none; }
+  .slip-fab-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .slip-fab-count {
+    position: absolute; top: -4px; right: -4px; min-width: 1.35rem; height: 1.35rem; padding: 0 0.3rem;
+    font-size: 0.74rem; box-shadow: 0 2px 6px rgba(11, 26, 74, 0.3);
+  }
+  .slip-fab:not(.has-items) .slip-fab-count { display: none; }
+
   /* Menu « Jeux » : panneau qui monte au-dessus de la barre d'onglets, tuiles 2 × 2 colorées par jeu */
   .games-backdrop { position: fixed; inset: 0; z-index: 34; background: rgba(6, 13, 43, 0.5); animation: games-fade 0.18s ease-out; }
   .games-sheet {
@@ -1634,6 +1671,12 @@ a.match-line-teams:hover { color: var(--brand); }
   .game-borlette { --game: 227, 23, 47; }
   .game-virtual { --game: 140, 82, 255; }
   .game-casino { --game: 245, 179, 1; }
+  .game-crash { --game: 24, 196, 120; }
+
+  /* Onglet « Menu » : championnats dans un panneau haut, liste défilante */
+  .menu-sheet { max-height: calc(100vh - var(--nav-h) - 60px - env(safe-area-inset-bottom)); gap: 0.6rem; }
+  .menu-sheet-body { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; }
+  .menu-sheet .competitions-list { max-height: calc(100vh - var(--nav-h) - 260px); }
   .game-icon {
     display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin-bottom: auto; border-radius: 13px;
     background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1677,8 +1720,9 @@ a.match-line-teams:hover { color: var(--brand); }
 }
 
 @media (max-width: 560px) {
-  /* « Connexion » est déjà dans la barre du bas : l'en-tête garde l'inscription. */
-  .header-login-btn { display: none; }
+  /* Connexion et inscription restent dans l'en-tête (plus d'onglet « Connexion » dans la barre du bas). */
+  .header-actions { gap: 0.4rem; }
+  .header-actions > .btn { height: 2.2rem; padding: 0 0.65rem; font-size: 0.82rem; }
   .footer-inner { grid-template-columns: 1fr; gap: 1.5rem; }
   .footer-bottom { flex-direction: column; }
   .hero-title { font-size: 1.6rem; }
@@ -1697,48 +1741,64 @@ a.match-line-teams:hover { color: var(--brand); }
   .top-head-text p, .top-nav { display: none; }
   .top-head-text h2 { font-size: 1.15rem; }
   .top-all { padding: 0.4rem 0.75rem; font-size: 0.85rem; }
-  .top-matches { grid-auto-columns: 84%; gap: 0.7rem; padding-bottom: 0.6rem; }
+  /* Carte compacte (hauteur proche d'une ligne de « Tous les matchs ») au style propre : liseré vertical à la teinte
+     du sport, en-tête fin, cotes réunies dans une seule barre segmentée. */
+  .top-matches { grid-auto-columns: 84%; gap: 0.6rem; padding-bottom: 0.5rem; }
   .match-card {
-    gap: 0.8rem; padding: 0.85rem; border-radius: 16px; box-shadow: 0 8px 20px rgba(6, 13, 43, 0.22);
-    background: radial-gradient(110% 60% at 0% 0%, rgba(var(--tint), 0.35), transparent 60%), linear-gradient(180deg, #0c1846, #070e30);
+    gap: 0.5rem; padding: 0.6rem 0.7rem 0.65rem 0.95rem; border-radius: 14px; box-shadow: 0 6px 16px rgba(6, 13, 43, 0.22);
+    background:
+      linear-gradient(180deg, rgb(var(--tint)), rgba(227, 23, 47, 0.9)) left / 4px 100% no-repeat,
+      radial-gradient(90% 70% at 0% 0%, rgba(var(--tint), 0.3), transparent 60%),
+      linear-gradient(180deg, #0c1846, #070e30);
   }
-  .match-card::before { background: linear-gradient(160deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05) 50%, rgba(var(--tint), 0.45)); }
+  .match-card::before { background: linear-gradient(160deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04) 50%, rgba(var(--tint), 0.35)); }
   .match-card::after, .match-card-more { display: none; }
   .match-card:hover { transform: none; }
-  .match-card-head .competition { gap: 0.45rem; }
-  .competition-icon { width: 1.6rem; height: 1.6rem; border-radius: 8px; }
+  .match-card-head .competition { gap: 0.4rem; }
+  .match-card .competition-icon { width: 1.3rem; height: 1.3rem; border-radius: 6px; background: none; border: 0; color: rgba(255, 255, 255, 0.85); }
+  .match-card .competition-icon svg { width: 14px; height: 14px; }
   .match-card .competition-text { flex-direction: row; align-items: baseline; gap: 0.3rem; }
   .match-card .competition-text { min-width: 0; }
   .match-card .competition-text strong { display: block; flex: 0 0 auto; max-width: 100%; font-size: 0.82rem; white-space: nowrap; text-overflow: ellipsis; }
   .match-card .competition-text span { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.68rem; letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.5); }
   .match-card .competition-text span::before { content: '· '; }
-  .match-card-head .kickoff { padding: 0.2rem 0.55rem; font-size: 0.7rem; }
+  .match-card .competition-text strong { font-size: 0.76rem; letter-spacing: 0.01em; }
+  .match-card-head .kickoff { padding: 0.12rem 0.45rem; font-size: 0.64rem; gap: 0.25rem; }
+  .match-card-head .kickoff svg { width: 11px; height: 11px; }
+  .match-card .live-dot { width: 0.4rem; height: 0.4rem; }
 
-  .match-card-teams { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 0.5rem 0.75rem; text-align: left; }
+  .match-card-teams { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 0.3rem 0.6rem; text-align: left; }
   .match-card-teams > .card-team:first-child { grid-area: 1 / 1; }
   .match-card-teams > .card-team:last-of-type { grid-area: 2 / 1; }
   .card-versus {
-    grid-area: 1 / 2 / 3 / 3; align-self: stretch; justify-content: center; gap: 0.2rem; min-width: 4.2rem; padding: 0 0 0 0.75rem;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    grid-area: 1 / 2 / 3 / 3; align-self: center; justify-content: center; gap: 0.1rem; min-width: 3.4rem; padding: 0.3rem 0.45rem;
+    border-radius: 10px; background: rgba(255, 255, 255, 0.06);
   }
-  .card-team { flex-direction: row; gap: 0.6rem; }
-  .card-team .team-name { display: block; font-size: 0.98rem; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
-  .match-card .team-crest { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4)); }
-  .match-card .team-crest > span { width: 1.9rem; height: 2.15rem; font-size: 0.66rem; }
+  .card-versus:not(:has(strong)) { display: none; }
+  .card-team { flex-direction: row; gap: 0.5rem; }
+  .card-team .team-name { display: block; font-size: 0.9rem; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+  .match-card .team-crest { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)); }
+  .match-card .team-crest > span { width: 1.4rem; height: 1.6rem; font-size: 0.52rem; }
   .card-vs { display: none; }
-  .card-time { font-size: 1.1rem; }
-  .card-day { font-size: 0.66rem; }
-  .card-score { font-size: 1.05rem; padding: 0.3rem 0.55rem; }
+  .card-time { font-size: 0.95rem; }
+  .card-day { font-size: 0.6rem; }
+  .card-score { font-size: 0.92rem; padding: 0.2rem 0.45rem; }
 
-  .match-odds-card { gap: 0.4rem; }
-  .odds-btn-card {
-    flex-direction: row; justify-content: space-between; min-height: 2.75rem; padding: 0 0.65rem; border-radius: 10px;
-    background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.1); backdrop-filter: none; -webkit-backdrop-filter: none;
+  /* Cotes : une seule barre segmentée (séparateurs fins) plutôt que des pavés séparés */
+  .match-odds-card {
+    gap: 0; border-radius: 10px; overflow: hidden;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
   }
-  .odds-btn-card .odds-label { font-size: 0.72rem; color: rgba(255, 255, 255, 0.55); }
-  .odds-btn-card .odds-value { font-size: 1.02rem; }
-  .odds-btn-card:hover:not(:disabled) { transform: none; }
-  .odds-btn-card.favorite::after { top: 5px; right: 5px; width: 5px; height: 5px; }
+  .odds-btn-card {
+    flex-direction: row; justify-content: space-between; min-height: 2.15rem; padding: 0 0.6rem; border-radius: 0;
+    background: none; border: 0; border-left: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .odds-btn-card:first-child { border-left: 0; }
+  .odds-btn-card .odds-label { font-size: 0.68rem; color: rgba(255, 255, 255, 0.5); }
+  .odds-btn-card .odds-value { font-size: 0.95rem; }
+  .odds-btn-card:hover:not(:disabled) { transform: none; box-shadow: none; }
+  .odds-btn-card.selected { border-color: rgba(255, 255, 255, 0.1); box-shadow: none; }
+  .odds-btn-card.favorite::after { top: 4px; right: 4px; width: 4px; height: 4px; }
   .match-groups { padding: 0.25rem; }
   .match-line { padding: 0.85rem 0.6rem 0.75rem; }
   .match-line-teams { font-size: 1.05rem; }

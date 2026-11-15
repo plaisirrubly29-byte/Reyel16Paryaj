@@ -13,7 +13,7 @@ import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
 import { CookieBanner } from '../../features/legal/components/CookieBanner';
 import { SessionReminder } from '../../features/responsible/components/SessionReminder';
 import { BrandLogo } from './BrandLogo';
-import { GamesTab } from './GamesMenu';
+import { GamesTab, MenuTab } from './GamesMenu';
 import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
@@ -75,6 +75,7 @@ function PublicShell() {
   const lotteryAvailable = useLotteryAvailable();
   const liveActive = params.get('tab') === 'live' && (pathname === '/' || pathname === '/sports');
   const sportsActive = !liveActive && (pathname === '/' || pathname.startsWith('/sports') || pathname.startsWith('/events'));
+  const sportsTabActive = !liveActive && pathname.startsWith('/sports');
 
   // Le panneau du coupon se referme quand on change de page, et avec Échap.
   useEffect(() => { slip.setPanelOpen(false); }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,7 +112,8 @@ function PublicShell() {
             {user?.is_admin && <NavLink to="/admin"><Icon name="shield" size={20} />Administration</NavLink>}
           </nav>
 
-          <CompetitionsMenu />
+          {/* Sur mobile, les championnats sont dans l'onglet « Menu » de la barre du bas. */}
+          {!mobile && <CompetitionsMenu />}
 
           <HeaderSearch />
 
@@ -141,40 +143,34 @@ function PublicShell() {
       <CookieBanner />
       <SessionReminder />
 
-      {/* Panier : sur ordinateur, bouton flottant qui ouvre le panneau à droite ; sur mobile, onglet de la barre du bas. */}
+      {/* Panier : bouton flottant qui ouvre le panneau (à droite sur ordinateur, montant du bas sur mobile, où le
+          bouton est rond et posé au-dessus de la barre d'onglets). */}
       <BetSlipPanel />
-      {!mobile && (
-        <button
-          type="button"
-          className={`slip-fab${count > 0 ? ' has-items' : ''}`}
-          aria-expanded={slip.panelOpen}
-          aria-controls="betslip"
-          onClick={() => slip.setPanelOpen(!slip.panelOpen)}
-        >
-          <Icon name="cart" size={24} />
-          <span>Panier</span>
-          <span key={count} className="slip-fab-count" aria-label={countLabel}>{count}</span>
-        </button>
-      )}
+      <button
+        type="button"
+        className={`slip-fab${count > 0 ? ' has-items' : ''}`}
+        aria-expanded={slip.panelOpen}
+        aria-controls="betslip"
+        onClick={() => slip.setPanelOpen(!slip.panelOpen)}
+      >
+        <Icon name="cart" size={24} />
+        <span className="slip-fab-label">Panier</span>
+        <span key={count} className="slip-fab-count" aria-label={countLabel}>{count}</span>
+      </button>
 
-      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. Pas d'onglet « Accueil » : le site
-          s'ouvre sur l'accueil et le logo y ramène ; à sa place, le menu des jeux. */}
+      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur : Menu (championnats), Live, Sports,
+          Jeux et Mes paris. Le panier flotte au-dessus ; le compte et la connexion sont dans l'en-tête. */}
       {mobile && (
       <nav className="tab-bar" aria-label="Navigation mobile">
+        <MenuTab />
+        <Link to="/sports?tab=live" className={liveActive ? 'active' : undefined} aria-current={liveActive ? 'page' : undefined}>
+          <span className="tab-icon"><Icon name="live" /></span>Live
+        </Link>
+        <Link to="/sports" className={sportsTabActive ? 'active' : undefined} aria-current={sportsTabActive ? 'page' : undefined}>
+          <span className="tab-icon"><Icon name="ball" /></span>Sports
+        </Link>
         <GamesTab />
-        <NavLink to="/sports"><span className="tab-icon"><Icon name="ball" /></span>Sports</NavLink>
-        <button
-          type="button"
-          aria-expanded={slip.panelOpen}
-          aria-controls="betslip"
-          onClick={() => slip.setPanelOpen(!slip.panelOpen)}
-        >
-          <span className="tab-icon"><Icon name="cart" /></span>
-          Panier
-          {count > 0 && <span className="tab-badge" aria-label={countLabel}>{count}</span>}
-        </button>
         <NavLink to="/bets"><span className="tab-icon"><Icon name="tickets" /></span>Mes paris</NavLink>
-        <NavLink to={user ? '/account' : '/login'}><span className="tab-icon"><Icon name="user" /></span>{user ? 'Compte' : 'Connexion'}</NavLink>
       </nav>
       )}
     </div>
