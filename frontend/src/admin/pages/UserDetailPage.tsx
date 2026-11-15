@@ -64,12 +64,28 @@ export function UserDetailPage() {
   );
 }
 
+const KYC_ACCOUNT_LABELS: Record<AdminUser['kyc_status'], string> = {
+  none: 'Non vérifiée (aucun dossier)',
+  pending: 'Dossier à vérifier',
+  approved: 'Vérifiée',
+  rejected: 'Dossier refusé',
+};
+
 function UserDetails({ user }: { user: AdminUser }) {
   return (
     <dl className="details">
       <dt>Téléphone</dt><dd className="mono">{user.phone}</dd>
       <dt>Email</dt><dd>{user.email ?? '—'}</dd>
       <dt>Type</dt><dd>{user.is_admin ? 'Administrateur' : 'Joueur'}</dd>
+      {!user.is_admin && (
+        <>
+          <dt>Identité</dt>
+          <dd>
+            {KYC_ACCOUNT_LABELS[user.kyc_status]}
+            {user.kyc_status !== 'none' && <> · <Link to={`/admin/kyc?status=all&user_id=${encodeURIComponent(user.id)}`}>Dossiers KYC</Link></>}
+          </dd>
+        </>
+      )}
       <dt>Inscription</dt><dd>{dateTime(user.created_at)}</dd>
       <dt>Dernière connexion</dt><dd>{dateTime(user.last_login_at)}</dd>
       <dt>Statut modifié le</dt><dd>{dateTime(user.status_changed_at)}</dd>

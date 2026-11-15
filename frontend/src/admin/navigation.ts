@@ -23,6 +23,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/settlements', label: 'Résultats & règlement', icon: 'trophy', group: 'Opérations', description: 'Saisie des résultats et règlement des tickets.', permissions: ['results.enter', 'settlement.run'] },
   { to: '/admin/tickets', label: 'Tickets', icon: 'coupon', group: 'Opérations', description: 'Recherche et détail des paris placés.', permissions: ['tickets.view'] },
   { to: '/admin/users', label: 'Utilisateurs', icon: 'users', group: 'Opérations', description: 'Comptes joueurs, statuts et rôles.', permissions: ['users.view'] },
+  { to: '/admin/kyc', label: "Vérification d'identité", icon: 'check', group: 'Contrôle', description: 'Dossiers KYC des joueurs : pièce, selfie, décision.', permissions: ['kyc.view'] },
   { to: '/admin/risk', label: 'Risques & exposition', icon: 'target', group: 'Contrôle', description: 'Exposition de la maison sur les tickets en cours.', permissions: ['tickets.view'] },
   { to: '/admin/finance', label: 'Finance', icon: 'wallet', group: 'Contrôle', description: 'Grand livre, rapprochement et corrections.', permissions: ['ledger.view'] },
   { to: '/admin/audit', label: 'Audit & rapports', icon: 'shield', group: 'Contrôle', description: 'Journal des actions sensibles.', permissions: ['audit.view'] },

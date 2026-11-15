@@ -23,6 +23,7 @@ Leur proposition, ou la valeur par défaut la plus protectrice, s'applique jusqu
 | D-12 | Borlette : cadre juridique, règles des jeux, barème des gains, limites par boule | V2-D09 | 🟡 À décider — brouillon ([détail](decisions/D-12-borlette.md)) | Tirages et résultats déjà affichés (étape 1) ; vente de tickets désactivée tant que l'avis juridique, le barème et les limites ne sont pas validés par écrit | | |
 | D-13 | Agents : rôle, portefeuille, documents, limites et commissions | V2-G01, V2-G02 | 🟡 À décider — options proposées ([détail](decisions/D-13-agents.md)) | Proposition : parrain (apporteur) seul au lancement, sans maniement d'argent ; encaissement en espèces après licence et D-08 ; point de vente reporté | | |
 | D-15 | Prestataires SMS et e-mail : codes de vérification, e-mails, notifications | V2-C01, V2-C02 | 🟡 À décider — comparatif proposé ([détail](decisions/D-15-sms-email.md)) | Proposition : Twilio (WhatsApp puis SMS en secours) pour les codes ; Amazon SES ou Postmark pour les e-mails ; nom d'expéditeur à enregistrer auprès du CONATEL | | |
+| D-18 | Politique de cotes : marge, arrondi, modification manuelle | V2-A04, V2-D03 | 🟡 À décider — options proposées ([détail](decisions/D-18-politique-cotes.md)) | Proposition : cote juste + marge de l'opérateur (6 % sur le 1X2 de football), avec l'argent réel seulement ; arrondi à 2 décimales vers le bas ; modification par Opérations ou Super Admin, double validation au-delà de ±20 % | | |
 
 ## Décisions techniques déjà prises
 

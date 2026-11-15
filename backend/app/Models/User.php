@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\IdentityAccess\Models\Role;
 use App\Modules\IdentityAccess\Models\UserProfile;
@@ -30,6 +31,8 @@ use Illuminate\Support\Collection;
  * @property list<string>|null $mfa_recovery_codes
  * @property int|null $mfa_last_used_step
  * @property int|null $max_stake_minor mise maximale par ticket posée par un administrateur (V2-D05)
+ * @property KycStatus $kyc_status statut KYC, tenu par KycService (V2-C03)
+ * @property Carbon|null $kyc_verified_at
  */
 #[Fillable(['name', 'email', 'phone', 'password'])]
 #[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
@@ -45,6 +48,7 @@ class User extends Authenticatable
      */
     protected $attributes = [
         'status' => 'active',
+        'kyc_status' => 'none',
     ];
 
     /**
@@ -65,6 +69,8 @@ class User extends Authenticatable
             'mfa_recovery_codes' => 'encrypted:array',
             'mfa_last_used_step' => 'integer',
             'max_stake_minor' => 'integer',
+            'kyc_status' => KycStatus::class,
+            'kyc_verified_at' => 'datetime',
         ];
     }
 

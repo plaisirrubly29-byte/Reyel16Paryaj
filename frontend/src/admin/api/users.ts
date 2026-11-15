@@ -21,6 +21,8 @@ export type AdminUser = {
   last_login_at: string | null;
   /** Mise maximale par ticket posée par un administrateur (V2-D05), en unité mineure ; null = limite générale. */
   max_stake_minor: number | null;
+  /** Vérification d'identité (V2-C03). */
+  kyc_status: 'none' | 'pending' | 'approved' | 'rejected';
   roles?: string[];
   mfa_enabled?: boolean;
   profile?: {
