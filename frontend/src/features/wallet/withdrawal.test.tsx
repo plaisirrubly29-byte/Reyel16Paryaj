@@ -120,6 +120,7 @@ describe('retrait en ligne', () => {
     const alert = await screen.findByText(title);
     expect(clean(alert.closest('.alert'))).toContain('Un retrait exige une identité vérifiée.');
     expect(clean(alert.closest('.alert'))).toContain(message);
+    expect(screen.getByRole('link', { name: status === 'pending' ? 'Voir mon dossier' : 'Vérifier mon identité' })).toHaveAttribute('href', '/verification');
   });
 
   it('suit le versement : retrait échoué annoncé et solde relu (montant rendu)', async () => {

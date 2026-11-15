@@ -1,10 +1,12 @@
+import { Link } from 'react-router-dom';
 import type { ApiError } from '../../../shared/api/client';
 import { Alert } from '../../../shared/components/Alert';
 import { formatMoney } from '../../../shared/format/money';
 
 /**
  * Refus kyc_required (V2-C03) d'un dépôt au-delà du seuil ou d'un retrait : message selon le statut du dossier
- * du joueur (details.kyc_status), et pour un dépôt, ce qu'il peut encore déposer sans identité vérifiée.
+ * du joueur (details.kyc_status), lien vers la vérification d'identité, et pour un dépôt, ce qu'il peut encore
+ * déposer sans identité vérifiée.
  */
 export function KycRequiredAlert({ error, operation, currency }: { error: ApiError; operation: 'deposit' | 'withdrawal'; currency: string }) {
   const { kyc_status: status, threshold_minor: threshold, deposited_minor: deposited } = error.details as {
@@ -25,7 +27,8 @@ export function KycRequiredAlert({ error, operation, currency }: { error: ApiErr
   if (status === 'pending') {
     return (
       <Alert tone="info" title="Vérification d'identité en cours">
-        {reason} Votre dossier est en cours d'examen : vous pourrez continuer dès sa validation.
+        {reason} Votre dossier est en cours d'examen : vous pourrez continuer dès sa validation.{' '}
+        <Link to="/verification">Voir mon dossier</Link>
       </Alert>
     );
   }
@@ -35,7 +38,8 @@ export function KycRequiredAlert({ error, operation, currency }: { error: ApiErr
       {reason}{' '}
       {status === 'rejected'
         ? 'Votre dernier dossier a été refusé : envoyez une nouvelle pièce d\'identité et un selfie.'
-        : 'Envoyez une pièce d\'identité et un selfie pour faire vérifier votre compte.'}
+        : 'Envoyez une pièce d\'identité et un selfie pour faire vérifier votre compte.'}{' '}
+      <Link to="/verification">Vérifier mon identité</Link>
     </Alert>
   );
 }
