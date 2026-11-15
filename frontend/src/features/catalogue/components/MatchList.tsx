@@ -10,6 +10,8 @@ import { MatchRow } from './MatchRow';
 
 /** Prochains matchs montrés dans l'onglet Live quand aucun match n'est en direct. */
 const UPCOMING_IN_LIVE = 10;
+/** Onglet Live : les matchs qui commencent dans ce délai sont montrés sous le direct. */
+const SOON_IN_LIVE_MS = 60 * 60_000;
 
 type Props = {
   sport?: string;
@@ -44,6 +46,11 @@ export function MatchList({ sport, competition, search, market = 'h2h', live = f
   const list = live ? found.filter((e) => isLiveStatus(e.status)) : found;
   // Onglet Live sans match en direct : les prochains coups d'envoi plutôt qu'un onglet vide.
   const upcoming = live && list.length === 0 ? found.slice(0, UPCOMING_IN_LIVE) : [];
+  // Onglet Live avec du direct : aussi les matchs qui commencent dans l'heure.
+  const soonLimit = Date.now() + SOON_IN_LIVE_MS;
+  const soon = live && list.length > 0
+    ? found.filter((e) => !isLiveStatus(e.status) && new Date(e.starts_at).getTime() <= soonLimit)
+    : [];
   const name = sport ? sportName(sport) : null;
 
   return (
@@ -72,6 +79,13 @@ export function MatchList({ sport, competition, search, market = 'h2h', live = f
         <MatchGroups events={list} market={market} />
       )}
 
+      {soon.length > 0 && (
+        <section className="upcoming-in-live" aria-labelledby="soon-title">
+          <h3 id="soon-title" className="board-subtitle">Ça commence bientôt</h3>
+          <MatchGroups events={soon} market={market} />
+        </section>
+      )}
+
       {upcoming.length > 0 && (
         <section className="upcoming-in-live" aria-labelledby="upcoming-title">
           <h3 id="upcoming-title" className="board-subtitle">Prochains matchs</h3>
@@ -92,7 +106,7 @@ export function MatchList({ sport, competition, search, market = 'h2h', live = f
   );
 }
 
-function MatchGroups({ events, market }: { events: CatalogueEvent[]; market: ListMarketKey }) {
+export function MatchGroups({ events, market }: { events: CatalogueEvent[]; market: ListMarketKey }) {
   return (
     <div className="match-groups">
       {groupByCompetition(events).map(({ competition: c, events: items }) => (

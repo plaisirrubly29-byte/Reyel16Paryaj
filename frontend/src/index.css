@@ -1151,6 +1151,25 @@ a.match-card-teams:hover .team-name { text-decoration: underline; text-underline
 
 /* Liste des matchs : une ligne par match */
 .match-groups { display: flex; flex-direction: column; padding: 0.5rem 0.5rem 0.75rem; }
+
+/* Page Sports, filtre « Tous » : une section par sport, titre en bandeau sombre */
+.sport-sections { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0.5rem 0.75rem; }
+.sport-section { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.sport-section-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.65rem 0.85rem;
+  background: linear-gradient(90deg, var(--navy, #0b1847), #13286e); color: #fff;
+}
+.sport-section-title { display: flex; align-items: center; gap: 0.55rem; margin: 0; font-size: 1.05rem; font-weight: 800; }
+.sport-section-icon {
+  display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 9px; background: var(--accent);
+}
+.sport-section-count {
+  padding: 0.05rem 0.5rem; border-radius: 999px; background: rgba(255, 255, 255, 0.16); font-size: 0.78rem; font-weight: 700;
+}
+.sport-section-all { display: inline-flex; align-items: center; gap: 0.2rem; color: rgba(255, 255, 255, 0.85); font-size: 0.86rem; font-weight: 700; white-space: nowrap; }
+.sport-section-all:hover { color: #fff; }
+.sport-section .match-groups { padding: 0.25rem; }
+.sport-section-more { display: flex; justify-content: center; margin: 0; padding: 0 0.75rem 0.85rem; }
 .match-lines { list-style: none; margin: 0; padding: 0; }
 .match-line { padding: 1rem 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; border-radius: 8px; transition: background-color 0.15s; }
 .match-line:nth-child(even) { background: #f6f7f9; }
@@ -1606,6 +1625,24 @@ a.match-line-teams:hover { color: var(--brand); }
   }
   .betslip .betslip-body { max-height: 55vh; min-height: 0; }
 
+  /* Panier flottant : bouton rond au-dessus de la barre d'onglets, compteur en pastille ; masqué quand le panneau
+     est ouvert (le panneau a son propre bouton de fermeture et son bouton de validation en bas). */
+  .slip-fab {
+    right: 1rem; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 37;
+    width: 3.5rem; height: 3.5rem; padding: 0; justify-content: center; gap: 0;
+    background: linear-gradient(160deg, #1f3fd6, var(--slate)); box-shadow: 0 10px 24px rgba(11, 26, 74, 0.4);
+  }
+  .slip-fab.has-items { background: linear-gradient(160deg, #ff4357, var(--accent)); }
+  .slip-fab[aria-expanded='true'] { display: none; }
+  .slip-fab-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .slip-fab-count {
+    position: absolute; top: -4px; right: -4px; min-width: 1.35rem; height: 1.35rem; padding: 0 0.3rem;
+    font-size: 0.74rem; box-shadow: 0 2px 6px rgba(11, 26, 74, 0.3);
+  }
+  .slip-fab:not(.has-items) .slip-fab-count { display: none; }
+
   /* Menu « Jeux » : panneau qui monte au-dessus de la barre d'onglets, tuiles 2 × 2 colorées par jeu */
   .games-backdrop { position: fixed; inset: 0; z-index: 34; background: rgba(6, 13, 43, 0.5); animation: games-fade 0.18s ease-out; }
   .games-sheet {
@@ -1634,6 +1671,12 @@ a.match-line-teams:hover { color: var(--brand); }
   .game-borlette { --game: 227, 23, 47; }
   .game-virtual { --game: 140, 82, 255; }
   .game-casino { --game: 245, 179, 1; }
+  .game-crash { --game: 24, 196, 120; }
+
+  /* Onglet « Menu » : championnats dans un panneau haut, liste défilante */
+  .menu-sheet { max-height: calc(100vh - var(--nav-h) - 60px - env(safe-area-inset-bottom)); gap: 0.6rem; }
+  .menu-sheet-body { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; }
+  .menu-sheet .competitions-list { max-height: calc(100vh - var(--nav-h) - 260px); }
   .game-icon {
     display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin-bottom: auto; border-radius: 13px;
     background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1677,8 +1720,9 @@ a.match-line-teams:hover { color: var(--brand); }
 }
 
 @media (max-width: 560px) {
-  /* « Connexion » est déjà dans la barre du bas : l'en-tête garde l'inscription. */
-  .header-login-btn { display: none; }
+  /* Connexion et inscription restent dans l'en-tête (plus d'onglet « Connexion » dans la barre du bas). */
+  .header-actions { gap: 0.4rem; }
+  .header-actions > .btn { height: 2.2rem; padding: 0 0.65rem; font-size: 0.82rem; }
   .footer-inner { grid-template-columns: 1fr; gap: 1.5rem; }
   .footer-bottom { flex-direction: column; }
   .hero-title { font-size: 1.6rem; }
