@@ -3,6 +3,7 @@
 namespace Tests\Feature\Modules\Payments;
 
 use App\Models\User;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Wallet\Services\LedgerService;
@@ -51,7 +52,8 @@ class PlopplopPayoutTest extends TestCase
             'payments.withdrawals.enabled' => true,
             'payments.withdrawals.provider' => 'plopplop',
         ]);
-        $this->player = User::factory()->create();
+        // Identité vérifiée : le contrôle KYC des retraits est actif par défaut (WithdrawalTest le couvre).
+        $this->player = User::factory()->create(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()]);
         $ledger = app(LedgerService::class);
         $ledger->creditSimulated($ledger->walletFor($this->player), Money::ofMinor(2_000_00, 'HTG'), 'test:gains');
 
@@ -153,7 +155,7 @@ class PlopplopPayoutTest extends TestCase
     public function test_withdrawals_wait_120_seconds_between_each_other(): void
     {
         // Deux joueurs (un seul retrait en cours par joueur).
-        $other = User::factory()->create();
+        $other = User::factory()->create(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()]);
         $ledger = app(LedgerService::class);
         $ledger->creditSimulated($ledger->walletFor($other), Money::ofMinor(500_00, 'HTG'), 'test:gains-2');
         $this->withdraw(300_00);

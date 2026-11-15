@@ -12,8 +12,6 @@ use App\Modules\Lottery\Contracts\LotteryProvider;
 use App\Modules\Lottery\Providers\FakeLotteryProvider;
 use App\Modules\Lottery\Providers\UnitySoftConnectLotteryProvider;
 use App\Modules\Monitoring\Services\QueueHeartbeat;
-use App\Modules\Payments\Contracts\KycVerifier;
-use App\Modules\Payments\Support\PendingKycVerifier;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
@@ -67,8 +65,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
         // Dépôts d'un joueur pour ses limites de dépôt : fournis par Wallet à Compliance (V2-B06).
         $this->app->bind(DepositHistory::class, LedgerDepositHistory::class);
-        // KYC exigé avant un retrait (V2-B03) : le module KYC (V2-C03) remplacera cette liaison.
-        $this->app->bindIf(KycVerifier::class, PendingKycVerifier::class);
 
         // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
         $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(

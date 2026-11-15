@@ -10,6 +10,7 @@ import { Spinner } from '../../../shared/components/Spinner';
 import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
+import { KycRequiredAlert } from './KycRequiredAlert';
 import {
   DEPOSIT_STATUS_LABELS,
   providerNavigation,
@@ -168,7 +169,9 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
           <form className="deposit-form stack-sm" onSubmit={submit} noValidate>
             {error?.code === 'deposit_limit_exceeded'
               ? <DepositLimitRefusal error={error} currency={currency} />
-              : error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
+              : error?.code === 'kyc_required'
+                ? <KycRequiredAlert error={error} operation="deposit" currency={currency} />
+                : error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
             {available.length > 1 && (
               <fieldset className="deposit-methods">

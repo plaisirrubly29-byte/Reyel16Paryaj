@@ -5,7 +5,7 @@ namespace App\Modules\Payments\Services;
 use App\Models\User;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
-use App\Modules\Payments\Contracts\KycVerifier;
+use App\Modules\IdentityAccess\Services\KycService;
 use App\Modules\Payments\Contracts\PayoutProvider;
 use App\Modules\Payments\Enums\PaymentDirection;
 use App\Modules\Payments\Enums\PaymentStatus;
@@ -43,7 +43,7 @@ class PayoutService
         private readonly PaymentProviderRegistry $providers,
         private readonly LedgerService $ledger,
         private readonly AuditLogger $audit,
-        private readonly KycVerifier $kyc,
+        private readonly KycService $kyc,
     ) {}
 
     /** Prestataire qui verse, s'il est activé, configuré pour les retraits, et si les retraits sont ouverts. */
@@ -75,8 +75,9 @@ class PayoutService
             throw new ApiException('not_a_player', __('Seul un joueur peut retirer.'), 422);
         }
 
-        if (config('payments.withdrawals.require_kyc') && ! $this->kyc->isVerified($user)) {
-            throw new ApiException('kyc_required', __('Faites vérifier votre identité avant votre premier retrait.'), 422);
+        // Identité validée par la revue KYC (V2-C03) exigée avant tout retrait : kyc_required avec le statut du joueur.
+        if (config('payments.withdrawals.require_kyc')) {
+            $this->kyc->assertCanWithdraw($user);
         }
 
         return DB::transaction(function () use ($user, $amount, $method, $recipient, $provider) {

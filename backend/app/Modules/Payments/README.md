@@ -73,8 +73,8 @@
 Versés **automatiquement**, sans validation manuelle (décision de Rubly du 2026-11-13, à la place de la double
 validation du contrat V2-B03) :
 
-1. Demande du joueur : compte joueur, KYC si `PAYMENTS_WITHDRAWALS_REQUIRE_KYC=true` (contrat `KycVerifier`, fourni par
-   le module KYC ; en attendant, personne n'est vérifié), un seul retrait en cours, plafond sur 24 h glissantes, solde
+1. Demande du joueur : compte joueur, identité validée par la revue KYC (`KycService::assertCanWithdraw` ; contrôle
+   coupé seulement en développement par `PAYMENTS_WITHDRAWALS_REQUIRE_KYC=false`), un seul retrait en cours, plafond sur 24 h glissantes, solde
    suffisant. Le montant est réservé par une écriture `withdrawal` (`payout:<référence>`). Statut joueur : `requested`.
 2. `payments:payouts` (chaque minute) : passe le plus ancien retrait en `processing` **avant** l'appel, vérifie le solde
    du portefeuille marchand (`api/marchand/balance`), puis verse chez Plop Plop : jeton marchand (`api/auth/marchand`),

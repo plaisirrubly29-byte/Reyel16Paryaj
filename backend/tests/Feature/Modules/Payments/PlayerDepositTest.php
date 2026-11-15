@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\Payments;
 use App\Models\User;
 use App\Modules\Compliance\Enums\ResponsiblePlayEventType;
 use App\Modules\Compliance\Models\ResponsiblePlayEvent;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentTransaction;
@@ -133,6 +134,27 @@ class PlayerDepositTest extends TestCase
 
         $this->assertSame(2, PaymentTransaction::count());
         $this->assertSame(1, ResponsiblePlayEvent::where('type', ResponsiblePlayEventType::DepositRefusedLimit)->count());
+    }
+
+    /** V2-C03 : au-delà du seuil (dépôts crédités + en attente + celui-ci), une identité vérifiée est exigée. */
+    public function test_beyond_the_kyc_threshold_a_deposit_requires_a_verified_identity(): void
+    {
+        config(['kyc.deposit_threshold_minor' => 2_000_00]);
+
+        $credited = $this->open(1_000_00)->json('data.reference');
+        $this->decide($credited, 'approve');
+        $this->open(600_00)->assertCreated(); // en attente : compte dans le seuil
+
+        $this->open(500_00)->assertUnprocessable()
+            ->assertJsonPath('error.code', 'kyc_required')
+            ->assertJsonPath('error.details.kyc_status', 'none')
+            ->assertJsonPath('error.details.threshold_minor', 2_000_00)
+            ->assertJsonPath('error.details.deposited_minor', 1_000_00);
+        $this->open(400_00)->assertCreated(); // pile au seuil
+        $this->assertSame(3, PaymentTransaction::count());
+
+        $this->player->forceFill(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()])->save();
+        $this->open(5_000_00)->assertCreated();
     }
 
     public function test_a_frozen_wallet_or_an_admin_account_cannot_deposit(): void

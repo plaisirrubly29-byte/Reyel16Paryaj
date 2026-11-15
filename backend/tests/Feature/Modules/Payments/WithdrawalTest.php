@@ -4,8 +4,8 @@ namespace Tests\Feature\Modules\Payments;
 
 use App\Models\User;
 use App\Modules\Audit\Models\AuditLog;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
-use App\Modules\Payments\Contracts\KycVerifier;
 use App\Modules\Payments\Enums\PaymentDirection;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentTransaction;
@@ -195,25 +195,27 @@ class WithdrawalTest extends TestCase
         $this->withdraw(300_00)->assertCreated();
     }
 
-    public function test_once_enabled_kyc_blocks_withdrawals_until_the_kyc_module_is_plugged(): void
+    /** Sans dossier, dossier en attente ou refusé : aucun retrait, rien n'est réservé. */
+    public function test_a_player_without_an_approved_kyc_cannot_withdraw(): void
     {
         config(['payments.withdrawals.require_kyc' => true]);
 
-        $this->withdraw()->assertUnprocessable()->assertJsonPath('error.code', 'kyc_required');
+        foreach ([KycStatus::None, KycStatus::Pending, KycStatus::Rejected] as $status) {
+            $this->player->forceFill(['kyc_status' => $status])->save();
+
+            $this->withdraw()->assertUnprocessable()
+                ->assertJsonPath('error.code', 'kyc_required')
+                ->assertJsonPath('error.details.kyc_status', $status->value);
+        }
+
         $this->assertSame(0, PaymentTransaction::count());
+        $this->assertSame(1_000_00, $this->balance());
     }
 
-    public function test_a_verified_player_withdraws_once_kyc_is_required(): void
+    public function test_a_player_whose_kyc_is_approved_withdraws(): void
     {
         config(['payments.withdrawals.require_kyc' => true]);
-        // Le module KYC (V2-C03) fournira cette vérification.
-        $this->app->instance(KycVerifier::class, new class implements KycVerifier
-        {
-            public function isVerified(User $user): bool
-            {
-                return true;
-            }
-        });
+        $this->player->forceFill(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()])->save();
 
         $this->withdraw()->assertCreated();
     }
