@@ -5,6 +5,7 @@ namespace App\Modules\Payments\Services;
 use App\Models\User;
 use App\Modules\Compliance\Exceptions\ResponsibleGamingException;
 use App\Modules\Compliance\Services\ResponsibleGamingService;
+use App\Modules\IdentityAccess\Services\KycService;
 use App\Modules\Payments\Contracts\ChecksPaymentStatus;
 use App\Modules\Payments\Contracts\PaymentProvider;
 use App\Modules\Payments\Enums\PaymentDirection;
@@ -40,14 +41,16 @@ class PaymentService
         private readonly PaymentProviderRegistry $providers,
         private readonly LedgerService $ledger,
         private readonly ResponsibleGamingService $responsibleGaming,
+        private readonly KycService $kyc,
     ) {}
 
     /**
      * Ouvre le dépôt d'un joueur chez le prestataire (POST /payments/deposits). Contrôles avant tout appel au
-     * prestataire : compte joueur, portefeuille actif, limites de dépôt du joueur (V2-B06) en comptant ses dépôts
-     * encore en attente. Rien n'est crédité ici : seul le webhook vérifié du prestataire crédite.
+     * prestataire : compte joueur, portefeuille actif, seuil de dépôts sans identité vérifiée (V2-C03) et limites
+     * de dépôt du joueur (V2-B06), tous deux en comptant ses dépôts encore en attente. Rien n'est crédité ici :
+     * seul le webhook vérifié du prestataire crédite.
      *
-     * @throws ApiException payment_provider_unavailable | not_a_player | wallet_frozen | payment_provider_error
+     * @throws ApiException payment_provider_unavailable | not_a_player | wallet_frozen | kyc_required | payment_provider_error
      * @throws ResponsibleGamingException deposit_limit_exceeded (refus journalisé)
      */
     public function startDeposit(User $user, Money $amount, string $providerName): PaymentTransaction
@@ -68,7 +71,10 @@ class PaymentService
                     throw new ApiException('wallet_frozen', __('Ce portefeuille est gelé.'), 423);
                 }
 
-                $this->responsibleGaming->assertCanDeposit($user, $amount->minor, $this->pendingDepositsMinor($user));
+                $pending = $this->pendingDepositsMinor($user);
+                // Au-delà du seuil (cumul des dépôts crédités + en attente + celui-ci), identité vérifiée exigée.
+                $this->kyc->assertCanDeposit($user, $amount->minor + $pending);
+                $this->responsibleGaming->assertCanDeposit($user, $amount->minor, $pending);
 
                 return PaymentTransaction::create([
                     'user_id' => $user->id,

@@ -103,6 +103,25 @@ describe('retrait en ligne', () => {
     expect(clean(alert.closest('.alert'))).toContain('Vous pouvez encore retirer 200,00 HTG');
   });
 
+  it.each([
+    ['pending', "Vérification d'identité en cours", 'Votre dossier est en cours d\'examen'],
+    ['rejected', "Vérification d'identité requise", 'Votre dernier dossier a été refusé'],
+    ['none', "Vérification d'identité requise", "Envoyez une pièce d'identité et un selfie"],
+  ])('refus KYC (%s) : message selon le dossier du joueur', async (status, title, message) => {
+    mockApi({
+      ...base,
+      'POST /payments/withdrawals': { status: 422, body: { error: { code: 'kyc_required', message: 'KYC.', details: { kyc_status: status } } } },
+    });
+    renderApp('/wallet');
+
+    await userEvent.type(await screen.findByLabelText('Montant du retrait'), '400');
+    await userEvent.click(screen.getByRole('button', { name: 'Demander le retrait' }));
+
+    const alert = await screen.findByText(title);
+    expect(clean(alert.closest('.alert'))).toContain('Un retrait exige une identité vérifiée.');
+    expect(clean(alert.closest('.alert'))).toContain(message);
+  });
+
   it('suit le versement : retrait échoué annoncé et solde relu (montant rendu)', async () => {
     let state = 'none';
     const fetchMock = mockApi({

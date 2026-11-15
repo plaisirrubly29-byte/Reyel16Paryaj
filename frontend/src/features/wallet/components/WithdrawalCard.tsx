@@ -11,6 +11,7 @@ import { formatMoney } from '../../../shared/format/money';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import { useDepositMethods } from '../api/deposits';
 import { WITHDRAWAL_STATUS_LABELS, isInProgress, useCancelWithdrawal, useRequestWithdrawal, useWithdrawals, type Withdrawal } from '../api/withdrawals';
+import { KycRequiredAlert } from './KycRequiredAlert';
 
 /** Saisie « +509 3412-3456 », « 3412 3456 »… → « 34123456 » ; null si ce n'est pas un numéro haïtien à 8 chiffres. */
 function localNumber(value: string): string | null {
@@ -150,7 +151,7 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
             ) : error?.code === 'insufficient_funds' ? (
               <Alert tone="error" title="Solde insuffisant">Ce montant dépasse votre solde disponible.</Alert>
             ) : error?.code === 'kyc_required' ? (
-              <Alert tone="warning" title="Vérification d'identité requise">Faites vérifier votre identité avant votre premier retrait.</Alert>
+              <KycRequiredAlert error={error} operation="withdrawal" currency={currency} />
             ) : error && error.code !== 'validation_failed' && error.code !== 'withdrawal_already_pending' && <ErrorAlert error={error} />}
 
             {settings.methods.length > 1 && (

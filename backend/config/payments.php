@@ -55,9 +55,9 @@ return [
     */
     'withdrawals' => [
         'enabled' => (bool) env('PAYMENTS_WITHDRAWALS_ENABLED', false),
-        // KYC validé exigé (contrat V2-B03). À activer quand le module KYC (V2-C03) est branché : avant, aucun compte
-        // n'est vérifié, donc plus aucun retrait n'est possible.
-        'require_kyc' => (bool) env('PAYMENTS_WITHDRAWALS_REQUIRE_KYC', false),
+        // Identité validée par la revue KYC (V2-C03) exigée avant tout retrait (contrat V2-B03). À ne couper qu'en
+        // développement.
+        'require_kyc' => (bool) env('PAYMENTS_WITHDRAWALS_REQUIRE_KYC', true),
         // Prestataire qui verse (doit être activé ci-dessus) : plopplop, ou fake en développement.
         'provider' => env('PAYMENTS_WITHDRAWALS_PROVIDER', 'plopplop'),
         // Portefeuilles mobiles acceptés (libellé vu par le joueur).

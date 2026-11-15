@@ -79,6 +79,26 @@ describe('dépôt en ligne', () => {
     expect(screen.getByRole('link', { name: 'Gérer mes limites' })).toHaveAttribute('href', '/responsible-gaming');
   });
 
+  it('au-delà du seuil KYC, demande une identité vérifiée et dit ce qui reste possible', async () => {
+    mockApi({
+      ...base,
+      'POST /payments/deposits': {
+        status: 422,
+        body: { error: { code: 'kyc_required', message: 'KYC.', details: { kyc_status: 'none', threshold_minor: 10_000_00, deposited_minor: 9_000_00 } } },
+      },
+    });
+    renderApp('/wallet');
+
+    await userEvent.type(await screen.findByLabelText('Montant du dépôt'), '2500');
+    await userEvent.click(screen.getByRole('button', { name: 'Déposer avec Paiement test' }));
+
+    const alert = await screen.findByText("Vérification d'identité requise");
+    const text = (alert.closest('.alert')?.textContent ?? '').replace(NBSP, ' ');
+    expect(text).toContain('Au-delà de 10 000,00 HTG de dépôts');
+    expect(text).toContain('Vous pouvez encore déposer 1 000,00 HTG sans vérification');
+    expect(text).toContain("Envoyez une pièce d'identité et un selfie");
+  });
+
   it('au retour du prestataire, annonce le dépôt crédité et rafraîchit le solde', async () => {
     let credited = false;
     const fetchMock = mockApi({

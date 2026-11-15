@@ -2379,7 +2379,8 @@ paths:
       description: |
         Ne crédite rien : le joueur confirme sur la page du prestataire (`redirect_url`), puis seul le webhook signé du
         prestataire crédite le solde, une seule fois. Contrôles avant l'appel au prestataire : compte joueur, portefeuille
-        actif, limites de dépôt du joueur (V2-B06) en comptant ses dépôts encore en attente. 10 dépôts par minute.
+        actif, seuil de dépôts sans identité vérifiée (V2-C03, réglage `kyc.deposit_threshold_minor`) puis limites de
+        dépôt du joueur (V2-B06), en comptant ses dépôts encore en attente. 10 dépôts par minute.
         Faux prestataire (`fake`, hors production) : `redirect_url` est la page simulée
         `/api/v1/payments/fake/checkout/{reference}`, qui envoie un vrai webhook signé puis renvoie sur
         `FRONTEND_URL/wallet?depot={reference}`.
@@ -2404,8 +2405,9 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "422":
           description: |
-            validation_failed ; payment_provider_unavailable ; not_a_player ; deposit_limit_exceeded (journalisé ;
-            details.period, limit_minor, remaining_minor)
+            validation_failed ; payment_provider_unavailable ; not_a_player ; kyc_required (cumul des dépôts au-delà
+            du seuil sans identité vérifiée ; details.kyc_status, threshold_minor, deposited_minor) ;
+            deposit_limit_exceeded (journalisé ; details.period, limit_minor, remaining_minor)
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423": { description: "`wallet_frozen` : portefeuille gelé", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
@@ -2458,8 +2460,8 @@ paths:
         (Plop Plop : jeton de retrait signé, 120 s entre deux versements). Annulation par le joueur avant l'envoi ou
         échec du versement : écriture `reversal` qui rend le montant, une seule fois.
 
-        Contrôles avant la réservation : compte joueur, portefeuille actif, KYC validé (V2-C03 ; contrôlé quand
-        `PAYMENTS_WITHDRAWALS_REQUIRE_KYC=true`), moyen de retrait activé, montant dans les bornes de
+        Contrôles avant la réservation : compte joueur, portefeuille actif, KYC validé (V2-C03 ; contrôle coupé
+        seulement en développement par `PAYMENTS_WITHDRAWALS_REQUIRE_KYC=false`), moyen de retrait activé, montant dans les bornes de
         `GET /payments/methods` (`withdrawal`), un seul retrait en cours par joueur, plafond par joueur sur 24 heures
         glissantes (`PAYMENTS_WITHDRAWAL_DAILY_MAX_MINOR`). 5 demandes par minute. Audit : `withdrawal.requested`, puis
         `withdrawal.paid` ou `withdrawal.failed`.
@@ -2489,7 +2491,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422":
           description: |
-            validation_failed ; not_a_player ; kyc_required (KYC absent, en attente ou refusé) ;
+            validation_failed ; not_a_player ; kyc_required (KYC absent, en attente ou refusé ; details.kyc_status) ;
             payment_provider_unavailable ; insufficient_funds (details.balance) ; withdrawal_daily_limit_exceeded
             (details.limit_minor, remaining_minor)
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
