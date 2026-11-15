@@ -1589,7 +1589,6 @@ a.match-line-teams:hover { color: var(--brand); }
   .main-nav, .header-search { display: none; }
   .header-actions { margin-left: auto; }
   .header-actions > .btn { height: 2.3rem; font-size: 0.88rem; padding: 0 0.8rem; }
-  .header-wallet { display: none; }
   .header-user { padding: 0; border: 0; }
   .header-user .user-name { display: none; }
   .content-wide { padding: 0.75rem; }
@@ -2113,6 +2112,19 @@ a.match-line-teams:hover { color: var(--brand); }
 }
 /* En-tête chargé (sports, live, mes paris, recherche) : le montant du solde ne s'affiche qu'en grand écran. */
 @media (max-width: 1199px) { .header-wallet-amount { display: none; } }
+/* Mobile : la navigation est en bas, l'en-tête a la place pour le solde ; pastille « icône + montant » à côté de
+   l'avatar (le mot « Solde » reste lu par les lecteurs d'écran). */
+@media (max-width: 960px) {
+  .site-header .header-wallet {
+    height: 2.3rem; padding: 0 0.75rem 0 0.6rem; gap: 0.35rem; border-radius: 999px; font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2);
+  }
+  .site-header .header-wallet svg { color: #ffd56a; }
+  .site-header .header-wallet > span {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .site-header .header-wallet-amount { display: inline; padding-left: 0; margin-left: 0; border-left: 0; white-space: nowrap; }
+}
 
 /* ===== Borlette (/borlette) : tirages, boules publiées, fiche ===== */
 .sport-tabs .sport-tab-link {
