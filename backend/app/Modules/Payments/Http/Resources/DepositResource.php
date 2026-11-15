@@ -4,6 +4,7 @@ namespace App\Modules\Payments\Http\Resources;
 
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentTransaction;
+use App\Modules\Payments\Services\PaymentProviderRegistry;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,7 +22,8 @@ class DepositResource extends JsonResource
         return [
             'reference' => $this->reference,
             'provider' => $this->provider,
-            'provider_label' => (string) config("payments.providers.{$this->provider}.label", $this->provider),
+            'method' => $this->metadata['method'] ?? null,
+            'provider_label' => app(PaymentProviderRegistry::class)->label($this->provider, $this->metadata['method'] ?? null),
             'status' => $this->status->value,
             'amount' => ['minor' => $this->amount_minor, 'currency' => $this->currency],
             'redirect_url' => $this->status === PaymentStatus::Pending ? ($this->metadata['redirect_url'] ?? null) : null,

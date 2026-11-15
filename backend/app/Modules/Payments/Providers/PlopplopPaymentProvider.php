@@ -153,7 +153,9 @@ class PlopplopPaymentProvider implements ChecksPaymentStatus, PayoutProvider
             'client_id' => $this->config('client_id'),
             'refference_id' => $transaction->reference, // orthographe de l'API
             'montant' => self::amount($transaction->amount_minor),
-            'payment_method' => $this->config('payment_method') ?: 'all',
+            // Moyen choisi par le joueur sur notre formulaire (moncash, natcash) : il arrive directement sur la page de
+            // l'opérateur. « all » (page de choix de Plop Plop) seulement pour un dépôt ouvert sans moyen.
+            'payment_method' => (string) ($transaction->metadata['method'] ?? 'all'),
         ]);
 
         $data = $response->json();
