@@ -12,6 +12,8 @@ export type User = {
   /** Facultatif : ne sert plus à se connecter. */
   email: string | null;
   status: 'active' | 'suspended' | 'excluded' | 'closed';
+  /** Vérification d'identité (V2-C03) ; détail par GET /me/kyc. */
+  kyc_status: 'none' | 'pending' | 'approved' | 'rejected';
   roles: string[];
   /** Permissions effectives : servent seulement à adapter l'affichage, l'API vérifie chaque route. */
   permissions: string[];

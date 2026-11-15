@@ -22,6 +22,10 @@ return [
         'max_attempts_per_account' => 30, // par heure, par téléphone, quelle que soit l'IP
     ],
 
+    // Limite globale de l'API pour un compte connecté (revue P8-02, F12) : requêtes par minute, par compte et jamais par
+    // IP (un cybercafé partage la même adresse). Les visiteurs n'y sont pas soumis : leurs routes ont leurs limites.
+    'api_rate_per_minute' => (int) env('API_ACCOUNT_RATE_PER_MINUTE', 120),
+
     // Double authentification, par compte (un code TOTP = 10^6 combinaisons).
     'mfa' => [
         'max_attempts_per_minute' => 5,

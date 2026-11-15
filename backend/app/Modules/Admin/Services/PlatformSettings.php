@@ -39,6 +39,8 @@ class PlatformSettings
             'help' => 'Pire cas des tickets en cours, tous marchés du match confondus. Au-delà, les nouveaux paris sur ce match sont refusés.'],
         'betting.max_market_liability_minor' => ['group' => 'Risque', 'label' => 'Perte maximale sur un marché', 'type' => 'money', 'rules' => ['integer', 'min:1', 'max:100000000000'],
             'help' => 'Pire cas des tickets en cours sur un seul marché (ex. le 1X2 d\'un match).'],
+        'kyc.deposit_threshold_minor' => ['group' => 'KYC', 'label' => 'Dépôts autorisés sans identité vérifiée', 'type' => 'money', 'rules' => ['integer', 'min:0', 'max:10000000000'],
+            'help' => 'Cumul des dépôts au-delà duquel un KYC validé est exigé ; 0 = KYC avant tout dépôt. Tout retrait exige un KYC validé.'],
         'wallet.welcome_credit_minor' => ['group' => 'Portefeuille', 'label' => 'Crédit de bienvenue (fonds fictifs)', 'type' => 'money', 'rules' => ['integer', 'min:0', 'max:100000000'],
             'help' => 'Versé à chaque nouvelle inscription ; 0 pour le désactiver.'],
         'sports_data.provider' => ['group' => 'Fournisseur', 'label' => 'Fournisseur de données sportives', 'type' => 'choice', 'rules' => ['string', 'in:fake,theodds'], 'options' => ['fake', 'theodds'],

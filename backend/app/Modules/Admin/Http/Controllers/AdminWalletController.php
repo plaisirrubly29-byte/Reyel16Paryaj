@@ -9,6 +9,7 @@ use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Compliance\Exceptions\ResponsibleGamingException;
 use App\Modules\Compliance\Services\ResponsibleGamingService;
+use App\Modules\IdentityAccess\Services\KycService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
@@ -50,9 +51,9 @@ class AdminWalletController extends Controller
     }
 
     /**
-     * @throws ApiException not_a_player, insufficient_funds, wallet_frozen, deposit_limit_exceeded
+     * @throws ApiException not_a_player, kyc_required, insufficient_funds, wallet_frozen, deposit_limit_exceeded
      */
-    public function store(Request $request, User $user, AuditLogger $audit): JsonResponse
+    public function store(Request $request, User $user, AuditLogger $audit, KycService $kyc): JsonResponse
     {
         $data = $request->validate([
             'type' => ['required', Rule::in([LedgerEntryType::Deposit->value, LedgerEntryType::Withdrawal->value])],
@@ -66,6 +67,13 @@ class AdminWalletController extends Controller
 
         $type = LedgerEntryType::from($data['type']);
         $actor = $request->user();
+
+        // V2-C03 : retrait seulement avec une identité vérifiée ; dépôts libres jusqu'au seuil kyc.deposit_threshold_minor.
+        if ($type === LedgerEntryType::Withdrawal) {
+            $kyc->assertCanWithdraw($user);
+        } else {
+            $kyc->assertCanDeposit($user, $data['amount_minor']);
+        }
 
         try {
             $entry = $this->record($user, $type, $data, $actor, $audit);
