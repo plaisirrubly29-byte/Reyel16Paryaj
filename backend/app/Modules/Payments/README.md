@@ -47,7 +47,9 @@
 ## Plop Plop (`PlopplopPaymentProvider`)
 
 1. Ouverture : `POST api/paiement-marchand` (`client_id`, `refference_id` = notre référence `pay_…`, `montant` en HTG,
-   `payment_method`, `all` par défaut). Le joueur est envoyé sur l'`url` renvoyée ; `transaction_id` est gardé comme
+   `payment_method` = moyen choisi par le joueur sur notre formulaire, `moncash` ou `natcash` : liste
+   `providers.plopplop.methods` de `config/payments.php`). Le joueur est envoyé sur l'`url` renvoyée, directement la page
+   de l'opérateur ; `transaction_id` est gardé comme
    référence du prestataire.
 2. Webhook `transaction.created` / `transaction.status_changed` sur `/api/v1/payments/webhooks/plopplop`, signé
    `X-Webhook-Signature: sha256=<HMAC-SHA256 du corps brut avec le client_secret>`. Statuts : `ok` → crédité,

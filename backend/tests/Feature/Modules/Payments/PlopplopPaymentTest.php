@@ -35,7 +35,6 @@ class PlopplopPaymentTest extends TestCase
             'payments.providers.plopplop.base_url' => 'https://plopplop.test/',
             'payments.providers.plopplop.client_id' => 'pp_test',
             'payments.providers.plopplop.client_secret' => self::SECRET,
-            'payments.providers.plopplop.payment_method' => 'all',
             'payments.providers.fake.enabled' => false,
         ]);
         $this->player = User::factory()->create();
@@ -51,7 +50,7 @@ class PlopplopPaymentTest extends TestCase
     private function open(int $amountMinor = 1_500_00): TestResponse
     {
         return $this->actingAs($this->player)->postJson('/api/v1/payments/deposits',
-            ['provider' => 'plopplop', 'amount_minor' => $amountMinor], ['Idempotency-Key' => (string) Str::uuid()]);
+            ['provider' => 'plopplop', 'method' => 'natcash', 'amount_minor' => $amountMinor], ['Idempotency-Key' => (string) Str::uuid()]);
     }
 
     /** @param  array<string, mixed>  $transaction */
@@ -82,14 +81,14 @@ class PlopplopPaymentTest extends TestCase
 
         $response = $this->open()->assertCreated()
             ->assertJsonPath('data.provider', 'plopplop')
-            ->assertJsonPath('data.provider_label', 'MonCash, NatCash ou carte')
+            ->assertJsonPath('data.provider_label', 'NatCash')
             ->assertJsonPath('data.redirect_url', 'https://plopplop.test/pay?id=173763124912345');
 
         Http::assertSent(fn (HttpRequest $r) => $r->url() === 'https://plopplop.test/api/paiement-marchand'
             && $r['client_id'] === 'pp_test'
             && $r['refference_id'] === $response->json('data.reference')
             && $r['montant'] === 1500
-            && $r['payment_method'] === 'all');
+            && $r['payment_method'] === 'natcash');
         $this->assertSame('173763124912345', PaymentTransaction::sole()->provider_reference);
         $this->assertSame(0, $this->balance());
     }
@@ -118,7 +117,7 @@ class PlopplopPaymentTest extends TestCase
         $this->assertSame(1_500_00, $this->balance());
         $entry = LedgerEntry::where('type', LedgerEntryType::Deposit)->sole();
         $this->assertSame("payment:{$reference}", $entry->reference);
-        $this->assertSame('Dépôt MonCash, NatCash ou carte', $entry->description);
+        $this->assertSame('Dépôt NatCash', $entry->description);
         $this->assertSame(2, WebhookEvent::count());
     }
 
