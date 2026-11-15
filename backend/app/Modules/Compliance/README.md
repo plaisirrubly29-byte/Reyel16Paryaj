@@ -11,6 +11,7 @@
 - Limites de dépôt (V2-B06) : même règle que les limites de mise ; contrôle avant chaque dépôt.
 - Limites de pertes nettes, rappel de durée de session, historique des dépenses (V2-E06).
 - Journal des événements de jeu responsable.
+- AML (V2-C04) : règles d'alerte sur les dépôts et retraits, file de revue de la Conformité.
 
 ## Dépendances
 
@@ -18,9 +19,11 @@
 - Betting fournit les mises du joueur via le contrat `Contracts\StakeHistory` (lié dans `AppServiceProvider`) :
   Betting appelle Compliance, jamais l'inverse.
 - Wallet fournit les dépôts du joueur via le contrat `Contracts\DepositHistory` (même principe) ; le dépôt enregistré
-  par l'admin (module Admin) appelle `assertCanDeposit()`, comme le feront les dépôts MonCash (V2-B02).
+  par l'admin (module Admin) appelle `assertCanDeposit()`, comme le feront les dépôts MonCash (V2-B02). Wallet envoie
+  aussi le job `Jobs\CheckAmlRules` après chaque dépôt ou retrait validé (`LedgerService`).
 - Wallet fournit aussi la perte nette (`Contracts\LossHistory`) et les totaux par jour (`Contracts\SpendingHistory`),
   lus dans le ledger par `LedgerPlayHistory`.
+- Audit (`AuditLogger`) pour la revue des alertes AML.
 
 ## Tables
 
@@ -30,6 +33,7 @@
 - `users.session_reminder_minutes` : intervalle du rappel de durée de session (null : désactivé)
 - `responsible_gaming_restrictions` : pauses et auto-exclusions
 - `responsible_play_events` : journal en ajout seul
+- `aml_alerts` : une alerte par règle et par écriture du ledger, ouverte puis classée ou signalée (motif, relecteur)
 
 ## Routes
 
@@ -42,6 +46,8 @@
   (30 jours) et par mois (12 mois), dans le fuseau d'affichage
 - Conformité (module Admin) : `GET /api/v1/admin/users/{id}/responsible-gaming` (responsible_gaming.view, consultation
   auditée) ; `POST /api/v1/admin/users/{id}/responsible-gaming/reopen` (responsible_gaming.manage, motif, après l'échéance)
+- Alertes AML (module Admin) : `GET /api/v1/admin/aml/alerts`, `GET /api/v1/admin/aml/alerts/{id}` (aml.view : Conformité,
+  Super Admin, Finance) ; `POST /api/v1/admin/aml/alerts/{id}/review` (aml.review : Conformité, motif)
 
 ## Règles à respecter
 
@@ -57,6 +63,16 @@
   `deposit_limit_exceeded`, refus journalisé avec l'admin qui enregistrait le dépôt). Les retraits ne sont pas limités.
 - Limite de pertes : perte nette = mises moins gains et remboursements de la période glissante. `assertCanBet()`
   compte le nouveau pari comme perdu (pire cas) : au-delà, 422 `loss_limit_exceeded`.
+- AML : seuils PROVISOIRES dans `config/compliance.php` (`aml`), en attendant l'avis juridique (question J-6) :
+  - `large_deposit` : un dépôt d'au moins 50 000 HTG ;
+  - `cumulative_deposits` : ce dépôt porte les dépôts des 7 derniers jours à 150 000 HTG ou plus (une alerte au
+    franchissement, pas à chaque dépôt suivant) ;
+  - `withdrawal_without_play` : un retrait alors que les dépôts des 72 dernières heures ont été misés à moins de 10 %.
+- Une alerte ne bloque rien : la Conformité la classe (`dismissed`) ou la signale (`reported`), une seule fois, avec un
+  motif audité ; elle suspend le compte si besoin (`PATCH /admin/users/{id}`). Jamais une alerte sur son propre compte.
+- Le contrôle s'exécute en file, après la validation de l'écriture : un dépôt annulé n'est pas contrôlé ; un job rejoué
+  ne crée pas de seconde alerte (unique par règle et par écriture). Un job en échec définitif apparaît dans les alertes
+  techniques de l'administration (`failed_jobs`).
 
 ## Organisation
 

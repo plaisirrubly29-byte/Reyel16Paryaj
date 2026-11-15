@@ -54,6 +54,12 @@ Schedule::command('payments:reconcile')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Versement des retraits en attente et vérification de ceux en cours (V2-B03) ; sans effet s'ils sont désactivés.
+Schedule::command('payments:payouts')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))

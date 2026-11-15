@@ -19,6 +19,9 @@ import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
 import { TransactionsPage } from '../features/wallet/pages/TransactionsPage';
 import { WalletPage } from '../features/wallet/pages/WalletPage';
+import { KycPage } from '../features/kyc/pages/KycPage';
+import { KycQueuePage } from '../admin/pages/KycQueuePage';
+import { KycSubmissionPage } from '../admin/pages/KycSubmissionPage';
 import { AccountLayout } from '../features/account/AccountLayout';
 import { LoyaltyPage, MessagesPage, ReferralPage } from '../features/account/ComingSoonPage';
 import { CouponsPage } from '../features/betting/pages/CouponsPage';
@@ -89,6 +92,7 @@ export const routes = [
           { path: 'loyalty', element: <LoyaltyPage /> },
           { path: 'referral', element: <ReferralPage /> },
           { path: 'account', element: <AccountPage /> },
+          { path: 'verification', element: <KycPage /> },
           { path: 'devices', element: <DevicesPage /> },
           { path: 'responsible-gaming', element: <ResponsibleSettingsPage /> },
           { path: 'responsible-gaming/history', element: <SpendingHistoryPage /> },
@@ -111,6 +115,8 @@ export const routes = [
       section('settlements/:id', <CorrectionDetailPage />),
       section('users', <UsersPage />),
       section('users/:id', <UserDetailPage />),
+      section('kyc', <KycQueuePage />),
+      section('kyc/:id', <KycSubmissionPage />),
       section('tickets', <TicketsPage />),
       section('tickets/:id', <TicketDetailPage />),
       section('risk', <RiskPage />),

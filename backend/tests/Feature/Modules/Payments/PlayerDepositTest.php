@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\Payments;
 use App\Models\User;
 use App\Modules\Compliance\Enums\ResponsiblePlayEventType;
 use App\Modules\Compliance\Models\ResponsiblePlayEvent;
+use App\Modules\IdentityAccess\Enums\KycStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentTransaction;
@@ -37,10 +38,10 @@ class PlayerDepositTest extends TestCase
         $this->player = User::factory()->create();
     }
 
-    private function open(int $amountMinor = 1_500_00, string $provider = 'fake', ?User $as = null): TestResponse
+    private function open(int $amountMinor = 1_500_00, string $provider = 'fake', ?User $as = null, ?string $method = 'moncash'): TestResponse
     {
         return $this->actingAs($as ?? $this->player)->postJson('/api/v1/payments/deposits',
-            ['provider' => $provider, 'amount_minor' => $amountMinor], ['Idempotency-Key' => (string) Str::uuid()]);
+            ['provider' => $provider, 'method' => $method, 'amount_minor' => $amountMinor], ['Idempotency-Key' => (string) Str::uuid()]);
     }
 
     private function decide(string $reference, string $decision): TestResponse
@@ -56,7 +57,7 @@ class PlayerDepositTest extends TestCase
     public function test_the_player_sees_the_enabled_methods_and_the_accepted_amounts(): void
     {
         $this->actingAs($this->player)->getJson('/api/v1/payments/methods')->assertOk()
-            ->assertJsonPath('data.methods', [['provider' => 'fake', 'label' => 'Paiement test']])
+            ->assertJsonPath('data.methods', [['provider' => 'fake', 'method' => 'moncash', 'label' => 'MonCash (test)'], ['provider' => 'fake', 'method' => 'natcash', 'label' => 'NatCash (test)']])
             ->assertJsonPath('data.min_amount', ['minor' => 100_00, 'currency' => 'HTG'])
             ->assertJsonPath('data.max_amount', ['minor' => 100_000_00, 'currency' => 'HTG']);
 
@@ -68,7 +69,7 @@ class PlayerDepositTest extends TestCase
     {
         $response = $this->open()->assertCreated()
             ->assertJsonPath('data.status', 'pending')
-            ->assertJsonPath('data.provider_label', 'Paiement test')
+            ->assertJsonPath('data.provider_label', 'MonCash (test)')
             ->assertJsonPath('data.amount', ['minor' => 1_500_00, 'currency' => 'HTG']);
         $reference = $response->json('data.reference');
         $this->assertSame("/api/v1/payments/fake/checkout/{$reference}", $response->json('data.redirect_url'));
@@ -86,7 +87,7 @@ class PlayerDepositTest extends TestCase
             ->assertJsonPath('data.redirect_url', null);
         $entry = LedgerEntry::where('type', LedgerEntryType::Deposit)->sole();
         $this->assertSame("payment:{$reference}", $entry->reference);
-        $this->assertSame('Dépôt Paiement test', $entry->description);
+        $this->assertSame('Dépôt MonCash (test)', $entry->description);
         $this->assertTrue(WebhookEvent::sole()->signature_valid);
 
         // Second envoi du formulaire (double clic, retour arrière) : aucun second crédit.
@@ -120,6 +121,29 @@ class PlayerDepositTest extends TestCase
         $this->assertSame(0, PaymentTransaction::count());
     }
 
+    /** Le joueur choisit MonCash ou NatCash sur notre formulaire ; tout autre moyen (ou aucun) est refusé. */
+    public function test_the_player_must_choose_moncash_or_natcash(): void
+    {
+        foreach ([null, 'kashpaw', 'all'] as $method) {
+            $this->open(method: $method)->assertUnprocessable()
+                ->assertJsonPath('error.code', 'payment_method_unavailable')
+                ->assertJsonPath('error.details.methods', ['moncash', 'natcash']);
+        }
+        $this->assertSame(0, PaymentTransaction::count());
+
+        $reference = $this->open(method: 'natcash')->assertCreated()
+            ->assertJsonPath('data.method', 'natcash')
+            ->assertJsonPath('data.provider_label', 'NatCash (test)')
+            ->json('data.reference');
+
+        // Le moyen est gardé avec la page du prestataire, montré sur cette page et dans l'écriture du ledger.
+        $this->assertSame('natcash', PaymentTransaction::sole()->metadata['method']);
+        $this->assertNotNull(PaymentTransaction::sole()->metadata['redirect_url']);
+        $this->get("/api/v1/payments/fake/checkout/{$reference}")->assertSee('NatCash (test)');
+        $this->decide($reference, 'approve');
+        $this->assertSame('Dépôt NatCash (test)', LedgerEntry::where('type', LedgerEntryType::Deposit)->sole()->description);
+    }
+
     public function test_the_deposit_limit_counts_pending_deposits_and_the_refusal_is_logged(): void
     {
         $this->actingAs($this->player)->putJson('/api/v1/responsible-gaming/deposit-limits/day',
@@ -133,6 +157,27 @@ class PlayerDepositTest extends TestCase
 
         $this->assertSame(2, PaymentTransaction::count());
         $this->assertSame(1, ResponsiblePlayEvent::where('type', ResponsiblePlayEventType::DepositRefusedLimit)->count());
+    }
+
+    /** V2-C03 : au-delà du seuil (dépôts crédités + en attente + celui-ci), une identité vérifiée est exigée. */
+    public function test_beyond_the_kyc_threshold_a_deposit_requires_a_verified_identity(): void
+    {
+        config(['kyc.deposit_threshold_minor' => 2_000_00]);
+
+        $credited = $this->open(1_000_00)->json('data.reference');
+        $this->decide($credited, 'approve');
+        $this->open(600_00)->assertCreated(); // en attente : compte dans le seuil
+
+        $this->open(500_00)->assertUnprocessable()
+            ->assertJsonPath('error.code', 'kyc_required')
+            ->assertJsonPath('error.details.kyc_status', 'none')
+            ->assertJsonPath('error.details.threshold_minor', 2_000_00)
+            ->assertJsonPath('error.details.deposited_minor', 1_000_00);
+        $this->open(400_00)->assertCreated(); // pile au seuil
+        $this->assertSame(3, PaymentTransaction::count());
+
+        $this->player->forceFill(['kyc_status' => KycStatus::Approved, 'kyc_verified_at' => now()])->save();
+        $this->open(5_000_00)->assertCreated();
     }
 
     public function test_a_frozen_wallet_or_an_admin_account_cannot_deposit(): void
@@ -159,7 +204,7 @@ class PlayerDepositTest extends TestCase
     public function test_deposits_require_a_signed_in_player(): void
     {
         $this->getJson('/api/v1/payments/methods')->assertUnauthorized();
-        $this->postJson('/api/v1/payments/deposits', ['provider' => 'fake', 'amount_minor' => 1_000_00])->assertUnauthorized();
+        $this->postJson('/api/v1/payments/deposits', ['provider' => 'fake', 'method' => 'moncash', 'amount_minor' => 1_000_00])->assertUnauthorized();
     }
 
     public function test_the_simulated_checkout_does_not_exist_when_the_fake_provider_is_disabled(): void
@@ -174,7 +219,7 @@ class PlayerDepositTest extends TestCase
 
     public function test_opening_a_deposit_requires_an_idempotency_key(): void
     {
-        $this->actingAs($this->player)->postJson('/api/v1/payments/deposits', ['provider' => 'fake', 'amount_minor' => 1_000_00])
+        $this->actingAs($this->player)->postJson('/api/v1/payments/deposits', ['provider' => 'fake', 'method' => 'moncash', 'amount_minor' => 1_000_00])
             ->assertStatus(428);
     }
 }
