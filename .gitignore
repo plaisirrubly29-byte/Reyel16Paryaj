@@ -29,3 +29,9 @@ Thumbs.db
 
 # Fichiers temporaires Office
 ~$*
+
+# Configuration locale de Claude Code
+.claude/
+
+# Rapports d'état des tâches (PDF générés)
+Etat-des-taches-*.pdf
