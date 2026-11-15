@@ -20,7 +20,11 @@ import {
   useDeposits,
   useStartDeposit,
   type Deposit,
+  type DepositMethod,
 } from '../api/deposits';
+
+/** Identifiant d'un choix de paiement : prestataire et moyen (« plopplop:moncash »). */
+const methodKey = (m: DepositMethod) => `${m.provider}:${m.method ?? ''}`;
 
 const LIMIT_PERIODS: Record<string, string> = { day: 'sur 24 heures', week: 'sur 7 jours', month: 'sur 30 jours' };
 
@@ -112,11 +116,12 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
   const returned = params.get('depot') ?? params.get('refference_id');
   const followed = returned && /^pay_[a-z0-9]+$/.test(returned) ? returned : null;
   const [amount, setAmount] = useState('');
-  const [provider, setProvider] = useState<string | null>(null);
+  const [choice, setChoice] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
 
   const available = methods.data?.methods ?? [];
-  const chosen = provider ?? available[0]?.provider ?? null;
+  // Plusieurs moyens (MonCash, NatCash) : le joueur choisit lui-même ; un seul : choisi d'office.
+  const chosen: DepositMethod | null = available.find((m) => methodKey(m) === choice) ?? (available.length === 1 ? available[0]! : null);
   const amountMinor = parseStakeMinor(amount);
   const min: Money | undefined = methods.data?.min_amount;
   const max: Money | undefined = methods.data?.max_amount;
@@ -127,7 +132,7 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
     e.preventDefault();
     if (amountMinor === null || chosen === null || outOfBounds) return;
     start.mutate(
-      { provider: chosen, amountMinor: Number(amountMinor), idempotencyKey },
+      { provider: chosen.provider, method: chosen.method, amountMinor: Number(amountMinor), idempotencyKey },
       {
         onSuccess: (deposit) => {
           setIdempotencyKey(newIdempotencyKey());
@@ -173,18 +178,6 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
                 ? <KycRequiredAlert error={error} operation="deposit" currency={currency} />
                 : error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
-            {available.length > 1 && (
-              <fieldset className="deposit-methods">
-                <legend>Moyen de paiement</legend>
-                {available.map((m) => (
-                  <label key={m.provider} className="deposit-method">
-                    <input type="radio" name="deposit-provider" value={m.provider} checked={chosen === m.provider} onChange={() => setProvider(m.provider)} />
-                    {m.label}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-
             <TextField
               label="Montant du dépôt"
               inputMode="decimal"
@@ -203,10 +196,24 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
               ))}
             </div>
 
+            {available.length > 1 && (
+              <fieldset className="pay-choices">
+                <legend>Payer avec</legend>
+                {available.map((m) => (
+                  <label key={methodKey(m)} className={['pay-choice', m.method && `pay-choice-${m.method}`].filter(Boolean).join(' ')}>
+                    <input type="radio" name="deposit-method" value={methodKey(m)} checked={chosen === m} onChange={() => setChoice(methodKey(m))} />
+                    <span>{m.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+
             <Button type="submit" block loading={start.isPending} disabled={amountMinor === null || amountMinor === 0n || outOfBounds || chosen === null}>
-              {available.length === 1 ? `Déposer avec ${available[0].label}` : 'Déposer'}
+              {chosen ? `Déposer avec ${chosen.label}` : `Choisissez ${available.map((m) => m.label).join(' ou ')}`}
             </Button>
-            <p className="muted small">Vous confirmerez le paiement sur la page du prestataire. Votre solde est crédité dès sa confirmation.</p>
+            <p className="muted small">
+              Vous confirmerez le paiement sur la page {chosen ? `de ${chosen.label}` : 'de votre opérateur'}. Votre solde est crédité dès sa confirmation.
+            </p>
           </form>
         ))}
 

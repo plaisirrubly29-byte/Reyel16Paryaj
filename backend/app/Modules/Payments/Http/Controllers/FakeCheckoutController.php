@@ -33,7 +33,8 @@ class FakeCheckoutController extends Controller
         return response()
             ->view('payments.fake-checkout', [
                 'transaction' => $transaction,
-                'label' => (string) config('payments.providers.fake.label'),
+                // Moyen choisi par le joueur (« MonCash (test) »), comme la page de l'opérateur chez Plop Plop.
+                'label' => $this->providers->label('fake', $transaction->metadata['method'] ?? null),
                 'amount' => Number::format($transaction->amount_minor / 100, 2, locale: 'fr').' '.$transaction->currency,
                 'action' => '/api/v1/payments/fake/checkout/'.$transaction->reference,
                 'returnUrl' => self::returnUrl($transaction),

@@ -50,20 +50,30 @@ class PaymentService
      * de dépôt du joueur (V2-B06), tous deux en comptant ses dépôts encore en attente. Rien n'est crédité ici :
      * seul le webhook vérifié du prestataire crédite.
      *
-     * @throws ApiException payment_provider_unavailable | not_a_player | wallet_frozen | kyc_required | payment_provider_error
+     * @param  string|null  $method  moyen choisi par le joueur (ex. moncash), obligatoire si le prestataire en propose
+     *
+     * @throws ApiException payment_provider_unavailable | payment_method_unavailable | not_a_player | wallet_frozen
+     *                      | kyc_required | payment_provider_error
      * @throws ResponsibleGamingException deposit_limit_exceeded (refus journalisé)
      */
-    public function startDeposit(User $user, Money $amount, string $providerName): PaymentTransaction
+    public function startDeposit(User $user, Money $amount, string $providerName, ?string $method = null): PaymentTransaction
     {
         $provider = $this->providers->find($providerName)
             ?? throw new ApiException('payment_provider_unavailable', __('Ce moyen de paiement n\'est pas disponible.'), 422);
+
+        $methods = $this->providers->methods($provider->name());
+        if ($methods === [] ? $method !== null : ! array_key_exists((string) $method, $methods)) {
+            throw new ApiException('payment_method_unavailable', __('Choisissez un moyen de paiement proposé.'), 422, [
+                'methods' => array_keys($methods),
+            ]);
+        }
 
         if ($user->isAdmin()) {
             throw new ApiException('not_a_player', __('Seul un joueur peut déposer.'), 422);
         }
 
         try {
-            $transaction = DB::transaction(function () use ($user, $amount, $provider) {
+            $transaction = DB::transaction(function () use ($user, $amount, $provider, $method) {
                 // Verrou sur le joueur : ses dépôts simultanés passent un par un devant les limites.
                 User::whereKey($user->id)->lockForUpdate()->first();
 
@@ -85,6 +95,8 @@ class PaymentService
                     'currency' => $amount->currency,
                     'reference' => 'pay_'.Str::lower((string) Str::ulid()),
                     'expires_at' => now()->addMinutes((int) config('payments.deposit_expiry_minutes')),
+                    // Moyen choisi : transmis au prestataire (PaymentProvider::initiate) et affiché au joueur.
+                    'metadata' => $method === null ? null : ['method' => $method],
                 ]);
             });
         } catch (ResponsibleGamingException $refusal) {
@@ -98,7 +110,7 @@ class PaymentService
         try {
             $initiation = $provider->initiate($transaction);
         } catch (Throwable $e) {
-            $transaction->forceFill(['status' => PaymentStatus::Failed, 'completed_at' => now(), 'metadata' => ['error' => 'initiation_failed']])->save();
+            $transaction->forceFill(['status' => PaymentStatus::Failed, 'completed_at' => now(), 'metadata' => ($transaction->metadata ?? []) + ['error' => 'initiation_failed']])->save();
             Log::error('Ouverture du paiement refusée par le prestataire.', ['provider' => $provider->name(), 'reference' => $transaction->reference, 'exception' => $e]);
 
             throw new ApiException('payment_provider_error', __('Le prestataire de paiement ne répond pas. Réessayez plus tard.'), 502);
@@ -106,7 +118,7 @@ class PaymentService
 
         $transaction->forceFill([
             'provider_reference' => $initiation->providerReference,
-            'metadata' => $initiation->redirectUrl === null ? null : ['redirect_url' => $initiation->redirectUrl],
+            'metadata' => ($initiation->redirectUrl === null ? [] : ['redirect_url' => $initiation->redirectUrl]) + ($transaction->metadata ?? []) ?: null,
         ])->save();
 
         return $transaction;
@@ -253,7 +265,7 @@ class PaymentService
                 Money::ofMinor($transaction->amount_minor, $transaction->currency),
                 "payment:{$transaction->reference}",
                 (string) $transaction->id,
-                (string) config("payments.providers.{$transaction->provider}.label", $transaction->provider),
+                $this->providers->label($transaction->provider, $transaction->metadata['method'] ?? null),
             )
             : null;
 

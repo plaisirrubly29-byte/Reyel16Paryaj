@@ -2281,3 +2281,15 @@ a.match-line-teams:hover { color: var(--brand); }
 @media (max-width: 640px) {
   .kyc-types { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* Dépôt : choix du moyen de paiement (MonCash, NatCash) après le montant. */
+.pay-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; margin: 0; padding: 0; border: 0; }
+.pay-choices legend { margin-bottom: 0.45rem; font-weight: 600; font-size: 0.9rem; }
+.pay-choice { position: relative; display: flex; align-items: center; justify-content: center; min-height: 3.25rem; padding: 0.6rem; border: 2px solid var(--border); border-radius: var(--radius); background: var(--surface); font-weight: 800; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.pay-choice:hover { border-color: var(--border-strong); }
+.pay-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.pay-choice:has(input:focus-visible) { box-shadow: 0 0 0 4px var(--accent-ring); }
+.pay-choice:has(input:checked) { border-color: var(--brand); background: #eef4fd; color: var(--brand-dark); }
+.pay-choice-moncash:has(input:checked) { border-color: #d6202f; background: #fdecee; color: #a3121f; }
+.pay-choice-natcash:has(input:checked) { border-color: #f08c00; background: #fff4e5; color: #8a4b00; }
