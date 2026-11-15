@@ -73,7 +73,7 @@ class SportsBettingJourneyTest extends TestCase
     {
         // 1. Dépôt : ouverture, confirmation chez le prestataire, crédit par le webhook signé.
         $deposit = $this->actingAs($this->player)->postJson('/api/v1/payments/deposits',
-            ['provider' => 'fake', 'amount_minor' => 1_500_00], ['Idempotency-Key' => (string) Str::uuid()])->assertCreated();
+            ['provider' => 'fake', 'method' => 'moncash', 'amount_minor' => 1_500_00], ['Idempotency-Key' => (string) Str::uuid()])->assertCreated();
         $this->assertSame(0, $this->balance());
         $this->post($deposit->json('data.redirect_url'), ['decision' => 'approve'])->assertStatus(303);
         $this->assertSame(1_500_00, $this->balance());

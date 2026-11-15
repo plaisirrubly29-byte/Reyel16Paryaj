@@ -3,6 +3,8 @@
 namespace App\Modules\Wallet\Services;
 
 use App\Models\User;
+use App\Modules\Compliance\Enums\AmlMovement;
+use App\Modules\Compliance\Jobs\CheckAmlRules;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Models\Wallet;
@@ -61,6 +63,18 @@ class LedgerService
     {
         return $this->post($wallet, LedgerEntryType::Deposit, $amount, $reference, 'payment', $paymentId,
             description: __('Dépôt :provider', ['provider' => $providerLabel]));
+    }
+
+    /**
+     * Retrait demandé par le joueur et versé par un prestataire (V2-B03) : le montant est débité (réservé) dès la
+     * demande. Référence unique payout:<référence>.
+     *
+     * @throws ApiException insufficient_funds, wallet_frozen
+     */
+    public function providerWithdrawal(Wallet $wallet, Money $amount, string $reference, string $paymentId, string $methodLabel): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Withdrawal, $amount, $reference, 'payment', $paymentId,
+            description: __('Retrait :method', ['method' => $methodLabel]));
     }
 
     /**
@@ -174,7 +188,7 @@ class LedgerService
                 ]);
             }
 
-            return LedgerEntry::create([
+            $entry = LedgerEntry::create([
                 'wallet_id' => $locked->id,
                 'type' => $type,
                 'amount_minor' => $signed,
@@ -188,6 +202,18 @@ class LedgerService
                 'metadata' => $metadata,
                 'created_by' => $actor?->id,
             ]);
+
+            // Contrôle AML de chaque dépôt et retrait (V2-C04), après la validation : jamais pour une écriture annulée.
+            $movement = match ($type) {
+                LedgerEntryType::Deposit => AmlMovement::Deposit,
+                LedgerEntryType::Withdrawal => AmlMovement::Withdrawal,
+                default => null,
+            };
+            if ($movement !== null) {
+                CheckAmlRules::dispatch($locked->user_id, $entry->id, $movement, abs($signed), $locked->currency, $entry->created_at)->afterCommit();
+            }
+
+            return $entry;
         });
     }
 

@@ -92,7 +92,9 @@ export async function api<T>(path: string, options: RequestOptions = {}, retried
   const method = options.method ?? 'GET';
   const headers: Record<string, string> = { Accept: 'application/json' };
 
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  // Fichiers (FormData) : le navigateur fixe lui-même l'en-tête multipart et sa frontière.
+  const multipart = options.body instanceof FormData;
+  if (options.body !== undefined && !multipart) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
 
   if (!SAFE_METHODS.includes(method)) {
@@ -106,7 +108,7 @@ export async function api<T>(path: string, options: RequestOptions = {}, retried
     response = await fetch(buildUrl(path, options.query), {
       method,
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: multipart ? (options.body as FormData) : options.body !== undefined ? JSON.stringify(options.body) : undefined,
       credentials: 'include',
       signal: options.signal,
     });
@@ -124,6 +126,22 @@ export async function api<T>(path: string, options: RequestOptions = {}, retried
   const data = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, data);
   return data as T;
+}
+
+/**
+ * GET d'un fichier protégé par la session (ex. pièce KYC) : renvoyé en Blob, à afficher par URL.createObjectURL.
+ * Jamais d'URL directe dans une balise <img> : le fichier ne reste pas dans le cache ni l'historique du navigateur.
+ */
+export async function fetchBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), { headers: { Accept: '*/*' }, credentials: 'include', cache: 'no-store', signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    throw new ApiError(0, null);
+  }
+  if (!response.ok) throw new ApiError(response.status, await response.json().catch(() => null));
+  return response.blob();
 }
 
 /**

@@ -42,7 +42,7 @@ class PaymentWebhookTest extends TestCase
 
     private function startDeposit(int $amountMinor = 1_500_00): PaymentTransaction
     {
-        return app(PaymentService::class)->startDeposit($this->player, Money::ofMinor($amountMinor, 'HTG'), 'fake');
+        return app(PaymentService::class)->startDeposit($this->player, Money::ofMinor($amountMinor, 'HTG'), 'fake', 'moncash');
     }
 
     /** @param  array<string, mixed>  $overrides */
@@ -94,7 +94,7 @@ class PaymentWebhookTest extends TestCase
         $entry = LedgerEntry::where('type', LedgerEntryType::Deposit)->sole();
         $this->assertSame("payment:{$transaction->reference}", $entry->reference);
         $this->assertSame(['payment', (string) $transaction->id], [$entry->related_type, $entry->related_id]);
-        $this->assertSame('Dépôt Paiement test', $entry->description);
+        $this->assertSame('Dépôt MonCash (test)', $entry->description);
 
         $transaction->refresh();
         $this->assertSame(PaymentStatus::Succeeded, $transaction->status);

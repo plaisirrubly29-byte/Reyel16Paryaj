@@ -2,12 +2,13 @@
 
 namespace App\Modules\Payments\Providers;
 
-use App\Modules\Payments\Contracts\PaymentProvider;
+use App\Modules\Payments\Contracts\PayoutProvider;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\InvalidWebhookException;
 use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Payments\Support\PaymentInitiation;
 use App\Modules\Payments\Support\PaymentNotification;
+use App\Modules\Payments\Support\PayoutResult;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -17,10 +18,37 @@ use Illuminate\Support\Str;
  *
  * Corps attendu : {"id": "...", "reference": "...", "provider_reference": "...", "status": "succeeded|failed|pending",
  * "amount_minor": 12300, "currency": "HTG"}.
+ *
+ * Retraits simulés (V2-B03) : versés aussitôt, sauf vers un numéro qui finit par 0000 (refusé, comme un numéro
+ * MonCash invalide). Solde marchand illimité, aucun délai entre deux versements.
  */
-class FakePaymentProvider implements PaymentProvider
+class FakePaymentProvider implements PayoutProvider
 {
     public const SIGNATURE_HEADER = 'X-Fake-Signature';
+
+    public function availableBalance(): ?int
+    {
+        return null;
+    }
+
+    public function payout(PaymentTransaction $transaction): PayoutResult
+    {
+        return str_ends_with((string) ($transaction->metadata['recipient'] ?? ''), '0000')
+            ? PayoutResult::rejected('Numéro de portefeuille invalide (prestataire simulé).')
+            : PayoutResult::paid('fake_wd_'.Str::lower((string) Str::ulid()), 0);
+    }
+
+    public function checkPayout(PaymentTransaction $transaction): ?PayoutResult
+    {
+        $id = $transaction->metadata['provider_transaction_id'] ?? null;
+
+        return $id === null ? null : PayoutResult::paid((string) $id);
+    }
+
+    public function payoutCooldownSeconds(): int
+    {
+        return 0;
+    }
 
     public function name(): string
     {
