@@ -13,7 +13,8 @@ import { TopMatches } from '../components/TopMatches';
  */
 export function HomePage() {
   // Seuls les sports qui ont des matchs sont annoncés ; la borlette, seulement si l'API publie des tirages.
-  const sports = useSports().data ?? [];
+  const sportsQuery = useSports();
+  const sports = sportsQuery.data ?? [];
   const draws = useLotteryDraws().data ?? [];
 
   return (
@@ -37,6 +38,8 @@ export function HomePage() {
             {/* Plus grand élément visible de l'accueil : chargé en priorité (V2-E05). */}
             <img className="hero-logo" src={BRAND_LOGO_SMALL_URL} alt="" width={151} height={190} fetchPriority="high" />
           </div>
+          {/* Rangée réservée pendant le chargement, pour que la page ne saute pas à l'arrivée des sports (V2-E05). */}
+          {sportsQuery.isPending && <div className="hero-sports hero-sports-placeholder" aria-hidden="true" />}
           {(sports.length > 0 || draws.length > 0) && (
             <nav className="hero-sports" aria-label="Sports disponibles">
               {sports.map((s) => (

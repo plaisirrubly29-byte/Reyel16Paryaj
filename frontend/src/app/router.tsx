@@ -2,15 +2,9 @@ import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { PublicLayout } from './layouts/PublicLayout';
 import { HomePage } from '../features/catalogue/pages/HomePage';
-import { MatchPage } from '../features/catalogue/pages/MatchPage';
-import { MyBetsPage } from '../features/betting/pages/MyBetsPage';
 import { SportsPage } from '../features/catalogue/pages/SportsPage';
 import { VirtualGate } from '../features/virtual/components/VirtualGate';
 import { RequireAuth } from '../features/auth/components/RequireAuth';
-import { AccountPage } from '../features/auth/pages/AccountPage';
-import { LoginPage } from '../features/auth/pages/LoginPage';
-import { RegisterPage } from '../features/auth/pages/RegisterPage';
-import { WalletPage } from '../features/wallet/pages/WalletPage';
 import { AccountLayout } from '../features/account/AccountLayout';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { NotFoundPage } from '../features/legal/pages/NotFoundPage';
@@ -45,6 +39,14 @@ const CouponsPage = lazyPage(() => import('../features/betting/pages/CouponsPage
 const ForgotPasswordPage = lazyPage(() => import('../features/auth/pages/ForgotPasswordPage'), 'ForgotPasswordPage');
 const ResetPasswordPage = lazyPage(() => import('../features/auth/pages/ResetPasswordPage'), 'ResetPasswordPage');
 const MessagesPage = lazyPage(() => import('../features/account/ComingSoonPage'), 'MessagesPage');
+
+// Pages hors de l'accueil (page d'un match, Mes paris, Solde, compte, connexion), aussi à la demande.
+const MatchPage = lazyPage(() => import('../features/catalogue/pages/MatchPage'), 'MatchPage');
+const MyBetsPage = lazyPage(() => import('../features/betting/pages/MyBetsPage'), 'MyBetsPage');
+const WalletPage = lazyPage(() => import('../features/wallet/pages/WalletPage'), 'WalletPage');
+const AccountPage = lazyPage(() => import('../features/auth/pages/AccountPage'), 'AccountPage');
+const LoginPage = lazyPage(() => import('../features/auth/pages/LoginPage'), 'LoginPage');
+const RegisterPage = lazyPage(() => import('../features/auth/pages/RegisterPage'), 'RegisterPage');
 
 const pageLoading = <div className="table-state"><Spinner /></div>;
 const page = (element: ReactNode) => <Suspense fallback={pageLoading}>{element}</Suspense>;
@@ -86,13 +88,13 @@ export const routes = [
     children: [
       { index: true, element: <HomePage /> },
       { path: 'sports', element: <SportsPage /> },
-      { path: 'events/:id', element: <MatchPage /> },
+      { path: 'events/:id', element: page(<MatchPage />) },
       { path: 'borlette', element: page(<LotteryPage />) },
       // Jeux virtuels (V2-D08) : « page introuvable » tant que VITE_VIRTUAL_GAMES n'est pas activée (D-11).
       { path: 'jeux-virtuels', element: <VirtualGate>{page(<VirtualGamesPage />)}</VirtualGate> },
       { path: 'jeux-virtuels/:id', element: <VirtualGate>{page(<VirtualEventPage />)}</VirtualGate> },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'register', element: <RegisterPage /> },
+      { path: 'login', element: page(<LoginPage />) },
+      { path: 'register', element: page(<RegisterPage />) },
       { path: 'forgot-password', element: page(<ForgotPasswordPage />) },
       { path: 'reset-password', element: page(<ResetPasswordPage />) },
       // Pages d'information (V2-E01), liées depuis le pied de page et l'inscription.
@@ -106,13 +108,13 @@ export const routes = [
       {
         element: <RequireAuth><AccountLayout /></RequireAuth>,
         children: [
-          { path: 'wallet', element: <WalletPage /> },
-          { path: 'bets', element: <MyBetsPage /> },
+          { path: 'wallet', element: page(<WalletPage />) },
+          { path: 'bets', element: page(<MyBetsPage />) },
           { path: 'coupons', element: page(<CouponsPage />) },
           { path: 'transactions', element: page(<TransactionsPage />) },
           { path: 'loyalty', element: page(<LoyaltyPage />) },
           { path: 'referral', element: page(<ReferralPage />) },
-          { path: 'account', element: <AccountPage /> },
+          { path: 'account', element: page(<AccountPage />) },
           { path: 'verification', element: page(<KycPage />) },
           { path: 'devices', element: page(<DevicesPage />) },
           { path: 'responsible-gaming', element: page(<ResponsibleSettingsPage />) },
@@ -124,7 +126,7 @@ export const routes = [
     ],
   },
   // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
-  { path: 'admin/login', element: <div className="admin-login"><LoginPage admin /></div> },
+  { path: 'admin/login', element: <div className="admin-login">{page(<LoginPage admin />)}</div> },
   {
     path: 'admin',
     element: <Suspense fallback={adminLoading}><AdminLayout /></Suspense>,
