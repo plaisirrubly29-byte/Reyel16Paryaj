@@ -66,7 +66,8 @@ describe('dépôt en ligne', () => {
 
     await openDeposit();
     const picker = await screen.findByRole('group', { name: 'Déposer avec' });
-    expect(within(picker).getAllByRole('button').map((b) => b.textContent)).toEqual(['MMonCash', 'NNatCash']);
+    // Les tuiles sont les logos officiels : nom de chaque bouton lu dans le texte alternatif de l'image.
+    expect(within(picker).getAllByRole('button').map((b) => b.querySelector('img')?.getAttribute('alt'))).toEqual(['MonCash', 'NatCash']);
     expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
 
     await userEvent.click(within(picker).getByRole('button', { name: 'NatCash' }));

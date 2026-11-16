@@ -2365,3 +2365,13 @@ a.match-line-teams:hover { color: var(--brand); }
 /* Couleurs des services, après les règles de base des tuiles et du rappel du moyen choisi. */
 .method-tile-moncash { --pay: 214, 32, 47; }
 .method-tile-natcash { --pay: 224, 120, 0; }
+
+/* Logos officiels MonCash / NatCash : la tuile est le logo (carré arrondi), anneau de couleur au survol et au focus. */
+.method-tile.has-logo {
+  padding: 0; min-height: 0; aspect-ratio: 1 / 1; width: 100%; max-width: 9.5rem; justify-self: center;
+  overflow: hidden; border: 0; border-radius: 22px; background: none; box-shadow: 0 8px 20px rgba(11, 26, 74, 0.18);
+}
+.method-tile.has-logo:hover { background: none; box-shadow: 0 0 0 3px rgba(var(--pay), 0.45), 0 10px 22px rgba(11, 26, 74, 0.22); }
+.method-tile.has-logo:focus-visible { outline: 0; box-shadow: 0 0 0 4px rgba(var(--pay), 0.6); }
+.method-logo { display: block; width: 100%; height: 100%; object-fit: cover; }
+.method-chosen .method-logo { width: 2.2rem; height: 2.2rem; flex: none; border-radius: 9px; }
