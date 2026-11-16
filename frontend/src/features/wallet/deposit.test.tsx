@@ -32,6 +32,12 @@ const base = {
   'GET /payments/withdrawals': { status: 200, body: page([]) },
 };
 
+/** Bouton « Dépôt » sous le solde, puis le moyen de paiement choisi (si donné). */
+async function openDeposit(method?: string) {
+  await userEvent.click(await screen.findByRole('button', { name: 'Dépôt' }));
+  if (method) await userEvent.click(await screen.findByRole('button', { name: method }));
+}
+
 describe('dépôt en ligne', () => {
   it("ouvre le dépôt puis envoie le joueur sur la page du prestataire, sans créditer quoi que ce soit côté client", async () => {
     const open = vi.spyOn(providerNavigation, 'open').mockImplementation(() => {});
@@ -39,8 +45,8 @@ describe('dépôt en ligne', () => {
 
     renderApp('/wallet');
 
+    await openDeposit('MonCash');
     await userEvent.type(await screen.findByLabelText('Montant du dépôt'), '1500');
-    await userEvent.click(screen.getByLabelText('MonCash'));
     await userEvent.click(screen.getByRole('button', { name: 'Déposer avec MonCash' }));
 
     await waitFor(() => expect(open).toHaveBeenCalledWith('http://localhost:8000/api/v1/payments/fake/checkout/pay_01abc'));
@@ -49,32 +55,43 @@ describe('dépôt en ligne', () => {
     expect(new Headers(post[1]!.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('le joueur saisit le montant puis choisit MonCash ou NatCash : rien ne part sans choix', async () => {
+  it('Dépôt ouvre le choix MonCash ou NatCash, puis le formulaire du moyen choisi', async () => {
     vi.spyOn(providerNavigation, 'open').mockImplementation(() => {});
     const fetchMock = mockApi({ ...base, 'POST /payments/deposits': { status: 201, body: { data: deposit('pending') } } });
-    renderApp('/wallet');
+    const router = renderApp('/wallet');
 
-    await userEvent.type(await screen.findByLabelText('Montant du dépôt'), '2500');
-    const choices = screen.getByRole('group', { name: 'Payer avec' });
-    expect(within(choices).getAllByRole('radio').map((r) => (r as HTMLInputElement).checked)).toEqual([false, false]);
-    expect(screen.getByRole('button', { name: 'Choisissez MonCash ou NatCash' })).toBeDisabled();
+    // Rien d'ouvert sous le solde tant que le joueur n'a pas choisi Dépôt ou Retrait.
+    expect(await screen.findByRole('button', { name: 'Retrait' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
 
-    await userEvent.click(screen.getByLabelText('NatCash'));
+    await openDeposit();
+    const picker = await screen.findByRole('group', { name: 'Déposer avec' });
+    expect(within(picker).getAllByRole('button').map((b) => b.textContent)).toEqual(['MMonCash', 'NNatCash']);
+    expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
+
+    await userEvent.click(within(picker).getByRole('button', { name: 'NatCash' }));
+    expect(router.state.location.search).toBe('?operation=depot&moyen=natcash');
+    await userEvent.type(screen.getByLabelText('Montant du dépôt'), '2500');
     await userEvent.click(screen.getByRole('button', { name: 'Déposer avec NatCash' }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST' && String(init.body).includes('natcash'))).toBe(true));
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST' && String(init.body).includes('amount_minor'))!;
     expect(JSON.parse(String(post[1]!.body))).toEqual({ provider: 'plopplop', method: 'natcash', amount_minor: 250000 });
+
+    // « Changer » revient au choix du moyen.
+    await userEvent.click(screen.getByRole('button', { name: 'Changer' }));
+    expect(screen.getByRole('group', { name: 'Déposer avec' })).toBeInTheDocument();
   });
 
   it('refuse un montant hors des bornes du serveur avant tout appel', async () => {
     const fetchMock = mockApi(base);
     renderApp('/wallet');
 
+    await openDeposit('MonCash');
     await userEvent.type(await screen.findByLabelText('Montant du dépôt'), '50');
 
     expect((await screen.findByRole('alert')).textContent?.replace(NBSP, ' ')).toContain('Le montant doit être compris entre 100,00');
-    expect(screen.getByRole('button', { name: 'Choisissez MonCash ou NatCash' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Déposer avec MonCash' })).toBeDisabled();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
@@ -88,8 +105,8 @@ describe('dépôt en ligne', () => {
     });
     renderApp('/wallet');
 
+    await openDeposit('MonCash');
     await userEvent.type(await screen.findByLabelText('Montant du dépôt'), '500');
-    await userEvent.click(screen.getByLabelText('MonCash'));
     await userEvent.click(screen.getByRole('button', { name: 'Déposer avec MonCash' }));
 
     const alert = await screen.findByText('Limite de dépôt atteinte');
@@ -109,8 +126,8 @@ describe('dépôt en ligne', () => {
     });
     renderApp('/wallet');
 
+    await openDeposit('MonCash');
     await userEvent.type(await screen.findByLabelText('Montant du dépôt'), '2500');
-    await userEvent.click(screen.getByLabelText('MonCash'));
     await userEvent.click(screen.getByRole('button', { name: 'Déposer avec MonCash' }));
 
     const alert = await screen.findByText("Vérification d'identité requise");
@@ -144,7 +161,7 @@ describe('dépôt en ligne', () => {
 
     const fetchMock = mockApi(base);
     renderApp('/wallet?refference_id=../../admin');
-    expect(await screen.findByLabelText('Montant du dépôt')).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Déposer avec' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/payments/deposits/'))).toBe(false);
   });
 
@@ -166,6 +183,7 @@ describe('dépôt en ligne', () => {
   it("n'affiche pas le formulaire quand le solde est gelé", async () => {
     mockApi({ ...base, 'GET /wallet': { status: 200, body: { data: { currency: 'HTG', balance: htg(0), status: 'frozen', simulated: false } } } });
     renderApp('/wallet');
+    await openDeposit();
 
     expect(await screen.findByText('Les dépôts sont indisponibles tant que votre solde est gelé.')).toBeInTheDocument();
     expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
