@@ -55,6 +55,10 @@ describe('Vérification d\'identité du joueur (V2-C03)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Envoyer mon dossier' }));
 
     expect(await screen.findByText("Dossier en cours d'examen")).toBeInTheDocument();
+    // Étapes : l'envoi est fait, l'examen est l'étape en cours.
+    const steps = screen.getByRole('list', { name: 'Étapes de la vérification' });
+    expect(steps.querySelector('[aria-current="step"]')).toHaveTextContent('Examen par notre équipe');
+    expect(screen.getByText('En cours d\'examen')).toHaveClass('kyc-badge');
     const form = sent as unknown as FormData;
     expect(form.get('document_type')).toBe('cin');
     expect((form.get('front') as File).name).toBe('recto.jpg');
@@ -109,7 +113,7 @@ describe('Vérification d\'identité du joueur (V2-C03)', () => {
     mockApi({ ...base, 'GET /me/kyc': kycState('approved', submission('approved')) });
     renderApp('/verification');
 
-    expect(await screen.findByText('Identité vérifiée')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Identité vérifiée' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Envoyer mon dossier' })).not.toBeInTheDocument();
   });
 

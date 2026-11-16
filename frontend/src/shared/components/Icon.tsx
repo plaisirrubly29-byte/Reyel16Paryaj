@@ -18,6 +18,10 @@ const PATHS = {
   bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
   chevron: 'M9 6l6 6-6 6',
   check: 'M5 12.5l4.5 4.5L19 7.5',
+  // Pièce d'identité : carte avec photo et lignes de texte.
+  idCard: 'M3 5h18v14H3zM8.5 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5.5 16a3 3 0 0 1 6 0M14 9h4M14 12.5h4',
+  camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+  upload: 'M12 16V4M7 9l5-5 5 5M4 16v4h16v-4',
   mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
   lock: 'M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5zM12 15v3',
   calendar: 'M4 9h16M7 3v4M17 3v4M5 6h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM8 14h.01M12 14h.01M16 14h.01',
