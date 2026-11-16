@@ -45,7 +45,9 @@
   --nav-h: 72px;
   /* Hauteur occupée en haut de l'écran par la barre verte collante (colonnes collantes en dessous). */
   --header-h: var(--nav-h);
-  font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Police du système d'abord (V2-E05) : Roboto sur Android, San Francisco sur iPhone, Segoe UI sur Windows ; aucune
+     recherche de police absente au premier affichage. */
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.45;
   color: var(--text);
   background: var(--bg);
@@ -2610,3 +2612,6 @@ a.match-line-teams:hover { color: var(--brand); }
    défilement ; hauteur estimée réservée (« auto » garde ensuite la hauteur réelle mesurée). */
 .match-line { content-visibility: auto; contain-intrinsic-size: auto 150px; }
 .site-footer { content-visibility: auto; contain-intrinsic-size: auto 640px; }
+/* Coquille de démarrage d'index.html : même logo que l'en-tête de React (adresse fixe, préchargée). */
+.boot-logo { background-image: url('/brand/reyel16-logo-sm.jpg'); }
+.hero-sports-placeholder { min-height: 2.6rem; }
