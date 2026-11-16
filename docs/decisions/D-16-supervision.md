@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-F03 (#191) — supervision : surveillance externe, suivi des erreurs, alertes Telegram |
-| **Statut** | 🟡 À décider — comparatif et recommandation proposés |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-16 — prix et réception des SMS en Haïti (SVJ-1 à SVJ-4) à confirmer par Benginio |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-11-13 |
 | **Dépend de** | V2-F01 (Production, #189), D-10 (hébergeur), D-15 (prestataire SMS et WhatsApp), P9-02 (alertes Telegram et e-mail, déjà en place) |
@@ -104,17 +104,17 @@ plus les crédits SMS.
 
 | # | Question | Proposition | Décision |
 |---|---|---|---|
-| SV-1 | Outil de suivi des erreurs | Sentry Team ; GlitchTip hébergé si l'on veut commencer sans frais | |
-| SV-2 | Envoi des nouvelles erreurs vers Telegram | Oui, première apparition seulement, puis résumé quotidien | |
-| SV-3 | Surveillance de disponibilité | UptimeRobot toutes les minutes (payant) ; Better Stack à 3 min en alternative | |
-| SV-4 | Réglage de healthchecks.io | Période 2 min, grâce 2 min | |
-| SV-5 | Fréquence de `monitoring:check` | Toutes les 2 minutes, charge vérifiée sur le Staging | |
-| SV-6 | Alertes de ressources du serveur | Celles de l'hébergeur (D-10) : disque > 80 %, mémoire > 90 % pendant 5 min | |
-| SV-7 | Environnements suivis | Staging et Production, séparés ; jamais le développement | |
-| SV-8 | Conservation des erreurs | Celle de l'offre retenue (14 à 90 jours) ; données personnelles masquées | |
-| SV-9 | Budget mensuel maximal | À fixer | |
-| SV-10 | Canaux d'alerte | Telegram et e-mail pour tout ; SMS (et WhatsApp en complément) pour les pannes graves, par healthchecks.io et UptimeRobot | |
-| SV-11 | Numéros d'astreinte | Ceux de Benginio et de Rubly, enregistrés dans les deux outils | |
+| SV-1 | Outil de suivi des erreurs | Sentry Team ; GlitchTip hébergé si l'on veut commencer sans frais | ✅ Sentry Team |
+| SV-2 | Envoi des nouvelles erreurs vers Telegram | Oui, première apparition seulement, puis résumé quotidien | ✅ Retenu |
+| SV-3 | Surveillance de disponibilité | UptimeRobot toutes les minutes (payant) ; Better Stack à 3 min en alternative | ✅ UptimeRobot toutes les minutes |
+| SV-4 | Réglage de healthchecks.io | Période 2 min, grâce 2 min | ✅ Retenu |
+| SV-5 | Fréquence de `monitoring:check` | Toutes les 2 minutes, charge vérifiée sur le Staging | ✅ Retenu |
+| SV-6 | Alertes de ressources du serveur | Celles de l'hébergeur (D-10) : disque > 80 %, mémoire > 90 % pendant 5 min | ✅ Alertes de l'hébergeur (Hostinger, D-10) si disponibles, sinon contrôle des ressources par healthchecks.io |
+| SV-7 | Environnements suivis | Staging et Production, séparés ; jamais le développement | ✅ Retenu |
+| SV-8 | Conservation des erreurs | Celle de l'offre retenue (14 à 90 jours) ; données personnelles masquées | ✅ Retenu |
+| SV-9 | Budget mensuel maximal | À fixer | ✅ 60 $/mois au plus, alerte à 80 % |
+| SV-10 | Canaux d'alerte | Telegram et e-mail pour tout ; SMS (et WhatsApp en complément) pour les pannes graves, par healthchecks.io et UptimeRobot | ✅ Retenu |
+| SV-11 | Numéros d'astreinte | Ceux de Benginio et de Rubly, enregistrés dans les deux outils | ✅ Retenu |
 
 ## 9. Questions à confirmer
 
@@ -150,7 +150,7 @@ plus les crédits SMS.
 
 | Rôle | Nom | Date | Décision |
 |---|---|---|---|
-| Chef de projet | Rubly PLAISIR | | |
+| Chef de projet | Rubly PLAISIR | 2026-11-16 | ✅ Sentry Team, UptimeRobot 1 min, healthchecks.io, Telegram + e-mail, SMS pour les pannes graves, budget 60 $/mois |
 
 ## Sources (consultées le 13 novembre 2026)
 

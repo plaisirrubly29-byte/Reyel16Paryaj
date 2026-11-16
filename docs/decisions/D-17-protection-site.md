@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-F04 (#192 backend, #193 écrans) — Cloudflare ou équivalent, limites de fréquence globales, protection des formulaires contre les robots |
-| **Statut** | 🟡 À décider — comparatif et recommandation proposés |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-16 — offre gratuite de Cloudflare et données de Turnstile (PSJ-1, PSJ-3) à confirmer par Benginio |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-11-13 |
 | **Dépend de** | V2-F01 (Production, #189), D-10 (hébergeur et DNS), revue P8-02 (B2 proxys de confiance, F12 limite par compte, #259) |
@@ -86,14 +86,14 @@ Coût : **0 $** avec Cloudflare gratuit et Turnstile ; ~20–25 $/mois si Pro de
 
 | # | Question | Proposition | Décision |
 |---|---|---|---|
-| PS-1 | Bouclier réseau | Cloudflare gratuit, Staging puis Production | |
-| PS-2 | DNS du domaine | Géré chez Cloudflare, choisi avant la mise en place de la Production | |
-| PS-3 | Protection contre les robots | Cloudflare Turnstile | |
-| PS-4 | Formulaires protégés | Inscription, mot de passe oublié, connexion après 3 échecs ; envoi d'un code SMS plus tard | |
-| PS-5 | Limite globale des visiteurs | 300 requêtes/min par IP sur toute l'API | |
-| PS-6 | Accès direct au serveur | Refusé par le pare-feu, sauf depuis Cloudflare (et SSH pour le déploiement) | |
-| PS-7 | Si Turnstile est indisponible | Inscription refusée avec un message clair (sécurité d'abord), alerte d'exploitation | |
-| PS-8 | Cloudflare Pro | Non au lancement ; à revoir si une attaque ou un besoin de limite réseau apparaît | |
+| PS-1 | Bouclier réseau | Cloudflare gratuit, Staging puis Production | ✅ Retenu |
+| PS-2 | DNS du domaine | Géré chez Cloudflare, choisi avant la mise en place de la Production | ✅ Retenu |
+| PS-3 | Protection contre les robots | Cloudflare Turnstile | ✅ Retenu |
+| PS-4 | Formulaires protégés | Inscription, mot de passe oublié, connexion après 3 échecs ; envoi d'un code SMS plus tard | ✅ Retenu |
+| PS-5 | Limite globale des visiteurs | 300 requêtes/min par IP sur toute l'API | ✅ Retenu |
+| PS-6 | Accès direct au serveur | Refusé par le pare-feu, sauf depuis Cloudflare (et SSH pour le déploiement) | ✅ Retenu |
+| PS-7 | Si Turnstile est indisponible | Inscription refusée avec un message clair (sécurité d'abord), alerte d'exploitation | ✅ Retenu |
+| PS-8 | Cloudflare Pro | Non au lancement ; à revoir si une attaque ou un besoin de limite réseau apparaît | ✅ Retenu |
 
 ## 8. Questions à confirmer
 
@@ -125,7 +125,7 @@ Coût : **0 $** avec Cloudflare gratuit et Turnstile ; ~20–25 $/mois si Pro de
 
 | Rôle | Nom | Date | Décision |
 |---|---|---|---|
-| Chef de projet | Rubly PLAISIR | | |
+| Chef de projet | Rubly PLAISIR | 2026-11-16 | ✅ Cloudflare gratuit (DNS compris), Turnstile sur inscription, mot de passe oublié et connexion après 3 échecs, 300 requêtes/min par IP |
 
 ## Sources (consultées le 13 novembre 2026)
 
