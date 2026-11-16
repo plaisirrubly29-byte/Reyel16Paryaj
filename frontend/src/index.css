@@ -1,7 +1,7 @@
 /* Design REYEL 16 PARYAJ — thème clair uniquement (aucun mode sombre, même si l'appareil en demande un).
    Mise en page des grands sites de paris haïtiens : en-tête blanc (recherche, connexion), barre de navigation bleue,
    colonne des sports à gauche, cartes « Top matchs » sombres, cotes dans des blocs bleu marine avec barre de
-   probabilité, panier sombre à droite, pied de page bleu marine. Typographie Roboto.
+   probabilité, panier sombre à droite, pied de page bleu marine. Typographie Roboto (police d'Android), police du système ailleurs : pas de Google Fonts (V2-E05).
    Couleurs du logo : bleu royal (navigation), rouge (actions, sélection), bleu nuit (panier, pied de page), or (touches). */
 
 :root {
@@ -105,7 +105,12 @@ p { margin: 0; }
 .main-nav a.active::after {
   content: ''; position: absolute; left: 0.95rem; right: 0.95rem; bottom: -0.95rem; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent);
 }
-.nav-live-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #ff3b4f; box-shadow: 0 0 0 0 rgba(255, 59, 79, 0.7); animation: live-pulse 1.6s infinite; }
+.nav-live-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #ff3b4f; }
+.nav-live-dot { position: relative; }
+.nav-live-dot::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(255, 59, 79, 0.7);
+  animation: dot-ping 1.6s ease-out infinite; will-change: transform, opacity;
+}
 
 /* Recherche en pilule */
 .header-search {
@@ -449,8 +454,12 @@ p { margin: 0; }
 .dash-hero .btn-secondary { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.25); color: #fff; gap: 0.4rem; }
 .dash-hero .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
 .dash-updated { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; color: rgba(255, 255, 255, 0.8); }
-.dash-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); animation: dash-pulse 2s infinite; }
-@keyframes dash-pulse { 70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
+.dash-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; }
+.dash-live-dot { position: relative; }
+.dash-live-dot::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(52, 211, 153, 0.6);
+  animation: dot-ping 2s ease-out infinite; will-change: transform, opacity;
+}
 
 .attention { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .attention-item {
@@ -840,7 +849,7 @@ p { margin: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .admin-shell, .admin-sidebar, .kpi, .quick-card { transition: none; }
-  .dash-live-dot { animation: none; }
+  .dash-live-dot::after { animation: none; opacity: 0; }
 }
 
 /* Boutons de la charte : rouge (action principale), bleu (inscription). */
@@ -926,8 +935,12 @@ p { margin: 0; }
   display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.75rem; border-radius: 999px;
   background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.14); font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.88);
 }
-.hero-badge-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #3fd334; animation: hero-pulse 2s infinite; }
-@keyframes hero-pulse { 0% { box-shadow: 0 0 0 0 rgba(63, 211, 52, 0.6); } 70%, 100% { box-shadow: 0 0 0 7px rgba(63, 211, 52, 0); } }
+.hero-badge-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #3fd334; }
+.hero-badge-dot { position: relative; }
+.hero-badge-dot::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(63, 211, 52, 0.6);
+  animation: dot-ping 2s ease-out infinite; will-change: transform, opacity;
+}
 .hero-title { font-size: clamp(1.75rem, 3.2vw, 2.8rem); font-weight: 900; line-height: 1.04; letter-spacing: -0.02em; }
 .hero-title span {
   display: block; background: linear-gradient(90deg, #ff5a6b, #ffc2c9 45%, #8fa8ff); -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -959,7 +972,7 @@ p { margin: 0; }
   min-width: 1.45rem; padding: 0 0.4rem; border-radius: 999px; background: rgba(255, 255, 255, 0.14);
   font-size: 0.72rem; font-weight: 700; line-height: 1.45rem; text-align: center; font-variant-numeric: tabular-nums;
 }
-@media (prefers-reduced-motion: reduce) { .hero-badge-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hero-badge-dot::after { animation: none; opacity: 0; } }
 
 /* Top matchs : en-tête de section (icône, titre, flèches de défilement, « Tout voir ») */
 .top-section { display: flex; flex-direction: column; gap: 1rem; }
@@ -1037,8 +1050,15 @@ p { margin: 0; }
 }
 .match-card-head .kickoff-soon { background: rgba(245, 179, 1, 0.16); border-color: rgba(245, 179, 1, 0.5); color: #ffd56a; }
 .match-card-head .kickoff-live { background: rgba(227, 23, 47, 0.22); border-color: rgba(255, 90, 107, 0.7); color: #ffd6db; }
-.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #ff3b4f; box-shadow: 0 0 0 0 rgba(255, 59, 79, 0.7); animation: live-pulse 1.6s infinite; }
-@keyframes live-pulse { 70% { box-shadow: 0 0 0 7px rgba(255, 59, 79, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 79, 0); } }
+.live-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #ff3b4f; }
+.live-dot { position: relative; }
+.live-dot::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(255, 59, 79, 0.7);
+  animation: dot-ping 1.6s ease-out infinite; will-change: transform, opacity;
+}
+/* Halo des points « en direct » : transform et opacity seulement, aucun redessin de la page (V2-E05). */
+@keyframes dot-ping { from { transform: scale(1); opacity: 1; } 75%, to { transform: scale(2.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .live-dot::after, .nav-live-dot::after, .hero-badge-dot::after, .dash-live-dot::after { animation: none; opacity: 0; } }
 
 /* Face-à-face : écusson, nom (2 lignes au plus), « VS » et compte à rebours */
 .match-card-teams { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 0.4rem; text-align: center; }
@@ -1110,7 +1130,7 @@ a.match-card-teams:hover .team-name { text-decoration: underline; text-underline
 @media (prefers-reduced-motion: reduce) {
   .match-card, .match-card::after, .odds-btn-card { transition: none; }
   .match-card:hover { transform: none; }
-  .live-dot { animation: none; }
+  .live-dot::after { animation: none; opacity: 0; }
 }
 
 /* Équipes */
@@ -2566,3 +2586,27 @@ a.match-line-teams:hover { color: var(--brand); }
   .referral-stats dd { font-size: 1rem; }
   .referral-code strong { font-size: 1.15rem; letter-spacing: 0.08em; }
 }
+
+/* Installer l'application (V2-E05) : proposé en haut du menu mobile quand le navigateur le permet */
+.install-app {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.7rem 0.85rem; border: 0; border-radius: 14px;
+  cursor: pointer; font: inherit; text-align: left; color: #fff; background: linear-gradient(120deg, var(--navy), #1f3fd6);
+}
+.install-app > span { display: flex; flex-direction: column; }
+.install-app > span > span { font-size: 0.78rem; color: rgba(255, 255, 255, 0.75); }
+
+/* Site léger (V2-E05) : places réservées pendant le chargement, pour que la page ne saute pas quand les données arrivent. */
+.top-section-placeholder {
+  min-height: 411px; border-radius: 18px;
+  background: linear-gradient(100deg, rgba(11, 24, 71, 0.06) 30%, rgba(11, 24, 71, 0.12) 50%, rgba(11, 24, 71, 0.06) 70%);
+  animation: placeholder-pulse 1.2s ease-in-out infinite alternate; will-change: opacity;
+}
+.board .table-state { min-height: 60vh; }
+@keyframes placeholder-pulse { from { opacity: 0.55; } to { opacity: 1; } }
+@media (max-width: 560px) { .top-section-placeholder { min-height: 209px; border-radius: 16px; } }
+@media (prefers-reduced-motion: reduce) { .top-section-placeholder { animation: none; } }
+
+/* Site léger (V2-E05) : les lignes de match et le pied de page hors de l'écran ne sont mis en page qu'à l'approche du
+   défilement ; hauteur estimée réservée (« auto » garde ensuite la hauteur réelle mesurée). */
+.match-line { content-visibility: auto; contain-intrinsic-size: auto 150px; }
+.site-footer { content-visibility: auto; contain-intrinsic-size: auto 640px; }

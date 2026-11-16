@@ -79,7 +79,7 @@ describe('jeux virtuels activés (VITE_VIRTUAL_GAMES=true)', () => {
     // Football par défaut : les 4 matchs de la prochaine journée, chacun avec ses cotes 1, X, 2.
     const upcoming = screen.getByRole('region', { name: 'Prochaines épreuves' });
     const first = findEvent(MATCH, new Date(START - 60_000))!;
-    const link = within(upcoming).getAllByRole('link').find((a) => a.getAttribute('href') === `/jeux-virtuels/${MATCH}`);
+    const link = (await within(upcoming).findAllByRole('link')).find((a) => a.getAttribute('href') === `/jeux-virtuels/${MATCH}`);
     expect(link).toHaveTextContent(`${first.home_team} – ${first.away_team}`);
     expect(link).toHaveTextContent(first.markets[0].selections[0].odds);
     expect(within(upcoming).getAllByText('Départ dans 01:00').length).toBeGreaterThan(0);

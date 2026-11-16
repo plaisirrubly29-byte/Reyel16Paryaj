@@ -24,7 +24,10 @@ export function TopMatches({ count = 8 }: { count?: number }) {
   const listRef = useRef<HTMLUListElement>(null);
   const list = events.data?.data ?? [];
 
-  if (live || list.length === 0) return null;
+  if (live) return null;
+  // Pendant le chargement : place réservée à la hauteur du bloc, pour que la liste en dessous ne saute pas (V2-E05).
+  if (events.isPending) return <div className="top-section top-section-placeholder" aria-hidden="true" />;
+  if (list.length === 0) return null;
 
   function scroll(direction: 1 | -1) {
     const el = listRef.current;

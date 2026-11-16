@@ -1,0 +1,25 @@
+{
+  "name": "REYEL 16 PARYAJ — Paris sportifs",
+  "short_name": "Reyel16",
+  "description": "Paris sportifs sur le football, le basketball et le baseball, borlette et jeux.",
+  "lang": "fr",
+  "dir": "ltr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060d2b",
+  "theme_color": "#0b1847",
+  "categories": ["sports", "entertainment"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Live", "url": "./sports?tab=live", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mes paris", "url": "./bets", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Solde", "url": "./wallet", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -6,6 +6,7 @@ import { CompetitionsBrowser } from '../../features/catalogue/components/Competi
 import { useLotteryAvailable } from '../../features/lottery/api/lottery';
 import { virtualGamesEnabled } from '../../features/virtual/api/virtualGames';
 import { Icon, type IconName } from '../../shared/components/Icon';
+import { useInstallPrompt } from '../pwa';
 
 type Game = { key: string; label: string; hint: string; icon: IconName; to?: string };
 
@@ -75,11 +76,23 @@ function SheetTab({ id, label, icon, title, className, children }: {
   );
 }
 
+/** Installer REYEL 16 PARYAJ comme une application (Chrome sur Android) ; rien quand le navigateur ne le propose pas. */
+function InstallAppButton() {
+  const install = useInstallPrompt();
+  if (!install) return null;
+  return (
+    <button type="button" className="install-app" onClick={() => { void install(); }}>
+      <Icon name="phone" size={20} />
+      <span><strong>Installer l'application</strong><span>Accès direct depuis l'écran d'accueil, plus rapide</span></span>
+    </button>
+  );
+}
+
 /** Onglet « Menu » : championnats par sport et recherche (contenu du trophée de l'en-tête sur ordinateur). */
 export function MenuTab() {
   return (
     <SheetTab id="main-menu" label="Menu" icon="menu" title="Championnats" className="menu-sheet">
-      {() => <div className="menu-sheet-body"><CompetitionsBrowser /></div>}
+      {() => <div className="menu-sheet-body"><InstallAppButton /><CompetitionsBrowser /></div>}
     </SheetTab>
   );
 }

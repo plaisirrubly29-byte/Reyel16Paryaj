@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BRAND_LOGO_URL } from '../../../app/layouts/BrandLogo';
+import { BRAND_LOGO_SMALL_URL } from '../../../app/layouts/BrandLogo';
 import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
 import { useLotteryDraws } from '../../lottery/api/lottery';
@@ -20,7 +20,9 @@ export function HomePage() {
     <>
       <h1 className="sr-only">REYEL 16 PARYAJ — paris sportifs</h1>
 
-      <BettingBoard title="Tous les matchs" perPage={50} paginate>
+      {/* 20 matchs sur l'accueil (V2-E05) : moins d'éléments à construire sur un téléphone d'entrée de gamme ; les autres
+          sont sur les pages suivantes. */}
+      <BettingBoard title="Tous les matchs" perPage={20} paginate>
         <section className="hero" aria-label="Bienvenue">
           <div className="hero-main">
             <div className="hero-text">
@@ -32,7 +34,8 @@ export function HomePage() {
                 <li><Icon name="shield" size={14} />Pi sekirite</li>
               </ul>
             </div>
-            <img className="hero-logo" src={BRAND_LOGO_URL} alt="" width={151} height={190} />
+            {/* Plus grand élément visible de l'accueil : chargé en priorité (V2-E05). */}
+            <img className="hero-logo" src={BRAND_LOGO_SMALL_URL} alt="" width={151} height={190} fetchPriority="high" />
           </div>
           {(sports.length > 0 || draws.length > 0) && (
             <nav className="hero-sports" aria-label="Sports disponibles">

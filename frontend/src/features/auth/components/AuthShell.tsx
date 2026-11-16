@@ -29,7 +29,7 @@ export function AuthShell({ title, subtitle, icon, children, visual = { heading:
       <div className="auth-shell">
         <aside className="auth-visual" aria-hidden="true">
           <div className="auth-visual-brand">
-            <BrandLogo />
+            <BrandLogo large />
           </div>
           <div>
             <h2 className="auth-visual-heading">{visual.heading}</h2>
