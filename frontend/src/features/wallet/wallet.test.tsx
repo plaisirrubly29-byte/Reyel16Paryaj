@@ -132,7 +132,7 @@ describe('espace joueur', () => {
     ]);
     // Fidélité et parrainage : « Bientôt » dès que le serveur répond 404 (programmes pas encore ouverts).
     await waitFor(() => expect(within(nav).getAllByText('Bientôt')).toHaveLength(3));
-    expect(screen.getByRole('heading', { name: 'Points de fidélité', level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Points de fidélité', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
   });
 
