@@ -139,10 +139,11 @@ describe('appareils connectés', () => {
     expect(screen.queryByText('Appareil déconnecté.')).not.toBeInTheDocument();
   });
 
-  it('est liée depuis « Mes informations » et réservée au joueur connecté', async () => {
+  it('est liée depuis le menu des rubriques du compte et réservée au joueur connecté', async () => {
     sessionsApi([current]);
     const router = renderApp('/account');
-    await userEvent.click(await screen.findByRole('link', { name: 'Gérer' }));
+    const menu = await screen.findByRole('navigation', { name: 'Rubriques du compte' });
+    await userEvent.click(within(menu).getByRole('link', { name: 'Appareils connectés' }));
     expect(await screen.findByRole('heading', { name: 'Appareils connectés', level: 1 })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/devices');
   });
