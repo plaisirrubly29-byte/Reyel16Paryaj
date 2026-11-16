@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-G01 (débloque #226 backend, #227 écrans) et V2-G02 (#228 commissions, #229 écrans) |
-| **Statut** | 🟡 À décider — options et recommandation proposées |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-16 — option A (parrain-apporteur) ; taux et seuil AG-13 à fixer avant la mise en service, questions juridiques AGJ-1 à AGJ-4 en attente |
 | **Décideur** | Rubly PLAISIR (chef de projet) ; avis écrit d'un conseil juridique pour les options qui font manier de l'argent à l'agent |
 | **Préparé le** | 2026-11-11 |
 | **Dépend de** | D-01/D-09 (cadre juridique, KYC), D-06 (devise, plafonds), D-07 (rôles admin), D-08 (paiements), V2-G03 (rôle « Gestion des agents », #230) |
@@ -58,21 +58,21 @@ Les trois options ne s'excluent pas : on peut commencer par l'une et ajouter les
 
 | # | Question | Proposition | Décision |
 |---|---|---|---|
-| AG-1 | Rôle de l'agent au lancement | Option A (parrain) seule | |
-| AG-2 | Un agent est-il une personne, un commerce, ou les deux ? | Les deux : type `individual` ou `business` | |
-| AG-3 | Comment l'agent se connecte-t-il ? | Compte à part, ni joueur ni admin, avec MFA obligatoire ; un agent ne peut pas parier depuis ce compte | |
-| AG-4 | Rattachement d'un joueur | Par le code de l'agent saisi à l'inscription, ou par un admin « Gestion des agents » avec motif ; un seul agent par joueur ; changement uniquement par un admin avec motif audité | |
-| AG-5 | Durée du rattachement | Commissions versées pendant 12 mois après l'inscription du joueur (configurable) | |
-| AG-6 | Portefeuille de l'agent | Portefeuille de commissions seulement (option A), alimenté par des écritures du ledger ; pas de float | |
-| AG-7 | Comment l'agent touche ses commissions | Demande de retrait de commissions, validée par la Finance (comme un retrait joueur, B03) ; en V1, montants fictifs | |
-| AG-8 | Documents exigés | Personne : pièce d'identité, NIF, justificatif d'adresse, contrat d'agent signé. Commerce : en plus patente ou enregistrement, NIF de l'entreprise, pièce du représentant | |
-| AG-9 | Statuts | `pending` (documents en revue) → `active` → `suspended` (motif) → `active` ou `terminated` ; seul un agent `active` touche des commissions | |
-| AG-10 | Qui crée et valide un agent | Création par « Gestion des agents » ; validation des documents par la Conformité (deux personnes différentes) | |
-| AG-11 | Base des commissions (V2-G02) | Pourcentage du **revenu net** des joueurs rattachés (mises − gains − bonus) par mois ; jamais négatif d'un mois sur l'autre. Autres bases possibles : mises, dépôts | |
-| AG-12 | Taux | Un taux par produit (paris sportifs, borlette, jeux virtuels), versionné ; hausse en double validation (#228) | |
-| AG-13 | Seuil commercial de 3 000 USD | Seuil d'activité mensuelle (en HTG, converti au taux fixé dans les paramètres) en dessous duquel aucune commission n'est versée, ou au-dessus duquel le taux augmente ? À préciser | |
-| AG-14 | Ce que voit l'agent | Ses joueurs rattachés sous forme anonymisée (identifiant court, date d'inscription, activité agrégée), jamais leurs coordonnées ni le détail de leurs paris | |
-| AG-15 | Réclamations | Un joueur peut lier une réclamation à son agent (V2-G04) ; l'agent ne voit pas ces réclamations | |
+| AG-1 | Rôle de l'agent au lancement | Option A (parrain) seule | ✅ Retenu |
+| AG-2 | Un agent est-il une personne, un commerce, ou les deux ? | Les deux : type `individual` ou `business` | ✅ Retenu |
+| AG-3 | Comment l'agent se connecte-t-il ? | Compte à part, ni joueur ni admin, avec MFA obligatoire ; un agent ne peut pas parier depuis ce compte | ✅ Retenu |
+| AG-4 | Rattachement d'un joueur | Par le code de l'agent saisi à l'inscription, ou par un admin « Gestion des agents » avec motif ; un seul agent par joueur ; changement uniquement par un admin avec motif audité | ✅ Retenu |
+| AG-5 | Durée du rattachement | Commissions versées pendant 12 mois après l'inscription du joueur (configurable) | ✅ Retenu |
+| AG-6 | Portefeuille de l'agent | Portefeuille de commissions seulement (option A), alimenté par des écritures du ledger ; pas de float | ✅ Retenu |
+| AG-7 | Comment l'agent touche ses commissions | Demande de retrait de commissions, validée par la Finance (comme un retrait joueur, B03) ; en V1, montants fictifs | ✅ Retenu |
+| AG-8 | Documents exigés | Personne : pièce d'identité, NIF, justificatif d'adresse, contrat d'agent signé. Commerce : en plus patente ou enregistrement, NIF de l'entreprise, pièce du représentant | ✅ Retenu |
+| AG-9 | Statuts | `pending` (documents en revue) → `active` → `suspended` (motif) → `active` ou `terminated` ; seul un agent `active` touche des commissions | ✅ Retenu |
+| AG-10 | Qui crée et valide un agent | Création par « Gestion des agents » ; validation des documents par la Conformité (deux personnes différentes) | ✅ Retenu |
+| AG-11 | Base des commissions (V2-G02) | Pourcentage du **revenu net** des joueurs rattachés (mises − gains − bonus) par mois ; jamais négatif d'un mois sur l'autre. Autres bases possibles : mises, dépôts | ✅ Retenu |
+| AG-12 | Taux | Un taux par produit (paris sportifs, borlette, jeux virtuels), versionné ; hausse en double validation (#228) | ✅ Retenu |
+| AG-13 | Seuil commercial de 3 000 USD | Seuil d'activité mensuelle (en HTG, converti au taux fixé dans les paramètres) en dessous duquel aucune commission n'est versée, ou au-dessus duquel le taux augmente ? À préciser | À fixer avec les taux, avant la mise en service |
+| AG-14 | Ce que voit l'agent | Ses joueurs rattachés sous forme anonymisée (identifiant court, date d'inscription, activité agrégée), jamais leurs coordonnées ni le détail de leurs paris | ✅ Retenu |
+| AG-15 | Réclamations | Un joueur peut lier une réclamation à son agent (V2-G04) ; l'agent ne voit pas ces réclamations | ✅ Retenu |
 
 ## 6. Questions au conseil juridique
 
@@ -105,4 +105,4 @@ Les trois options ne s'excluent pas : on peut commencer par l'une et ajouter les
 
 | Rôle | Nom | Date | Décision |
 |---|---|---|---|
-| Chef de projet | Rubly PLAISIR | | |
+| Chef de projet | Rubly PLAISIR | 2026-11-16 | ✅ Option A (parrain-apporteur), commission sur le revenu net pendant 12 mois ; taux et AG-13 à fixer |

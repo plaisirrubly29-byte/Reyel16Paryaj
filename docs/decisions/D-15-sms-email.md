@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-C01 (#150 code SMS), V2-C02 (#152 vrais e-mails) ; débloque V2-E04 (#182 notifications) |
-| **Statut** | 🟡 À décider — comparatif et recommandation proposés |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-16 — prix (SEJ-2, SEJ-3) et règles du CONATEL (SEJ-1) à confirmer par Benginio avant la commande |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-11-13 |
 | **Dépend de** | D-01/D-09 (données personnelles, J-9), D-10 (hébergeur : choix de l'e-mail selon le fournisseur retenu) |
@@ -101,15 +101,15 @@ Dans tous les cas : domaine d'envoi authentifié (SPF, DKIM, DMARC) ; adresse d'
 
 | # | Question | Proposition | Décision |
 |---|---|---|---|
-| SE-1 | Prestataire des codes de vérification | Twilio (Verify : WhatsApp puis SMS) ; Infobip en alternative | |
-| SE-2 | WhatsApp pour les codes | Oui, en premier, avec SMS en secours | |
-| SE-3 | Nom d'expéditeur SMS | « REYEL16 », enregistré auprès du CONATEL | |
-| SE-4 | Prestataire e-mail | Amazon SES si hébergeur AWS, sinon Postmark ; Resend en Staging | |
-| SE-5 | Domaine et adresse d'envoi | `no-reply@<domaine de Production>`, SPF, DKIM et DMARC | |
-| SE-6 | Limites d'envoi des codes | 3 envois par numéro par heure, 10 par jour ; 60 s entre deux renvois ; 20 par IP par heure | |
-| SE-7 | Durée de validité d'un code | 10 minutes, 5 essais au plus | |
-| SE-8 | Notifications par SMS (V2-E04) | Au choix du joueur, seulement retrait payé et KYC refusé | |
-| SE-9 | Budget mensuel maximal SMS et WhatsApp | À fixer ; alerte d'exploitation à 80 % | |
+| SE-1 | Prestataire des codes de vérification | Twilio (Verify : WhatsApp puis SMS) ; Infobip en alternative | ✅ Twilio (Verify) |
+| SE-2 | WhatsApp pour les codes | Oui, en premier, avec SMS en secours | ✅ Retenu |
+| SE-3 | Nom d'expéditeur SMS | « REYEL16 », enregistré auprès du CONATEL | ✅ Retenu |
+| SE-4 | Prestataire e-mail | Amazon SES si hébergeur AWS, sinon Postmark ; Resend en Staging | ✅ Postmark (hébergeur retenu : Hostinger, pas AWS) ; Resend en Staging |
+| SE-5 | Domaine et adresse d'envoi | `no-reply@<domaine de Production>`, SPF, DKIM et DMARC | ✅ Retenu |
+| SE-6 | Limites d'envoi des codes | 3 envois par numéro par heure, 10 par jour ; 60 s entre deux renvois ; 20 par IP par heure | ✅ Retenu |
+| SE-7 | Durée de validité d'un code | 10 minutes, 5 essais au plus | ✅ Retenu |
+| SE-8 | Notifications par SMS (V2-E04) | Au choix du joueur, seulement retrait payé et KYC refusé | ✅ Retenu |
+| SE-9 | Budget mensuel maximal SMS et WhatsApp | À fixer ; alerte d'exploitation à 80 % | ✅ 100 $/mois au plus, alerte à 80 % |
 
 ## 9. Questions à confirmer auprès des prestataires et du CONATEL
 
@@ -143,7 +143,7 @@ Dans tous les cas : domaine d'envoi authentifié (SPF, DKIM, DMARC) ; adresse d'
 
 | Rôle | Nom | Date | Décision |
 |---|---|---|---|
-| Chef de projet | Rubly PLAISIR | | |
+| Chef de projet | Rubly PLAISIR | 2026-11-16 | ✅ Twilio Verify (WhatsApp puis SMS), « REYEL16 », Postmark, budget 100 $/mois |
 
 ## Sources (consultées le 13 novembre 2026)
 

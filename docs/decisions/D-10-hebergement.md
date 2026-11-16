@@ -3,10 +3,14 @@
 | | |
 |---|---|
 | **Tâche** | P0-07 (débloque P1-06 Staging, P8-04 sauvegardes, P9-02 monitoring) |
-| **Statut** | ⏸ Reportée (2026-10-30) — la proposition s'applique au Staging et à la démo ; à valider avant la production |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-16 — Production chez **Hostinger** (option A), à revoir avant l'argent réel (V2-B04) |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-15 |
 | **Dépend de** | D-01/D-09 question J-9 (les données doivent-elles rester dans le pays ?) |
+
+> **Décision du 2026-11-16** : sans base managée, l'archivage continu (WAL) de PostgreSQL vers Backblaze B2 et le test
+> de restauration à un instant donné sont à la charge de l'équipe (Benginio, V2-F01 et V2-F02). Le choix est revu avant
+> le passage à l'argent réel (V2-B04).
 
 ## 1. Besoin
 
@@ -135,11 +139,11 @@ ne suffit plus.
 
 | # | Question | Proposition | Décision |
 |---|---|---|---|
-| H-1 | Fournisseur | DigitalOcean (Vultr en second choix) ; Hostinger seul si le budget prime, tant que les fonds sont fictifs | |
-| H-2 | Région | New York ; Toronto si J-9 l'exige | |
-| H-3 | Budget mensuel | Jusqu'à 110 $ pour Staging + Production | |
-| H-4 | Titulaire du compte et moyen de paiement | Compte au nom du projet, accès MFA pour 2 personnes | |
-| H-5 | Stockage hors site | Backblaze B2 ou Cloudflare R2 | |
+| H-1 | Fournisseur | DigitalOcean (Vultr en second choix) ; Hostinger seul si le budget prime, tant que les fonds sont fictifs | ✅ **Hostinger** pour la Production aussi (VPS KVM 4, PostgreSQL en conteneur, comme le Staging). À revoir avant l'argent réel : base managée si la restauration fine n'est pas tenue |
+| H-2 | Région | New York ; Toronto si J-9 l'exige | ✅ Centre de données Hostinger d'Amérique du Nord le plus proche d'Haïti, choisi à la commande |
+| H-3 | Budget mensuel | Jusqu'à 110 $ pour Staging + Production | ✅ Jusqu'à 110 $/mois pour Staging + Production (≈ 15–35 $ prévus pour la Production) |
+| H-4 | Titulaire du compte et moyen de paiement | Compte au nom du projet, accès MFA pour 2 personnes | ✅ Retenu |
+| H-5 | Stockage hors site | Backblaze B2 ou Cloudflare R2 | ✅ Backblaze B2 (Cloudflare R2 en second choix), chez un autre fournisseur que l'hébergeur |
 
 Une fois H-1 à H-5 tranchés, le workflow « Deploy Production » (V2-F01, #189) est préparé : déploiement depuis `main`
 avec validation manuelle, secrets séparés du Staging, retour arrière testé.
@@ -148,4 +152,4 @@ avec validation manuelle, secrets séparés du Staging, retour arrière testé.
 
 | Rôle | Nom | Date | Décision |
 |---|---|---|---|
-| Chef de projet | Rubly PLAISIR | | |
+| Chef de projet | Rubly PLAISIR | 2026-11-16 | ✅ Production chez Hostinger ; RPO 15 min tenu par archivage WAL vers le stockage hors site, à installer et tester (V2-F02) |

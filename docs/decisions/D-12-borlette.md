@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-D09 (débloque les issues #234 backend et #235 écrans) |
-| **Statut** | 🟡 À décider — brouillon préparé le 2026-11-08 ; avis juridique, règles et barème à obtenir |
+| **Statut** | 🟡 En attente d'un avis juridique — décision de Rubly PLAISIR du 2026-11-16 : la vente reste fermée ; le code peut être préparé derrière un interrupteur désactivé |
 | **Décideur** | Rubly PLAISIR (chef de projet), sur avis écrit d'un conseil juridique du territoire visé |
 | **Préparé le** | 2026-11-08 |
 | **Dépend de** | D-01/D-09 (cadre juridique), D-06 (devise, mises, plafonds), D-05 (corrections), V2-D05 (plafonds de risque) |
@@ -11,6 +11,10 @@
 > Ce document n'est pas un avis juridique. Il structure la décision et liste les questions à trancher. Aucune règle de
 > jeu, aucun barème de gain et aucune limite n'est fixé ici : les cases vides sont à remplir par écrit avant la
 > moindre vente de ticket.
+
+> **Décision du 2026-11-16** : on attend l'avis d'un juriste sur BL-1 à BL-6 avant toute vente. Benginio peut préparer le
+> code de la vente (V2-D09, contrat déjà écrit) derrière un interrupteur désactivé par défaut, sans le mettre en service,
+> même au Staging.
 
 ## 1. Besoin
 

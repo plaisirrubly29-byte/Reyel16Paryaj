@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-A04 (#140) — décision ; prépare V2-D03 (#167 backend, #168 écrans) |
-| **Statut** | 🟡 À décider — options et recommandation proposées |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-16 — option C, marges du §5, appliquée avec l'argent réel seulement |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-11-13 |
 | **Dépend de** | D-02 (fournisseur de cotes : « pas de marge tant que les fonds sont fictifs »), D-06 (arrondi, plafonds), D-07 (rôles admin), V2-B04 (argent réel, #146) |
@@ -96,17 +96,17 @@ Garde-fous :
 
 | # | Question | Proposition | Décision |
 |---|---|---|---|
-| CO-1 | Méthode de marge | Option C : cote juste (moyenne des bookmakers) + marge de l'opérateur, méthode proportionnelle | |
-| CO-2 | Marges par sport et par marché | Tableau du §5 | |
-| CO-3 | Quand appliquer la marge | Avec l'argent réel seulement (V2-B04) ; cotes du fournisseur telles quelles en fonds fictifs | |
-| CO-4 | Arrondi | 2 décimales vers le bas, minimum 1,01 | |
-| CO-5 | Nombre minimum de bookmakers | 2 ; sinon cote du bookmaker de référence telle quelle | |
-| CO-6 | Plafond | Jamais au-dessus de la meilleure cote des bookmakers suivis | |
-| CO-7 | Rôles pour modifier une cote | Opérations et Super Admin, motif obligatoire | |
-| CO-8 | Seuil de double validation | Écart de plus de ±20 % avec la cote calculée | |
-| CO-9 | Durée d'une cote modifiée | Jusqu'à une date limite ou au début du match | |
-| CO-10 | Qui règle les marges | Super Admin (paramètres versionnés), Opérations en lecture | |
-| CO-11 | Bookmaker de référence | À fixer (aujourd'hui : le premier disponible) | |
+| CO-1 | Méthode de marge | Option C : cote juste (moyenne des bookmakers) + marge de l'opérateur, méthode proportionnelle | ✅ Retenu |
+| CO-2 | Marges par sport et par marché | Tableau du §5 | ✅ Retenu |
+| CO-3 | Quand appliquer la marge | Avec l'argent réel seulement (V2-B04) ; cotes du fournisseur telles quelles en fonds fictifs | ✅ Retenu |
+| CO-4 | Arrondi | 2 décimales vers le bas, minimum 1,01 | ✅ Retenu |
+| CO-5 | Nombre minimum de bookmakers | 2 ; sinon cote du bookmaker de référence telle quelle | ✅ Retenu |
+| CO-6 | Plafond | Jamais au-dessus de la meilleure cote des bookmakers suivis | ✅ Retenu |
+| CO-7 | Rôles pour modifier une cote | Opérations et Super Admin, motif obligatoire | ✅ Retenu |
+| CO-8 | Seuil de double validation | Écart de plus de ±20 % avec la cote calculée | ✅ Retenu |
+| CO-9 | Durée d'une cote modifiée | Jusqu'à une date limite ou au début du match | ✅ Retenu |
+| CO-10 | Qui règle les marges | Super Admin (paramètres versionnés), Opérations en lecture | ✅ Retenu |
+| CO-11 | Bookmaker de référence | À fixer (aujourd'hui : le premier disponible) | Premier bookmaker disponible pour l'instant ; à revoir avec les premières données |
 
 ## 7. Conséquences techniques
 
@@ -130,7 +130,7 @@ Garde-fous :
 
 | Rôle | Nom | Date | Décision |
 |---|---|---|---|
-| Chef de projet | Rubly PLAISIR | | |
+| Chef de projet | Rubly PLAISIR | 2026-11-16 | ✅ Option C, marges du §5 (6 % football 1X2), argent réel seulement ; modification par Opérations ou Super Admin, double validation au-delà de ±20 % |
 
 ## Sources (consultées le 13 novembre 2026)
 
