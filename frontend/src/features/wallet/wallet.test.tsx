@@ -102,9 +102,16 @@ describe('espace joueur', () => {
     renderApp('/wallet');
 
     expect(await screen.findByRole('heading', { name: 'Solde', level: 1 })).toBeInTheDocument();
+    const accountNumber = () => screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Votre numéro de compte : 1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dépôt' }));
     expect(screen.getByRole('heading', { name: 'Dépôt', level: 2 })).toBeInTheDocument();
+    await waitFor(() => expect(accountNumber()).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retrait' }));
     expect(screen.getByRole('heading', { name: 'Retrait', level: 2 })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByText((_, el) => el?.tagName === 'P' && el.textContent === 'Votre numéro de compte : 1')).toHaveLength(2));
+    expect(screen.queryByRole('heading', { name: 'Dépôt', level: 2 })).toBeNull();
+    await waitFor(() => expect(accountNumber()).toBeInTheDocument());
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(await screen.findByText('Dépôt', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('Retrait', { selector: 'strong' })).toBeInTheDocument();

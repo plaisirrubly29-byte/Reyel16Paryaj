@@ -2318,3 +2318,50 @@ a.match-line-teams:hover { color: var(--brand); }
 .pay-choice:has(input:checked) { border-color: var(--brand); background: #eef4fd; color: var(--brand-dark); }
 .pay-choice-moncash:has(input:checked) { border-color: #d6202f; background: #fdecee; color: #a3121f; }
 .pay-choice-natcash:has(input:checked) { border-color: #f08c00; background: #fff4e5; color: #8a4b00; }
+
+/* Solde : boutons « Dépôt » et « Retrait » sous le solde, puis panneau de l'opération (choix MonCash / NatCash, formulaire). */
+.money-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.money-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem; min-height: 3.4rem; padding: 0 1rem;
+  border: 2px solid transparent; border-radius: 14px; cursor: pointer; font: inherit; font-size: 1.05rem; font-weight: 800; color: #fff;
+  box-shadow: 0 6px 16px rgba(11, 26, 74, 0.18); transition: transform 0.12s, box-shadow 0.15s, filter 0.15s;
+}
+.money-action-deposit { background: linear-gradient(160deg, #22b05a, #138a43); }
+.money-action-withdraw { background: linear-gradient(160deg, #1f3fd6, var(--navy)); }
+.money-action:hover { filter: brightness(1.06); }
+.money-action:active { transform: scale(0.98); }
+.money-action:focus-visible { outline: 3px solid var(--accent-ring, rgba(227, 23, 47, 0.35)); outline-offset: 2px; }
+.money-action.active { border-color: #fff; box-shadow: 0 0 0 3px rgba(19, 64, 216, 0.25), 0 8px 20px rgba(11, 26, 74, 0.25); }
+.money-panel { animation: money-panel-in 0.18s ease-out; }
+.money-panel > .money-card { width: 100%; }
+@keyframes money-panel-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .money-panel, .money-action { animation: none; transition: none; } }
+
+.method-picker { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; }
+.method-picker-title { margin: 0; font-weight: 700; font-size: 0.95rem; }
+.method-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.method-tile {
+  --pay: 19, 64, 216;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem; min-height: 6.2rem; padding: 0.8rem;
+  border: 2px solid rgba(var(--pay), 0.35); border-radius: 16px; cursor: pointer; font: inherit; color: rgb(var(--pay));
+  background: linear-gradient(180deg, rgba(var(--pay), 0.08), rgba(var(--pay), 0.02)); transition: border-color 0.15s, transform 0.12s, background 0.15s;
+}
+.method-tile:hover { border-color: rgb(var(--pay)); background: rgba(var(--pay), 0.12); }
+.method-tile:active { transform: scale(0.98); }
+.method-tile:focus-visible { outline: 3px solid rgba(var(--pay), 0.45); outline-offset: 2px; }
+.method-tile-logo {
+  display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 12px; flex: none;
+  background: rgb(var(--pay, 19, 64, 216)); color: #fff; font-weight: 900; font-size: 1.15rem;
+}
+.method-tile-label { font-size: 1.05rem; font-weight: 800; }
+.method-chosen {
+  --pay: 19, 64, 216;
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.55rem 0.75rem; border-radius: 12px;
+  background: rgba(var(--pay), 0.08); border: 1px solid rgba(var(--pay), 0.25);
+}
+.method-chosen .method-tile-logo { width: 2rem; height: 2rem; border-radius: 9px; font-size: 0.9rem; }
+.method-chosen > span:nth-child(2) { flex: 1; min-width: 0; }
+.method-chosen strong { color: rgb(var(--pay)); }
+/* Couleurs des services, après les règles de base des tuiles et du rappel du moyen choisi. */
+.method-tile-moncash { --pay: 214, 32, 47; }
+.method-tile-natcash { --pay: 224, 120, 0; }

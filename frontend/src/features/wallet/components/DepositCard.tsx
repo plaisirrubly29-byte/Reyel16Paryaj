@@ -11,6 +11,7 @@ import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import { KycRequiredAlert } from './KycRequiredAlert';
+import { MethodChosen, MethodPicker, useChosenMethod } from './MethodPicker';
 import {
   DEPOSIT_STATUS_LABELS,
   providerNavigation,
@@ -23,8 +24,8 @@ import {
   type DepositMethod,
 } from '../api/deposits';
 
-/** Identifiant d'un choix de paiement : prestataire et moyen (« plopplop:moncash »). */
-const methodKey = (m: DepositMethod) => `${m.provider}:${m.method ?? ''}`;
+/** Identifiant d'un choix de paiement, gardé dans l'URL (?moyen=moncash) : le moyen, sinon le prestataire. */
+const methodKey = (m: DepositMethod) => m.method ?? m.provider;
 
 const LIMIT_PERIODS: Record<string, string> = { day: 'sur 24 heures', week: 'sur 7 jours', month: 'sur 30 jours' };
 
@@ -105,7 +106,8 @@ function RecentDeposits() {
 }
 
 /**
- * Dépôt en ligne : montant et moyen de paiement, puis confirmation sur la page du prestataire. Sans moyen de
+ * Dépôt en ligne : le joueur choisit MonCash ou NatCash (étape sautée s'il n'y a qu'un moyen), saisit le montant, puis
+ * confirme sur la page du prestataire. Sans moyen de
  * paiement activé, les instructions de dépôt auprès de l'opérateur restent affichées.
  */
 export function DepositCard({ accountId, currency, frozen }: { accountId?: string; currency: string; frozen: boolean }) {
@@ -116,7 +118,7 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
   const returned = params.get('depot') ?? params.get('refference_id');
   const followed = returned && /^pay_[a-z0-9]+$/.test(returned) ? returned : null;
   const [amount, setAmount] = useState('');
-  const [choice, setChoice] = useState<string | null>(null);
+  const [choice, setChoice] = useChosenMethod();
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
 
   const available = methods.data?.methods ?? [];
@@ -137,7 +139,7 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
         onSuccess: (deposit) => {
           setIdempotencyKey(newIdempotencyKey());
           if (deposit.redirect_url) providerNavigation.open(providerPageUrl(deposit.redirect_url));
-          else setParams({ depot: deposit.reference }, { replace: true });
+          else setParams({ operation: 'depot', depot: deposit.reference }, { replace: true });
         },
         onError: (err) => {
           if (err instanceof ApiError && err.status !== 0) setIdempotencyKey(newIdempotencyKey());
@@ -156,7 +158,7 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
         </div>
       </header>
       <div className="money-card-body">
-        {followed && <DepositFollowUp reference={followed} onClose={() => setParams({}, { replace: true })} />}
+        {followed && <DepositFollowUp reference={followed} onClose={() => setParams({ operation: 'depot' }, { replace: true })} />}
 
         {methods.isPending && <Spinner />}
         <ErrorAlert error={methods.error} onRetry={() => methods.refetch()} />
@@ -170,8 +172,19 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
 
         {methods.data && available.length > 0 && (frozen ? (
           <p className="muted small">Les dépôts sont indisponibles tant que votre solde est gelé.</p>
+        ) : chosen === null ? (
+          <MethodPicker
+            title="Déposer avec"
+            options={available.map((m) => ({ key: methodKey(m), label: m.label }))}
+            onPick={setChoice}
+          />
         ) : (
           <form className="deposit-form stack-sm" onSubmit={submit} noValidate>
+            <MethodChosen
+              option={{ key: methodKey(chosen), label: chosen.label }}
+              verb="Dépôt avec"
+              onChange={available.length > 1 ? () => setChoice(null) : undefined}
+            />
             {error?.code === 'deposit_limit_exceeded'
               ? <DepositLimitRefusal error={error} currency={currency} />
               : error?.code === 'kyc_required'
@@ -196,23 +209,11 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
               ))}
             </div>
 
-            {available.length > 1 && (
-              <fieldset className="pay-choices">
-                <legend>Payer avec</legend>
-                {available.map((m) => (
-                  <label key={methodKey(m)} className={['pay-choice', m.method && `pay-choice-${m.method}`].filter(Boolean).join(' ')}>
-                    <input type="radio" name="deposit-method" value={methodKey(m)} checked={chosen === m} onChange={() => setChoice(methodKey(m))} />
-                    <span>{m.label}</span>
-                  </label>
-                ))}
-              </fieldset>
-            )}
-
-            <Button type="submit" block loading={start.isPending} disabled={amountMinor === null || amountMinor === 0n || outOfBounds || chosen === null}>
-              {chosen ? `Déposer avec ${chosen.label}` : `Choisissez ${available.map((m) => m.label).join(' ou ')}`}
+            <Button type="submit" block loading={start.isPending} disabled={amountMinor === null || amountMinor === 0n || outOfBounds}>
+              Déposer avec {chosen.label}
             </Button>
             <p className="muted small">
-              Vous confirmerez le paiement sur la page {chosen ? `de ${chosen.label}` : 'de votre opérateur'}. Votre solde est crédité dès sa confirmation.
+              Vous confirmerez le paiement sur la page de {chosen.label}. Votre solde est crédité dès sa confirmation.
             </p>
           </form>
         ))}

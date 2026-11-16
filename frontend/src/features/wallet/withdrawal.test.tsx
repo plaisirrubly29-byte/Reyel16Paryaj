@@ -38,12 +38,36 @@ const base = {
 
 const card = () => screen.getByRole('region', { name: 'Retrait' });
 
+/** Bouton « Retrait » sous le solde, puis le portefeuille choisi (si donné). */
+async function openWithdrawal(method?: string) {
+  await userEvent.click(await screen.findByRole('button', { name: 'Retrait' }));
+  if (method) await userEvent.click(await screen.findByRole('button', { name: method }));
+}
+
 describe('retrait en ligne', () => {
+  it('Retrait ouvre le choix MonCash ou NatCash, puis le formulaire du portefeuille choisi', async () => {
+    const fetchMock = mockApi({ ...base, 'POST /payments/withdrawals': { status: 201, body: { data: withdrawal('requested', { method: 'natcash', method_label: 'NatCash' }) } } });
+    renderApp('/wallet');
+    await openWithdrawal();
+
+    const picker = await screen.findByRole('group', { name: 'Recevoir sur' });
+    expect(screen.queryByLabelText('Montant du retrait')).toBeNull();
+    await userEvent.click(within(picker).getByRole('button', { name: 'NatCash' }));
+    await userEvent.type(screen.getByLabelText('Montant du retrait'), '400');
+    expect(screen.getByLabelText('Numéro NatCash')).toHaveValue('34123456');
+    await userEvent.click(screen.getByRole('button', { name: 'Demander le retrait' }));
+
+    await screen.findByText('Retrait demandé');
+    const post = fetchMock.mock.calls.find(([u, init]) => String(u).endsWith('/payments/withdrawals') && init?.method === 'POST')!;
+    expect(JSON.parse(String(post[1]!.body))).toMatchObject({ method: 'natcash', amount_minor: 40000 });
+  });
+
   it('demande un retrait vers MonCash avec le numéro du compte, et le montant est réservé', async () => {
     const fetchMock = mockApi({ ...base, 'POST /payments/withdrawals': { status: 201, body: { data: withdrawal('requested') } } });
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
-    const phone = await screen.findByLabelText('Numéro du portefeuille');
+    const phone = await screen.findByLabelText('Numéro MonCash');
     expect(phone).toHaveValue('34123456'); // prérempli avec le téléphone du compte
     await userEvent.type(screen.getByLabelText('Montant du retrait'), '400');
     await userEvent.click(screen.getByRole('button', { name: 'Demander le retrait' }));
@@ -58,12 +82,13 @@ describe('retrait en ligne', () => {
   it('refuse avant tout appel un montant supérieur au solde ou un numéro invalide', async () => {
     const fetchMock = mockApi(base);
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
     await userEvent.type(await screen.findByLabelText('Montant du retrait'), '1500');
     expect(within(card()).getByText('Ce montant dépasse votre solde disponible.')).toBeInTheDocument();
 
-    await userEvent.clear(screen.getByLabelText('Numéro du portefeuille'));
-    await userEvent.type(screen.getByLabelText('Numéro du portefeuille'), '1234');
+    await userEvent.clear(screen.getByLabelText('Numéro MonCash'));
+    await userEvent.type(screen.getByLabelText('Numéro MonCash'), '1234');
     expect(within(card()).getByText('Indiquez un numéro haïtien à 8 chiffres.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Demander le retrait' })).toBeDisabled();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
@@ -77,6 +102,7 @@ describe('retrait en ligne', () => {
       'POST /payments/withdrawals/pay_01abc/cancel': () => { cancelled = true; return { status: 200, body: { data: withdrawal('cancelled') } }; },
     });
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
     await screen.findByRole('region', { name: 'Retrait' });
     expect(await within(card()).findByText(/En attente de versement/)).toBeInTheDocument();
@@ -95,6 +121,7 @@ describe('retrait en ligne', () => {
       'POST /payments/withdrawals': { status: 422, body: { error: { code: 'withdrawal_daily_limit_exceeded', message: 'Plafond.', details: { limit_minor: 100_000_00, remaining_minor: 200_00 } } } },
     });
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
     await userEvent.type(await screen.findByLabelText('Montant du retrait'), '400');
     await userEvent.click(screen.getByRole('button', { name: 'Demander le retrait' }));
@@ -113,6 +140,7 @@ describe('retrait en ligne', () => {
       'POST /payments/withdrawals': { status: 422, body: { error: { code: 'kyc_required', message: 'KYC.', details: { kyc_status: status } } } },
     });
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
     await userEvent.type(await screen.findByLabelText('Montant du retrait'), '400');
     await userEvent.click(screen.getByRole('button', { name: 'Demander le retrait' }));
@@ -132,9 +160,10 @@ describe('retrait en ligne', () => {
       'POST /payments/withdrawals': () => { state = 'requested'; return { status: 201, body: { data: withdrawal('requested', { recipient: '****0000' }) } }; },
     });
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
-    await userEvent.clear(await screen.findByLabelText('Numéro du portefeuille'));
-    await userEvent.type(screen.getByLabelText('Numéro du portefeuille'), '34120000');
+    await userEvent.clear(await screen.findByLabelText('Numéro MonCash'));
+    await userEvent.type(screen.getByLabelText('Numéro MonCash'), '34120000');
     await userEvent.type(screen.getByLabelText('Montant du retrait'), '400');
     await userEvent.click(screen.getByRole('button', { name: 'Demander le retrait' }));
     expect(await screen.findByText('Retrait demandé')).toBeInTheDocument();
@@ -153,6 +182,7 @@ describe('retrait en ligne', () => {
   it('un seul retrait à la fois : le formulaire attend la fin du retrait en cours', async () => {
     mockApi({ ...base, 'GET /payments/withdrawals': { status: 200, body: page([withdrawal('processing')]) } });
     renderApp('/wallet');
+    await openWithdrawal('MonCash');
 
     const banner = await screen.findByText('Retrait en cours');
     expect(clean(banner.closest('.alert'))).toContain('Votre retrait de 400,00 HTG est en cours');
@@ -165,6 +195,7 @@ describe('retrait en ligne', () => {
   it("garde les instructions de retrait auprès de l'opérateur quand les retraits en ligne sont fermés", async () => {
     mockApi({ ...base, 'GET /payments/methods': methods(false) });
     renderApp('/wallet');
+    await openWithdrawal();
 
     await screen.findByRole('region', { name: 'Retrait' });
     expect(await within(card()).findByText(/Demandez votre retrait auprès de REYEL 16 PARYAJ/)).toBeInTheDocument();

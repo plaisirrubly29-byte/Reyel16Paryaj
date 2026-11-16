@@ -12,6 +12,7 @@ import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import { useDepositMethods } from '../api/deposits';
 import { WITHDRAWAL_STATUS_LABELS, isInProgress, useCancelWithdrawal, useRequestWithdrawal, useWithdrawals, type Withdrawal } from '../api/withdrawals';
 import { KycRequiredAlert } from './KycRequiredAlert';
+import { MethodChosen, MethodPicker, useChosenMethod } from './MethodPicker';
 
 /** Saisie « +509 3412-3456 », « 3412 3456 »… → « 34123456 » ; null si ce n'est pas un numéro haïtien à 8 chiffres. */
 function localNumber(value: string): string | null {
@@ -82,13 +83,14 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
   const withdrawals = useWithdrawals();
   const request = useRequestWithdrawal();
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<string | null>(null);
+  const [method, setMethod] = useChosenMethod();
   const [number, setNumber] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
 
   const settings = config.data?.withdrawal;
   const open = !!settings?.methods.length;
-  const chosen = settings?.methods.find((m) => m.method === method) ?? settings?.methods[0] ?? null;
+  // Plusieurs portefeuilles (MonCash, NatCash) : le joueur choisit lui-même ; un seul : choisi d'office.
+  const chosen = settings?.methods.find((m) => m.method === method) ?? (settings?.methods.length === 1 ? settings.methods[0]! : null);
   const wallet = number ?? phone ?? '';
   const recipient = localNumber(wallet);
   const phoneValid = recipient !== null;
@@ -135,8 +137,22 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
 
         {open && (frozen ? (
           <p className="muted small">Les retraits sont indisponibles tant que votre solde est gelé.</p>
+        ) : chosen === null ? (
+          <>
+            {pending && (
+              <Alert tone="info" title="Retrait en cours">
+                Votre retrait de <MoneyText value={pending.amount} /> est en cours. Vous pourrez en demander un autre une fois celui-ci terminé.
+              </Alert>
+            )}
+            <MethodPicker title="Recevoir sur" options={settings.methods.map((m) => ({ key: m.method, label: m.label }))} onPick={setMethod} />
+          </>
         ) : (
           <form className="deposit-form stack-sm" onSubmit={submit} noValidate>
+            <MethodChosen
+              option={{ key: chosen.method, label: chosen.label }}
+              verb="Retrait sur"
+              onChange={settings.methods.length > 1 ? () => setMethod(null) : undefined}
+            />
             {latest && <LatestWithdrawal w={latest} />}
             {pending && !latest && (
               <Alert tone="info" title="Retrait en cours">
@@ -154,20 +170,8 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
               <KycRequiredAlert error={error} operation="withdrawal" currency={currency} />
             ) : error && error.code !== 'validation_failed' && error.code !== 'withdrawal_already_pending' && <ErrorAlert error={error} />}
 
-            {settings.methods.length > 1 && (
-              <fieldset className="deposit-methods">
-                <legend>Recevoir sur</legend>
-                {settings.methods.map((m) => (
-                  <label key={m.method} className="deposit-method">
-                    <input type="radio" name="withdrawal-method" value={m.method} checked={chosen?.method === m.method} onChange={() => setMethod(m.method)} />
-                    {m.label}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-
             <TextField
-              label="Numéro du portefeuille"
+              label={`Numéro ${chosen.label}`}
               inputMode="tel"
               name="withdrawal-phone"
               autoComplete="tel-national"
