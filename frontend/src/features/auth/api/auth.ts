@@ -44,6 +44,8 @@ export type RegisterInput = {
   /** Case « J'accepte les conditions » cochée (V2-E01), avec la version des textes affichés. */
   terms_accepted: true;
   terms_version: string;
+  /** Code du parrain (V2-E07, D-19), saisi à l'inscription seulement. */
+  referral_code?: string;
 };
 
 export type ResetPasswordInput = {

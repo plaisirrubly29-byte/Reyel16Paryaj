@@ -130,7 +130,8 @@ describe('espace joueur', () => {
     expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
       '/wallet', '/bets', '/coupons', '/transactions', '/loyalty', '/referral', '/account', '/verification', '/devices', '/responsible-gaming', '/messages',
     ]);
-    expect(within(nav).getAllByText('Bientôt')).toHaveLength(3);
+    // Fidélité et parrainage : « Bientôt » dès que le serveur répond 404 (programmes pas encore ouverts).
+    await waitFor(() => expect(within(nav).getAllByText('Bientôt')).toHaveLength(3));
     expect(screen.getByRole('heading', { name: 'Points de fidélité', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
   });

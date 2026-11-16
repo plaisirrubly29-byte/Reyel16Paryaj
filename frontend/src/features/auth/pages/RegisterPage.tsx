@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
@@ -13,7 +13,10 @@ import { digitsOnly } from '../phone';
 
 const COUNTRIES = countryOptions().map((c) => ({ value: c.code, label: c.name }));
 
-type Form = Omit<RegisterInput, 'terms_accepted' | 'terms_version'>;
+type Form = Omit<RegisterInput, 'terms_accepted' | 'terms_version' | 'referral_code'>;
+
+/** Code parrain saisi ou reçu par lien : lettres et chiffres en majuscules, 16 caractères au plus. */
+const cleanCode = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
 
 const empty: Form = {
   name: '',
@@ -29,6 +32,9 @@ export function RegisterPage() {
   const register = useRegister();
   const navigate = useNavigate();
   const [form, setForm] = useState<Form>(empty);
+  // Lien de parrainage : …/register?parrain=CODE préremplit le code (le joueur peut le corriger).
+  const [params] = useSearchParams();
+  const [referralCode, setReferralCode] = useState(() => cleanCode(params.get('parrain') ?? ''));
   const [accepted, setAccepted] = useState(false);
   const [mustAccept, setMustAccept] = useState(false);
   const termsId = useId();
@@ -48,7 +54,8 @@ export function RegisterPage() {
     const { email, ...rest } = form;
     const terms = { terms_accepted: true as const, terms_version: LEGAL_VERSION };
     // L'âge minimum et la politique de mot de passe sont vérifiés par le serveur.
-    register.mutate({ ...(email ? form : rest), ...terms }, { onSuccess: () => navigate('/account', { replace: true }) });
+    const referral = referralCode ? { referral_code: referralCode } : {};
+    register.mutate({ ...(email ? form : rest), ...terms, ...referral }, { onSuccess: () => navigate('/account', { replace: true }) });
   }
 
   return (
@@ -143,6 +150,18 @@ export function RegisterPage() {
           required
           value={form.password_confirmation}
           onChange={set('password_confirmation')}
+        />
+        <TextField
+          label="Code parrain (facultatif)"
+          labelHidden
+          name="referral_code"
+          autoComplete="off"
+          icon="gift"
+          placeholder="Code parrain (facultatif)"
+          value={referralCode}
+          onChange={(e) => setReferralCode(cleanCode(e.target.value))}
+          error={fieldErrors.referral_code}
+          hint={referralCode && params.get('parrain') ? 'Vous avez été invité par un joueur REYEL 16 PARYAJ.' : undefined}
         />
         <TermsCheckbox
           id={termsId}

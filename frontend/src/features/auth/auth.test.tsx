@@ -140,6 +140,7 @@ describe('inscription', { timeout: 15_000 }, () => {
     const body = JSON.parse(String(registerCall?.[1]?.body));
     expect(body.phone).toBe('34123456');
     expect(body).not.toHaveProperty('email');
+    expect(body).not.toHaveProperty('referral_code'); // aucun code parrain : rien n'est envoyé
   });
 
   it('propose le pays dans une liste, Haïti par défaut et en tête', async () => {

@@ -23,6 +23,8 @@ tags:
   - name: ResponsibleGaming
   - name: Complaints
     description: Réclamations du joueur (V2-G04)
+  - name: Rewards
+    description: Fidélité, parrainage et bonus (V2-E07, D-19) — 404 tant que les programmes sont désactivés
   - name: Admin
   - name: Payments
 
@@ -79,6 +81,13 @@ paths:
                     V2-E01 : version des textes affichés au joueur (LEGAL_VERSION du frontend, en tête de /conditions).
                     Le serveur enregistre l'acceptation (version, date, IP). Version différente de la version en vigueur
                     côté serveur : 422 (details.terms_version), le joueur recharge la page.
+                referral_code:
+                  type: [string, "null"]
+                  example: RY7K2M9P
+                  description: |
+                    V2-E07 (D-19 §3) : code du parrain, prérempli depuis le lien ?parrain=CODE. Optionnel, saisi à
+                    l'inscription seulement. Code inconnu : 422 (details.referral_code). Ignoré tant que
+                    REFERRAL_ENABLED=false.
       responses:
         "201":
           description: Compte créé, session ouverte
@@ -323,6 +332,93 @@ paths:
           description: validation_failed ; kyc_back_required ; kyc_not_for_admins
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "429": { description: Trop d'envois }
+  /me/loyalty:
+    get:
+      tags: [Rewards]
+      summary: Points de fidélité du joueur connecté (solde, palier, échange, bonus en cours)
+      description: |
+        V2-E07, règles de D-19. 1 point par tranche de 100 HTG misés, crédité au règlement du pari (gagné ou perdu ;
+        pas les paris annulés ou remboursés, ni les mises payées avec le bonus). Palier selon les points gagnés sur
+        12 mois glissants. 404 not_found tant que LOYALTY_ENABLED=false (le frontend affiche alors « Bientôt »).
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LoyaltyState" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/loyalty/history:
+    get:
+      tags: [Rewards]
+      summary: Mouvements de points (gains, échanges, expirations, corrections), le plus récent d'abord
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LoyaltyEntry" } }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/loyalty/redeem:
+    post:
+      tags: [Rewards]
+      summary: Échanger des points contre un bonus
+      description: |
+        V2-E07. points : multiple de exchange.step, au moins exchange.min_points, au plus le solde. Le bonus
+        (points / 100 × taux du palier) va sur le solde bonus, avec conditions de mise (D-19 §4). Renvoie l'état à jour.
+        Compte suspendu ou auto-exclu : 403 account_restricted.
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [points]
+              properties:
+                points: { type: integer, minimum: 1, example: 500 }
+      responses:
+        "200":
+          description: Points échangés
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LoyaltyState" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: account_restricted
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: validation_failed ; loyalty_insufficient_points ; loyalty_below_minimum ; loyalty_invalid_step
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /me/referral:
+    get:
+      tags: [Rewards]
+      summary: Parrainage du joueur connecté (code, lien, règles, filleuls)
+      description: |
+        V2-E07, règles de D-19 §3. Filleul qualifié dans les 30 jours après son inscription : identité vérifiée,
+        dépôt réel ≥ 500 HTG et paris réglés ≥ 500 HTG ; le parrain reçoit alors reward en bonus (20 par mois au plus).
+        Filleul lié au parrain (V2-C05) : status blocked, signalé à la Conformité. Le nom du filleul est masqué.
+        404 not_found tant que REFERRAL_ENABLED=false.
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ReferralState" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /me/sessions:
     get:
       tags: [Auth]
@@ -3341,6 +3437,98 @@ components:
             submitted_at: { type: string, format: date-time }
             decided_at: { type: [string, "null"], format: date-time }
             rejection_reason: { type: [string, "null"], description: Motif du refus ; null sinon }
+    LoyaltyTier:
+      type: object
+      properties:
+        key: { type: string, enum: [bronze, silver, gold, diamond] }
+        label: { type: string, example: Argent }
+        min_points: { type: integer, description: Points gagnés sur 12 mois pour atteindre le palier }
+        rate: { $ref: "#/components/schemas/Money", description: Bonus obtenu pour 100 points à ce palier }
+    BonusTerms:
+      type: object
+      description: Conditions de mise de tout bonus (D-19 §4), affichées au joueur avant qu'il ne l'obtienne.
+      properties:
+        wagering_multiplier: { type: integer, example: 3, description: Montant à miser = multiplicateur × bonus }
+        min_odds: { type: string, example: "1.50" }
+        days: { type: integer, example: 30, description: Délai pour remplir les conditions }
+    BonusWagering:
+      type: object
+      description: Conditions de mise d'un bonus en cours (D-19 §4), à afficher au joueur.
+      properties:
+        amount: { $ref: "#/components/schemas/Money", description: Bonus encore soumis aux conditions }
+        required: { $ref: "#/components/schemas/Money", description: Montant total à miser (3 × le bonus) }
+        wagered: { $ref: "#/components/schemas/Money", description: "Déjà misé et réglé, à la cote minimale ou plus" }
+        min_odds: { type: string, example: "1.50", description: Cote minimale (cote totale pour un combiné) }
+        expires_at: { type: string, format: date-time }
+    LoyaltyState:
+      type: object
+      properties:
+        points: { type: integer, description: Points disponibles }
+        points_12_months: { type: integer, description: Points gagnés sur 12 mois glissants (palier) }
+        tier: { $ref: "#/components/schemas/LoyaltyTier" }
+        next_tier: { oneOf: [{ $ref: "#/components/schemas/LoyaltyTier" }, { type: "null" }], description: null au palier le plus haut }
+        tiers: { type: array, items: { $ref: "#/components/schemas/LoyaltyTier" } }
+        earn_rule:
+          type: object
+          properties:
+            stake_step: { $ref: "#/components/schemas/Money", description: "Mise donnant 1 point (100,00 HTG)" }
+            points_per_step: { type: integer, example: 1 }
+        exchange:
+          type: object
+          properties:
+            min_points: { type: integer, example: 500 }
+            step: { type: integer, example: 100 }
+        points_expiring:
+          type: [object, "null"]
+          description: Prochains points à expirer
+          properties:
+            points: { type: integer }
+            expires_at: { type: string, format: date-time }
+        bonus_balance: { $ref: "#/components/schemas/Money" }
+        wagering: { type: array, items: { $ref: "#/components/schemas/BonusWagering" } }
+        bonus_terms: { $ref: "#/components/schemas/BonusTerms" }
+    LoyaltyEntry:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [earned, redeemed, expired, adjusted] }
+        points: { type: integer, description: "Positif pour un gain, négatif sinon" }
+        label: { type: string, example: "Pari réglé — ticket R16-8F2K" }
+        bonus: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Bonus obtenu (type redeemed) }
+        created_at: { type: string, format: date-time }
+    ReferralState:
+      type: object
+      properties:
+        code: { type: string, example: RY7K2M9P }
+        link: { type: string, format: uri, example: "https://reyel16paryaj.com/register?parrain=RY7K2M9P" }
+        reward: { $ref: "#/components/schemas/Money", description: Bonus versé au parrain par filleul qualifié }
+        eligible: { type: boolean, description: "false : identité du parrain non vérifiée ou compte restreint (récompenses en attente)" }
+        rules:
+          type: object
+          properties:
+            qualify_days: { type: integer, example: 30 }
+            min_deposit: { $ref: "#/components/schemas/Money" }
+            min_stake: { $ref: "#/components/schemas/Money" }
+            monthly_limit: { type: integer, example: 20 }
+        rewarded_this_month: { type: integer }
+        total_rewards: { $ref: "#/components/schemas/Money" }
+        bonus_terms: { $ref: "#/components/schemas/BonusTerms" }
+        referrals:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string, example: "Jean D.", description: Prénom et initiale du nom }
+              joined_at: { type: string, format: date-time }
+              status: { type: string, enum: [pending, qualified, rewarded, expired, blocked] }
+              steps:
+                type: object
+                properties:
+                  kyc: { type: boolean }
+                  deposit: { type: boolean }
+                  stake: { type: boolean }
+              qualify_before: { type: string, format: date-time }
     AdminKycSubmission:
       type: object
       properties:
