@@ -32,7 +32,7 @@ export function ComingSoonPage({ icon, title, promise, features }: Props) {
   );
 }
 
-export const LoyaltyPage = () => (
+export const LoyaltySoon = () => (
   <ComingSoonPage
     icon="star"
     title="Points de fidélité"
@@ -41,7 +41,7 @@ export const LoyaltyPage = () => (
   />
 );
 
-export const ReferralPage = () => (
+export const ReferralSoon = () => (
   <ComingSoonPage
     icon="gift"
     title="Parrainage"
