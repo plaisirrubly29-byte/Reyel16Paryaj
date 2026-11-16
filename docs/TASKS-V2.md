@@ -59,7 +59,7 @@ crédit.
 |---|---|---|---|---|---|---|
 | V2-B01 | Payments Adapter : interface commune, webhooks signés et idempotents, journal des transactions | P1 | Benginio #142 | — | V2-A02 | Webhook rejoué sans double crédit. Signature vérifiée. Tests avec un faux prestataire. |
 | V2-B02 | Dépôt MonCash (et NatCash si retenu) | P1 | Benginio #143 | — | V2-B01 | Dépôt sandbox crédité automatiquement dans le ledger. Échec et expiration gérés. |
-| V2-B03 | Retraits : demande du joueur, validation admin à 4 yeux, versement, statuts | P1 | Benginio #144 | Rubly (écran admin de validation) #145 | V2-B01, V2-C03 | Aucun retrait sans KYC validé. Montant réservé pendant la demande. Annulation possible. Tout est audité. |
+| V2-B03 | Retraits : demande du joueur, validation admin à 4 yeux, versement, statuts | P1 | Benginio #144 | Benginio (écran admin de validation, réattribué le 2026-11-16) #145 | V2-B01, V2-C03 | Aucun retrait sans KYC validé. Montant réservé pendant la demande. Annulation possible. Tout est audité. |
 | V2-B04 | Passer en argent réel : `wallet.simulated=false`, rapprochement automatique prestataire ↔ ledger | P1 | Benginio #146 | — | V2-B02, V2-B03 | Rapport quotidien des écarts. Alerte si écart. Les crédits manuels restent tracés comme corrections. |
 | V2-B05 | Page portefeuille : déposer, retirer, suivre ses transactions | P1 | — | Rubly #147 | V2-B02, V2-B03 | Parcours testés sur téléphone. Messages clairs pour chaque statut. |
 | V2-B06 | Limites de dépôt, quotidienne, hebdomadaire et mensuelle, choisies par le joueur | P1 | Benginio #148 | Rubly (réglage dans l'espace joueur) #149 | V2-B02 | Même règle que les limites de mise : baisse immédiate, hausse après un délai. |
@@ -74,7 +74,7 @@ l'admin.
 | V2-C01 | Vérification du téléphone par code SMS, à l'inscription et au changement de numéro | P1 | Benginio #150 | Rubly (saisie du code) #151 | — | Prestataire SMS branché. Code limité en essais et en durée. Numéro unique. |
 | V2-C02 | Vrais e-mails (prestataire transactionnel) et vérification de l'adresse e-mail | P2 | Benginio #152 | Rubly (écran de confirmation) #153 | — | `MAIL_MAILER` réel en Staging et en Production. Mot de passe oublié reçu. Adresse confirmée. |
 | V2-C03 | KYC : envoi de la pièce d'identité et d'un selfie, revue admin, statut du compte | P1 | Benginio #154 | Rubly (envoi des documents, écran de revue admin) #155 | — | Documents chiffrés et à accès restreint. Seuils configurables. Décision auditée. Retrait bloqué tant que le KYC n'est pas validé. |
-| V2-C04 | AML : règles d'alerte et file de revue admin | P1 | Benginio #156 | Rubly (file d'alertes admin) #157 | V2-B02 | Exemples de règles : gros dépôt, dépôt suivi d'un retrait sans jeu, seuils cumulés. Alertes traitées et auditées. |
+| V2-C04 | AML : règles d'alerte et file de revue admin | P1 | Benginio #156 | Benginio (file d'alertes admin, réattribué le 2026-11-16) #157 | V2-B02 | Exemples de règles : gros dépôt, dépôt suivi d'un retrait sans jeu, seuils cumulés. Alertes traitées et auditées. |
 | V2-C05 | Détection des multi-comptes : même téléphone, appareil ou pièce d'identité | P2 | Benginio #158 | — | V2-C03 | Comptes liés signalés à l'admin. Aucun blocage automatique sans revue. |
 | V2-C06 | Sessions : expiration des jetons Sanctum, déconnexion des autres appareils, limite de fréquence sur `POST /bets` | P1 | Benginio #159 | Rubly (liste des appareils connectés) #160 | — | Expiration configurée. Test de limite de fréquence. Liste des appareils connectés. |
 | V2-C07 | Fermer les 11 points ⏳ de la revue de sécurité P8-02 (F1 à F11) | P1 | Benginio #161 | Rubly (points frontend, ex. F11 coupon sur appareil partagé) #162 | — | Chaque point corrigé ou accepté par écrit dans `docs/security/`. |
@@ -88,12 +88,12 @@ l'admin.
 |---|---|---|---|---|---|---|
 | V2-D01 | Couverture : basketball (NBA), baseball (MLB) et plus de football (Ligue des champions, Liga, Serie A, Ligue 1…) | P1 | Benginio #164 | — | V2-A01 | Chaque sport du menu a des matchs. Un sport sans match n'est pas renvoyé par l'API. Budget de crédits respecté. |
 | V2-D02 | Marchés en plus du 1X2 : plus/moins, double chance, les deux équipes marquent | P2 | Benginio #165 | Rubly (masquer les filtres vides) #166 | V2-A01 | Les filtres DC, +/- et LDEM affichent de vrais marchés, ou sont masqués quand ils sont vides. |
-| V2-D03 | Marge de l'opérateur appliquée aux cotes, et modification manuelle des cotes par l'admin | P2 | Benginio #167 | Rubly (écran admin des cotes) #168 | V2-A04 | Marge configurable. Modification auditée. Cote modifiée signalée dans le catalogue. |
+| V2-D03 | Marge de l'opérateur appliquée aux cotes, et modification manuelle des cotes par l'admin | P2 | Benginio #167 | Benginio (écran admin des cotes, réattribué le 2026-11-16) #168 | V2-A04 | Marge configurable. Modification auditée. Cote modifiée signalée dans le catalogue. |
 | V2-D04 | Saisie manuelle des résultats par l'admin quand le fournisseur échoue, avec règle du temps réglementaire | P1 | Benginio #169 | Rubly (écran admin de saisie) #170 | — | Résultat saisi à 4 yeux puis réglé. Règle du temps réglementaire testée (D-03). |
 | V2-D05 | Risque : plafonds d'engagement par match et par marché, exposition des combinés, limites de mise par joueur | P1 | Benginio #171 | Rubly (écrans admin des plafonds) #172 | — | Pari refusé au-delà du plafond. Combinés inclus dans le pire cas. Limite individuelle posée par l'admin. |
 | V2-D06 | Paris en direct (live) : cotes en direct, délai d'acceptation, suspension sur événement | P3 | Benginio #173 | Rubly (onglet Live, coupon en direct) #174 | V2-A01, V2-D05 | `allow_live` activé seulement après test de charge et budget de crédits validés. |
 | V2-D07 | Cash-out (encaisser avant la fin) | P3 | Benginio #175 | Rubly (bouton et confirmation) #176 | V2-D06 | Montant calculé côté serveur. Cote revérifiée. Ledger cohérent. |
-| V2-D08 | Jeux virtuels : football et courses, par un prestataire tiers (D-11) | P3 | Benginio #208 | Rubly (accueil, épreuve, résultats, « Mes paris ») #209 | D-11, V2-D05 | D-11 validée (avis juridique, prestataire, règles). Mises et gains dans le ledger. Limites de jeu responsable appliquées. |
+| V2-D08 | Jeux virtuels : football et courses, par un prestataire tiers (D-11) | P3 | Rubly (prestataire tiers, après le simulateur) #208 | Rubly (accueil, épreuve, résultats, « Mes paris ») #209 | D-11, V2-D05 | D-11 validée (avis juridique, prestataire, règles). Mises et gains dans le ledger. Limites de jeu responsable appliquées. |
 
 ## Phase E — Expérience joueur
 
@@ -121,11 +121,27 @@ retour arrière.
 | V2-F02 | Sauvegardes hors site chiffrées et test de restauration sur un volume réaliste | P1 | Benginio #190 | — | V2-F01 | Restauration chronométrée et documentée. Alerte si une sauvegarde manque. |
 | V2-F03 | Supervision : uptime externe, suivi des erreurs (Sentry ou équivalent), alertes Telegram en Production | P1 | Benginio #191 | — | V2-F01 | Une panne provoquée déclenche une alerte en moins de 5 minutes. |
 | V2-F04 | Protection du site : Cloudflare ou équivalent, limites de fréquence globales, protection des formulaires contre les robots | P2 | Benginio #192 | Rubly (protection des formulaires) #193 | V2-F01 | Test de limite de fréquence. Inscription protégée contre les robots. |
-| V2-F05 | Tableau de bord métier : inscriptions, dépôts, mises, marge (GGR), joueurs actifs | P2 | Benginio #194 | Rubly (écran admin) #195 | V2-B04 | Chiffres du jour et du mois dans l'admin, cohérents avec le ledger. |
-| V2-F06 | Support client : canal WhatsApp ou tickets, procédure de réclamation et de litige | P2 | — | Rubly #196 | — | Procédure écrite. Lien visible sur le site. Délai de réponse fixé. |
+| V2-F05 | Tableau de bord métier : inscriptions, dépôts, mises, marge (GGR), joueurs actifs | P2 | Benginio #194 | Benginio (écran admin, réattribué le 2026-11-16) #195 | V2-B04 | Chiffres du jour et du mois dans l'admin, cohérents avec le ledger. |
+| V2-F06 | Support client : canal WhatsApp ou tickets, procédure de réclamation et de litige | P2 | Benginio (procédure et canal, réattribué le 2026-11-16) #196 | — | — | Procédure écrite. Lien visible sur le site. Délai de réponse fixé. |
 | V2-F07 | Lancement V2 : bêta fermée en argent réel avec plafonds bas, puis ouverture | P1 | Benginio #197 | Rubly (vérification des parcours) #198 | toutes les P1 | Checklist signée. Bêta avec quelques joueurs invités. Bilan avant ouverture. |
 
 ## Répartition
+
+> **Mise à jour du 2026-11-16 (décision de Rubly)** : **Benginio** prend toutes les tâches d'**administration** restantes
+> (backend et écrans admin) ; **Rubly** garde ce qui touche aux **actions du joueur** sur le site, plus la relecture
+> croisée de sécurité V2-C08.
+>
+> - Réattribuées à Benginio : #145 (B03, validation des retraits), #157 (C04, alertes AML), #168 (D03, écran des
+>   cotes), #179 (E02, messages de l'API), #194 et #195 (F05, tableau de bord métier), #196 (F06, support client),
+>   #227 et #229 (G01, G02, écrans des agents et des commissions), #230 et #231 (G03, rôles admin).
+> - Restent à Rubly : #141 et #180 (langues), #151 (code SMS), #153 (e-mail), #174 (live), #176 (cash-out), #183
+>   (notifications et messagerie), #184 (PWA), #193 (protection des formulaires), #198 (parcours du lancement), #208 et
+>   #209 (jeux virtuels), #233 (réclamations : dépôt par le joueur et traitement admin), #235 (vente de borlette), #237
+>   (casino), #163 (V2-C08).
+> - Fermées comme terminées : #147 (B05), #155 (C03 écrans), #185 (E06 backend), #138 et #143 (A02, B02 : faits avec
+>   Plop Plop, #255, #264, #266, #268).
+>
+> Le tableau ci-dessous est la répartition initiale du 2026-11-02.
 
 | Membre | Rôle en V2 | Tâches | dont seul |
 |---|---|---|---|
