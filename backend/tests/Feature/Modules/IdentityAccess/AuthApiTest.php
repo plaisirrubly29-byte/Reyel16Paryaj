@@ -56,6 +56,31 @@ class AuthApiTest extends TestCase
         $this->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.phone', '34123456');
     }
 
+    public function test_closed_beta_requires_a_valid_invite_code_case_insensitive(): void
+    {
+        config(['identity.invite_codes' => ['BETA2026', 'AMIS']]);
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData())
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'validation_failed')
+            ->assertJsonPath('error.details.invite_code.0', 'Les inscriptions se font sur invitation pendant la bêta : saisissez votre code d\'invitation.');
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData(['invite_code' => 'FAUX']))
+            ->assertStatus(422)
+            ->assertJsonPath('error.details.invite_code.0', 'Ce code d\'invitation n\'est pas valide.');
+        $this->assertDatabaseCount('users', 0);
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData(['invite_code' => ' beta2026 ']))->assertCreated();
+        $this->assertDatabaseHas('users', ['phone' => '34123456']);
+    }
+
+    public function test_open_registration_ignores_the_invite_code_when_no_list_is_set(): void
+    {
+        config(['identity.invite_codes' => []]);
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData(['invite_code' => 'NIMPORTE']))->assertCreated();
+    }
+
     public function test_register_without_email_succeeds_and_stores_a_null_email(): void
     {
         $this->postJson('/api/v1/auth/register', $this->registrationData())

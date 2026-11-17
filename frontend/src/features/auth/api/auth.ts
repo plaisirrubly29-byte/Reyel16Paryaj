@@ -46,6 +46,8 @@ export type RegisterInput = {
   terms_version: string;
   /** Code du parrain (V2-E07, D-19), saisi à l'inscription seulement. */
   referral_code?: string;
+  /** Code d'invitation de la bêta fermée (V2-F07), exigé tant que le serveur a une liste de codes. */
+  invite_code?: string;
 };
 
 export type ResetPasswordInput = {

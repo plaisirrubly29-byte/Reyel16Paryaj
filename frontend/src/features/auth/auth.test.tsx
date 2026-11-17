@@ -98,6 +98,46 @@ describe('connexion', () => {
 
 // Formulaire complet saisi touche par touche : plus long que le délai par défaut quand toute la suite tourne.
 describe('inscription', { timeout: 15_000 }, () => {
+  it('bêta fermée : le champ du code d\'invitation apparaît quand le serveur l\'exige, puis le code est envoyé', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/register': (init) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        return body.invite_code === 'BETA2026'
+          ? { status: 201, body: { data: player } }
+          : { status: 422, body: { error: { code: 'validation_failed', message: 'Invalide.', details: { invite_code: ["Les inscriptions se font sur invitation pendant la bêta : saisissez votre code d'invitation."] } } } };
+      },
+    });
+    renderApp('/register');
+
+    expect(screen.queryByLabelText("Code d'invitation")).toBeNull();
+    await userEvent.type(await screen.findByLabelText('Nom'), 'Ana Joueuse');
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
+    await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    const invite = await screen.findByLabelText("Code d'invitation");
+    expect(invite).toHaveAccessibleDescription(/sur invitation pendant la bêta/);
+    await userEvent.type(invite, 'beta2026');
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[0]).not.toHaveProperty('invite_code');
+    expect(bodies[1].invite_code).toBe('BETA2026');
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('le lien ?invitation=CODE affiche et préremplit le code d\'invitation', async () => {
+    mockApi({ 'GET /me': guest });
+    renderApp('/register?invitation=beta-2026');
+    expect(await screen.findByLabelText("Code d'invitation")).toHaveValue('BETA2026');
+  });
+
   it('affiche les erreurs de validation sous chaque champ', async () => {
     mockApi({
       'GET /me': guest,
