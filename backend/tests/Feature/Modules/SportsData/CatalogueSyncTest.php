@@ -4,6 +4,8 @@ namespace Tests\Feature\Modules\SportsData;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Data\EventData;
+use App\Modules\SportsData\Data\MarketData;
+use App\Modules\SportsData\Data\SelectionData;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Exceptions\SportsDataException;
@@ -409,6 +411,57 @@ class CatalogueSyncTest extends TestCase
         $label = fn (string $key) => Competition::where('external_key', $key)->firstOrFail()->only(['name', 'country']);
         $this->assertSame(['name' => 'Premier League', 'country' => 'Angleterre'], $label('soccer_epl'));
         $this->assertSame(['name' => 'NBA', 'country' => null], $label('basketball_nba'));
+    }
+
+    /** Fournisseur fictif avec un second bookmaker sur le 1X2 (cotes un peu différentes), pour la cote juste (V2-D03). */
+    private function withSecondBookmaker(): void
+    {
+        $this->app->instance(SportsDataProvider::class, new class extends FakeSportsDataProvider
+        {
+            public function events(string $sportKey): array
+            {
+                return array_map(function (EventData $e) {
+                    $extra = [];
+                    foreach ($e->markets as $m) {
+                        if ($m->key === 'h2h') {
+                            $extra[] = new MarketData('h2h', 'otherbook', $m->updatedAt, array_map(
+                                fn (SelectionData $s) => new SelectionData($s->name, bcmul($s->odds, '1.02', 3), $s->point, $s->description),
+                                $m->selections,
+                            ));
+                        }
+                    }
+
+                    return new EventData($e->externalId, $e->sportKey, $e->competition, $e->homeTeam, $e->awayTeam, $e->startsAt, [...$e->markets, ...$extra]);
+                }, parent::events($sportKey));
+            }
+        });
+    }
+
+    public function test_real_money_applies_the_operator_margin_on_the_fair_odds_of_several_bookmakers(): void
+    {
+        config(['wallet.simulated' => false]);
+        $this->withSecondBookmaker();
+
+        $this->sync();
+
+        $odds = $this->h2h('fake-1')->selections()->pluck('odds', 'key')->map(fn ($o) => (float) $o);
+        // Jamais au-dessus des cotes des bookmakers (2.10 / 3.25 / 3.40 et +2 %), marge de 6 % sur le 1X2 du football.
+        $this->assertLessThanOrEqual(2.1 * 1.02, $odds['home']);
+        $this->assertEqualsWithDelta(1.06, $odds->map(fn ($o) => 1 / $o)->sum(), 0.01);
+        $this->assertSame('fakebook', $this->h2h('fake-1')->source_bookmaker);
+    }
+
+    public function test_fictitious_money_keeps_the_reference_bookmaker_odds(): void
+    {
+        config(['wallet.simulated' => true]);
+        $this->withSecondBookmaker();
+
+        $this->sync();
+
+        $this->assertSame(
+            ['away' => '3.400', 'draw' => '3.250', 'home' => '2.100'],
+            $this->h2h('fake-1')->selections()->orderBy('key')->pluck('odds', 'key')->all(),
+        );
     }
 
     public function test_sync_is_scheduled_with_the_configured_frequency(): void

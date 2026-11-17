@@ -163,4 +163,19 @@ return [
     // revérifie toujours la cote côté serveur : une cote affichée depuis le cache peut avoir ce retard, jamais le ticket.
     'catalogue_cache_seconds' => (int) env('CATALOGUE_CACHE_SECONDS', 0),
 
+    // Marge de l'opérateur (V2-D03, décision D-18 validée le 2026-11-16) : cote juste (moyenne des bookmakers) + marge,
+    // appliquée seulement avec l'argent réel (WALLET_SIMULATED=false). Taux en fraction (0.06 = 6 %).
+    'margin' => [
+        'enabled' => (bool) env('SPORTS_DATA_MARGIN', true),
+        // Bookmakers nécessaires pour calculer la cote juste ; en dessous, cotes du bookmaker de référence (CO-5).
+        'min_bookmakers' => (int) env('SPORTS_DATA_MARGIN_MIN_BOOKMAKERS', 2),
+        'football_h2h' => (float) env('SPORTS_DATA_MARGIN_FOOTBALL_H2H', 0.06),
+        // 1X2 des autres sports, plus/moins, double chance, les deux marquent, remboursé si nul.
+        'main' => (float) env('SPORTS_DATA_MARGIN_MAIN', 0.05),
+        // Handicaps, score exact, buts par équipe, pair/impair…
+        'secondary' => (float) env('SPORTS_DATA_MARGIN_SECONDARY', 0.08),
+        // Ajouté pendant le match (synchro en direct).
+        'live_extra' => (float) env('SPORTS_DATA_MARGIN_LIVE_EXTRA', 0.02),
+    ],
+
 ];
