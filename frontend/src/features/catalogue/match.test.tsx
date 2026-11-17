@@ -58,6 +58,23 @@ function api(match: unknown = MATCH, status = 200) {
 }
 
 describe("page d'un match", () => {
+  it('ouvre directement l\'onglet Spécial R16 depuis le repère de la liste', async () => {
+    api({
+      ...MATCH,
+      markets: [...MATCH.markets, {
+        id: 'm9', key: 'r16_goal_range', name: 'Tranche de buts', line: null, odds_version: 1, odds_updated_at: inHours(0), bettable: true,
+        selections: [
+          { id: 's91', key: 'range_0_1', label: '0-1', name: '0 ou 1 but', odds: '3.50' },
+          { id: 's92', key: 'range_2_3', label: '2-3', name: '2 ou 3 buts', odds: '1.90' },
+        ],
+      }],
+    });
+    renderApp('/events/11?paris=special-r16');
+
+    expect(await screen.findByRole('region', { name: 'Tranche de buts' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Résultat du match (1X2)' })).toBeNull();
+  });
+
   it('affiche la compétition, les équipes, le coup d\'envoi et tous les marchés', async () => {
     api();
     renderApp('/events/11');

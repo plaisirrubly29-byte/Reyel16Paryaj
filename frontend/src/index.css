@@ -1206,6 +1206,12 @@ a.match-line-teams:hover { color: var(--brand); }
   display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.45rem; border-radius: 3px;
   background: #111; color: #fff; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.04em; font-style: italic;
 }
+/* Repère des paris maison (V2-D10) : ouvre l'onglet « Spécial R16 » de la page du match */
+.special-badge {
+  display: inline-flex; align-items: center; padding: 0.05rem 0.45rem; border-radius: 3px;
+  background: var(--gold); color: #111; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.04em; white-space: nowrap;
+}
+.special-badge:hover { background: #ffc61a; color: #111; }
 .match-line-time { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; line-height: 1.2; text-align: right; }
 .match-line-time strong { font-size: 1.2rem; color: var(--text); font-variant-numeric: tabular-nums; }
 .match-line-time > span { font-size: 1.02rem; color: var(--text); font-weight: 500; }

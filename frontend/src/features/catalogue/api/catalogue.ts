@@ -42,6 +42,8 @@ export type CatalogueEvent = {
   status: string;
   /** Score du moment d'un match en cours ("live") ; null avant le coup d'envoi ou s'il n'est pas encore connu. */
   score?: { home: string; away: string } | null;
+  /** Paris maison REYEL 16 sur la page du match (repère « Spécial R16 » de la liste). */
+  has_house_markets?: boolean;
   markets: CatalogueMarket[];
 };
 

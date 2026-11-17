@@ -3829,6 +3829,7 @@ components:
           properties:
             home: { type: string, example: "1" }
             away: { type: string, example: "0" }
+        has_house_markets: { type: boolean, description: "true : le match a des paris maison REYEL 16 (r16_*) sur sa page ; repère « Spécial R16 » de la liste" }
         markets:
           type: array
           items:
