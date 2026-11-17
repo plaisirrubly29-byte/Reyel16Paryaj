@@ -14,6 +14,9 @@ use App\Modules\Lottery\Contracts\LotteryProvider;
 use App\Modules\Lottery\Providers\FakeLotteryProvider;
 use App\Modules\Lottery\Providers\UnitySoftConnectLotteryProvider;
 use App\Modules\Monitoring\Services\QueueHeartbeat;
+use App\Modules\Settlement\Contracts\MatchStatisticsProvider;
+use App\Modules\Settlement\Providers\ApiFootballProvider;
+use App\Modules\Settlement\Providers\FakeMatchStatisticsProvider;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
@@ -50,6 +53,12 @@ class AppServiceProvider extends ServiceProvider
             ),
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
         });
+
+        // Statistiques des matchs terminés (V2-D09) : STATISTICS_PROVIDER=apifootball ; sinon fournisseur en mémoire
+        // (tests ; l'import est coupé quand STATISTICS_PROVIDER est vide).
+        $this->app->singleton(MatchStatisticsProvider::class, fn ($app) => config('sports_data.statistics.provider') === 'apifootball'
+            ? new ApiFootballProvider($app->make(HttpFactory::class), config('sports_data.statistics'))
+            : new FakeMatchStatisticsProvider);
 
         // Fournisseur des tirages de borlette choisi par LOTTERY_PROVIDER (config/lottery.php).
         $this->app->singleton(LotteryProvider::class, fn ($app) => match (config('lottery.provider')) {

@@ -3835,7 +3835,7 @@ components:
             type: object
             properties:
               id: { type: string }
-              key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even] }
+              key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even, h2h_h1, double_chance_h1, draw_no_bet_h1, totals_h1, btts_h1, correct_score_h1, halftime_fulltime, alternate_totals_corners, alternate_spreads_corners, alternate_team_totals_corners, alternate_totals_cards, alternate_spreads_cards] }
               name: { type: string, example: Résultat du match (1X2) }
               line: { type: [string, "null"], example: "2.5", description: "Ligne du plus/moins ou du handicap (celle de l'équipe à domicile, ex. \"-0.5\") ; null pour les autres marchés, dont ceux à plusieurs lignes (ligne dans la clé de la sélection)" }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
@@ -3894,7 +3894,7 @@ components:
                 type: object
                 properties:
                   id: { type: string, description: Marché du catalogue }
-                  key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even] }
+                  key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even, h2h_h1, double_chance_h1, draw_no_bet_h1, totals_h1, btts_h1, correct_score_h1, halftime_fulltime, alternate_totals_corners, alternate_spreads_corners, alternate_team_totals_corners, alternate_totals_cards, alternate_spreads_cards] }
                   name: { type: string, example: Nombre de buts }
                   line: { type: [string, "null"], example: "2.5" }
               selection:

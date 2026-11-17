@@ -94,6 +94,7 @@ l'admin.
 | V2-D06 | Paris en direct (live) : cotes en direct, délai d'acceptation, suspension sur événement | P3 | Benginio #173 | Rubly (onglet Live, coupon en direct) #174 | V2-A01, V2-D05 | `allow_live` activé seulement après test de charge et budget de crédits validés. |
 | V2-D07 | Cash-out (encaisser avant la fin) | P3 | Benginio #175 | Rubly (bouton et confirmation) #176 | V2-D06 | Montant calculé côté serveur. Cote revérifiée. Ledger cohérent. |
 | V2-D08 | Jeux virtuels : football et courses, par un prestataire tiers (D-11) | P3 | Rubly (prestataire tiers, après le simulateur) #208 | Rubly (accueil, épreuve, résultats, « Mes paris ») #209 | D-11, V2-D05 | D-11 validée (avis juridique, prestataire, règles). Mises et gains dans le ledger. Limites de jeu responsable appliquées. |
+| V2-D09 | Marchés 1re mi-temps, mi-temps / fin de match, corners et cartons, réglés avec les statistiques d'API-Football | P2 | Rubly (demandé par Rubly le 2026-11-17, fait avec le code serveur) | Rubly (onglets Mi-temps, Corners, Cartons) | V2-A01 | Marchés proposés seulement si les statistiques sont actives. Match reconnu par l'heure, les équipes et le score. Pari sans statistiques annulé après 48 h. |
 
 ## Phase E — Expérience joueur
 

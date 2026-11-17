@@ -14,6 +14,16 @@ describe('marchés du match', () => {
     expect(marketCategory(market('odd_even', 'Nombre de buts pair ou impair'))).toBe('Buts');
   });
 
+  it('range la mi-temps, les corners et les cartons dans leurs onglets', () => {
+    expect(marketCategory(market('h2h_h1', 'Résultat à la mi-temps (1X2)'))).toBe('Mi-temps');
+    expect(marketCategory(market('correct_score_h1', 'Score exact à la mi-temps'))).toBe('Mi-temps');
+    expect(marketCategory(market('halftime_fulltime', 'Mi-temps / fin de match'))).toBe('Mi-temps');
+    expect(marketCategory(market('alternate_spreads_corners', 'Handicap corners'))).toBe('Corners');
+    expect(marketCategory(market('alternate_team_totals_corners', 'Corners par équipe'))).toBe('Corners');
+    expect(marketCategory(market('alternate_totals_cards', 'Nombre de cartons'))).toBe('Cartons');
+    expect(marketColumns(market('totals_h1', ''), 2)).toBe(2);
+  });
+
   it('affiche les marchés à plusieurs lignes par paires', () => {
     expect(marketColumns(market('alternate_totals', ''), 8)).toBe(2);
     expect(marketColumns(market('team_totals', ''), 4)).toBe(2);

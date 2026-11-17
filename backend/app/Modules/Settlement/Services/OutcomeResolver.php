@@ -4,31 +4,59 @@ namespace App\Modules\Settlement\Services;
 
 use App\Modules\Betting\Enums\BetSelectionStatus;
 use App\Modules\Settlement\Enums\ResultStatus;
+use App\Modules\Settlement\Exceptions\StatisticsPending;
+use App\Modules\Settlement\Models\MatchStatistics;
 use App\Modules\Settlement\Models\Result;
+use App\Modules\SportsData\Services\MarketKeys;
 use InvalidArgumentException;
 
 /**
- * Issue d'une sélection d'après le résultat d'un match, pour les marchés du catalogue (CatalogueSyncService::MARKETS).
+ * Issue d'une sélection d'après le résultat d'un match, pour les marchés du catalogue (MarketKeys::all()).
  *
  * - Match annulé : sélection annulée (void, cote 1 dans un combiné) — politique D-05.
  * - Plus/moins : la ligne est celle figée sur le ticket ; un total égal à une ligne entière ("3") est annulé.
  * - Handicap : même règle, sur l'écart de buts ; remboursé si nul : le nul annule la sélection.
  * - Marchés à plusieurs lignes (alternate_*, team_totals) : la ligne est dans la clé de la sélection, figée sur le ticket.
+ * - 1re mi-temps, corners, cartons (V2-D09) : mêmes règles, sur le score à la mi-temps, le nombre de corners ou de
+ *   cartons (jaunes + rouges) de chaque équipe (MatchStatistics). Sans statistiques : en attente (StatisticsPending),
+ *   puis annulé passé sports_data.statistics.void_after_hours après le coup d'envoi.
  */
 class OutcomeResolver
 {
-    /** @throws InvalidArgumentException marché ou sélection non pris en charge */
+    /**
+     * @throws StatisticsPending statistiques du match pas encore reçues
+     * @throws InvalidArgumentException marché ou sélection non pris en charge
+     */
     public function resolve(string $marketKey, ?string $line, string $selectionKey, Result $result): BetSelectionStatus
     {
         if ($result->status === ResultStatus::Cancelled) {
             return BetSelectionStatus::Void;
         }
 
-        $home = (int) $result->home_score;
-        $away = (int) $result->away_score;
+        if (! in_array($marketKey, MarketKeys::all(), true)) {
+            $this->unknown($marketKey, $selectionKey);
+        }
+
+        $measure = MarketKeys::measure($marketKey);
+        if ($measure === MarketKeys::GOALS) {
+            $home = (int) $result->home_score;
+            $away = (int) $result->away_score;
+        } else {
+            $pair = $this->statistics($result, $measure);
+            if ($pair === null) {
+                return BetSelectionStatus::Void;
+            }
+            [$home, $away] = $pair;
+        }
+
+        if ($marketKey === MarketKeys::HALFTIME_FULLTIME) {
+            return $this->halftimeFulltime($selectionKey, $home <=> $away, (int) $result->home_score <=> (int) $result->away_score)
+                ? BetSelectionStatus::Won : BetSelectionStatus::Lost;
+        }
+
         $winner = $home <=> $away;
 
-        $won = match ($marketKey) {
+        $won = match (MarketKeys::base($marketKey)) {
             'h2h' => match ($selectionKey) {
                 'home' => $winner > 0,
                 'draw' => $winner === 0,
@@ -86,6 +114,40 @@ class OutcomeResolver
         }
 
         return $won ? BetSelectionStatus::Won : BetSelectionStatus::Lost;
+    }
+
+    /**
+     * Valeurs de chaque équipe pour la mesure du marché (score à la mi-temps, corners, cartons).
+     *
+     * @return array{0: int, 1: int}|null null : jamais reçues passé le délai, la sélection est annulée
+     *
+     * @throws StatisticsPending pas encore reçues
+     */
+    private function statistics(Result $result, string $measure): ?array
+    {
+        $pair = MatchStatistics::where('event_id', $result->event_id)->first()?->pair($measure);
+        if ($pair !== null) {
+            return $pair;
+        }
+
+        $startsAt = $result->event?->starts_at;
+        $hours = (int) config('sports_data.statistics.void_after_hours', 48);
+        if ($startsAt !== null && $startsAt->copy()->addHours($hours)->isPast()) {
+            return null;
+        }
+
+        throw new StatisticsPending("Statistiques du match {$result->event_id} pas encore reçues ({$measure}).");
+    }
+
+    /** Mi-temps / fin de match : clé "home/draw" (issue à la mi-temps / issue finale). */
+    private function halftimeFulltime(string $selectionKey, int $half, int $full): bool
+    {
+        $sides = ['home' => 1, 'draw' => 0, 'away' => -1];
+        if (! preg_match('/^(home|draw|away)\/(home|draw|away)$/', $selectionKey, $m)) {
+            $this->unknown(MarketKeys::HALFTIME_FULLTIME, $selectionKey);
+        }
+
+        return $sides[$m[1]] === $half && $sides[$m[2]] === $full;
     }
 
     /** @return bool|null null : total égal à la ligne (remboursé) */
