@@ -59,6 +59,19 @@ class MarketResource extends JsonResource
             'team_totals' => $goals ? 'Buts par équipe' : 'Points par équipe',
             'alternate_team_totals' => $goals ? 'Buts par équipe (autres lignes)' : 'Points par équipe (autres lignes)',
             'odd_even' => $goals ? 'Nombre de buts pair ou impair' : 'Total pair ou impair',
+            // Réglés avec les statistiques du match (V2-D09).
+            'h2h_h1' => 'Résultat à la mi-temps (1X2)',
+            'double_chance_h1' => 'Double chance à la mi-temps',
+            'draw_no_bet_h1' => 'Remboursé si nul à la mi-temps',
+            'totals_h1' => $goals ? 'Nombre de buts à la mi-temps' : 'Total de points à la mi-temps',
+            'btts_h1' => 'Les deux équipes marquent en 1re mi-temps',
+            'correct_score_h1' => 'Score exact à la mi-temps',
+            'halftime_fulltime' => 'Mi-temps / fin de match',
+            'alternate_totals_corners' => 'Nombre de corners',
+            'alternate_spreads_corners' => 'Handicap corners',
+            'alternate_team_totals_corners' => 'Corners par équipe',
+            'alternate_totals_cards' => 'Nombre de cartons',
+            'alternate_spreads_cards' => 'Handicap cartons',
             default => $key,
         };
     }
@@ -72,6 +85,7 @@ class MarketResource extends JsonResource
     {
         $team = fn (string $side) => $side === 'home' ? '1' : '2';
         $signed = fn (string $value) => bccomp($value, '0', 2) > 0 ? "+{$value}" : $value;
+        $outcome = fn (string $side) => ['home' => '1', 'draw' => 'X', 'away' => '2'][$side];
 
         return match (true) {
             // Handicap : la ligne du marché est celle de l'équipe à domicile.
@@ -90,6 +104,8 @@ class MarketResource extends JsonResource
             (bool) preg_match('/^(over|under)_(.+)$/', $key, $m) => ($m[1] === 'over' ? '> ' : '< ').$m[2],
             (bool) preg_match('/^(home|away)_(over|under)_(.+)$/', $key, $m) => $team($m[1]).($m[2] === 'over' ? ' > ' : ' < ').$m[3],
             (bool) preg_match('/^(home|away)_([+-]?[\d.]+)$/', $key, $m) => "{$team($m[1])} ({$m[2]})",
+            // Mi-temps / fin de match : "home/draw" → 1/X.
+            (bool) preg_match('/^(home|draw|away)\/(home|draw|away)$/', $key, $m) => $outcome($m[1]).'/'.$outcome($m[2]),
             default => $key,
         };
     }

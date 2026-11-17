@@ -464,6 +464,60 @@ class CatalogueSyncTest extends TestCase
         );
     }
 
+    /** Fournisseur fictif avec, sur chaque match, des marchés de mi-temps, corners et cartons (V2-D09). */
+    private function withStatisticsMarkets(): void
+    {
+        $this->app->instance(SportsDataProvider::class, new class extends FakeSportsDataProvider
+        {
+            public function events(string $sportKey): array
+            {
+                return array_map(function (EventData $e) {
+                    $s = fn (string $name, string $odds, ?string $point = null, ?string $description = null) => new SelectionData($name, $odds, $point, $description);
+                    $extra = [
+                        new MarketData('h2h_h1', 'fakebook', now()->toImmutable(), [$s($e->homeTeam, '3.100'), $s('Draw', '2.100'), $s($e->awayTeam, '3.600')]),
+                        new MarketData('halftime_fulltime', 'fakebook', now()->toImmutable(), [
+                            $s("{$e->homeTeam}/{$e->homeTeam}", '2.800'), $s("Draw/{$e->awayTeam}", '6.500'), $s('Draw/Draw', '4.750'),
+                        ]),
+                        new MarketData('alternate_totals_corners', 'fakebook', now()->toImmutable(), [
+                            $s('Over', '1.960', '10.5'), $s('Under', '1.850', '10.5'), $s('Over', '1.570', '9.5'), $s('Under', '2.300', '9.5'),
+                        ]),
+                        new MarketData('alternate_totals_cards', 'fakebook', now()->toImmutable(), [$s('Over', '2.030', '3.5'), $s('Under', '1.700', '3.5')]),
+                    ];
+
+                    return new EventData($e->externalId, $e->sportKey, $e->competition, $e->homeTeam, $e->awayTeam, $e->startsAt, [...$e->markets, ...$extra]);
+                }, parent::events($sportKey));
+            }
+        });
+    }
+
+    public function test_first_half_corners_and_cards_markets_are_synced_when_statistics_can_settle_them(): void
+    {
+        config(['sports_data.statistics.provider' => 'apifootball']);
+        $this->withStatisticsMarkets();
+
+        $this->sync();
+
+        $event = Event::where('external_id', 'fake-1')->sole();
+        $market = fn (string $key) => $event->markets()->where('key', $key)->sole()->selections()->orderBy('key')->pluck('name', 'key')->all();
+        $this->assertSame(['away', 'draw', 'home'], array_keys($market('h2h_h1')));
+        $this->assertSame(['draw/away', 'draw/draw', 'home/home'], array_keys($market('halftime_fulltime')));
+        $this->assertSame('Nul / Nul', $market('halftime_fulltime')['draw/draw']);
+        $this->assertSame(['over_10.5', 'over_9.5', 'under_10.5', 'under_9.5'], array_keys($market('alternate_totals_corners')));
+        $this->assertSame(['over_3.5' => 'Plus de 3.5', 'under_3.5' => 'Moins de 3.5'], $market('alternate_totals_cards'));
+    }
+
+    public function test_statistics_markets_are_not_offered_without_a_statistics_provider(): void
+    {
+        config(['sports_data.statistics.provider' => '']);
+        $this->withStatisticsMarkets();
+
+        $this->sync();
+
+        $keys = Event::where('external_id', 'fake-1')->sole()->markets()->pluck('key')->all();
+        $this->assertContains('h2h', $keys);
+        $this->assertEmpty(array_intersect($keys, ['h2h_h1', 'halftime_fulltime', 'alternate_totals_corners', 'alternate_totals_cards']));
+    }
+
     public function test_sync_is_scheduled_with_the_configured_frequency(): void
     {
         $event = collect(app(Schedule::class)->events())

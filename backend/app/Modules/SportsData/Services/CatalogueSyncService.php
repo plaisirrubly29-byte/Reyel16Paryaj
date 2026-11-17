@@ -67,13 +67,11 @@ class CatalogueSyncService
      * si nul), totals (plus/moins de N buts ou points), btts (les deux équipes marquent : oui / non), correct_score
      * (score exact), spreads (handicap), odd_even (total pair ou impair) et les marchés à plusieurs lignes
      * (alternate_totals, alternate_spreads, team_totals, alternate_team_totals), dont la ligne est dans la clé de
-     * chaque sélection ("over_2.5", "home_-1.5", "away_under_0.5"). Tous se règlent sur le score final.
+     * chaque sélection ("over_2.5", "home_-1.5", "away_under_0.5"). Ils se règlent sur le score final.
+     * Mêmes paris sur la 1re mi-temps (suffixe _h1), mi-temps / fin de match, corners et cartons (suffixes _corners,
+     * _cards) : réglés avec les statistiques du match (V2-D09, MarketKeys::all() donne l'ordre).
      * Hors 1X2, plus/moins et handicap, ils ne viennent que de syncEventMarkets() chez The Odds API.
      */
-    private const MARKETS = [
-        'h2h', 'double_chance', 'draw_no_bet', 'totals', 'alternate_totals', 'btts', 'correct_score',
-        'spreads', 'alternate_spreads', 'team_totals', 'alternate_team_totals', 'odd_even',
-    ];
 
     /** Clés de sélection du marché 1X2 (h2h). */
     private const DRAW_NAMES = ['draw', 'tie', 'nul', 'match nul'];
@@ -203,7 +201,12 @@ class CatalogueSyncService
 
         $isNew ? $report->eventsCreated++ : $report->eventsUpdated++;
 
-        foreach (self::MARKETS as $key) {
+        foreach (MarketKeys::all() as $key) {
+            // Sans fournisseur de statistiques, ces paris ne pourraient pas être réglés : marché non proposé.
+            if (MarketKeys::needsStatistics($key) && (string) config('sports_data.statistics.provider') === '') {
+                continue;
+            }
+
             [$market, $selections, $line, $error] = $this->pickMarket($data, $key);
             if ($market === null) {
                 if ($error !== null && $key === 'h2h') {
@@ -334,7 +337,8 @@ class CatalogueSyncService
      */
     private function selections(EventData $data, MarketData $source): array
     {
-        return match ($source->key) {
+        // Même analyse pour la 1re mi-temps, les corners ou les cartons (« totals_h1 » comme « totals »).
+        return match (MarketKeys::base($source->key)) {
             'h2h' => [$this->h2hSelections($data, $source), null],
             'double_chance' => [$this->doubleChanceSelections($data, $source), null],
             'totals' => $this->totalsSelections($source),
@@ -346,6 +350,7 @@ class CatalogueSyncService
             'alternate_totals' => [$this->alternateTotalsSelections($source), null],
             'team_totals', 'alternate_team_totals' => [$this->teamTotalsSelections($data, $source), null],
             'odd_even' => [$this->oddEvenSelections($source), null],
+            MarketKeys::HALFTIME_FULLTIME => [$this->halftimeFulltimeSelections($data, $source), null],
             default => throw new \InvalidArgumentException("Marché non pris en charge : {$source->key}"),
         };
     }
@@ -631,6 +636,31 @@ class CatalogueSyncService
         }
 
         return $this->lineSelections($rows, 'buts par équipe');
+    }
+
+    /**
+     * Mi-temps / fin de match : sélections « Arsenal/Draw » (issue à la mi-temps / issue finale), clé "home/draw".
+     * Au moins deux des neuf combinaisons, sans doublon.
+     *
+     * @return array<string, array{name: string, odds: string}>
+     */
+    private function halftimeFulltimeSelections(EventData $data, MarketData $source): array
+    {
+        $order = ['home' => 0, 'draw' => 1, 'away' => 2];
+        $names = ['home' => $data->homeTeam, 'draw' => 'Nul', 'away' => $data->awayTeam];
+
+        $rows = [];
+        foreach ($source->selections as $selection) {
+            $parts = explode('/', $selection->name);
+            if (count($parts) !== 2) {
+                throw new \InvalidArgumentException("Sélection inconnue : {$selection->name}");
+            }
+            [$half, $full] = array_map(fn (string $part) => $this->outcome($data, $part), $parts);
+            $rows[] = [$order[$half], $order[$full], "{$half}/{$full}",
+                ['name' => "{$names[$half]} / {$names[$full]}", 'odds' => $selection->odds]];
+        }
+
+        return $this->lineSelections($rows, 'mi-temps / fin de match');
     }
 
     /**

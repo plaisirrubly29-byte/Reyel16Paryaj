@@ -128,11 +128,28 @@ return [
     'horizon_days' => (int) env('SPORTS_DATA_HORIZON_DAYS', 7),
     'max_events_per_competition' => (int) env('SPORTS_DATA_MAX_EVENTS', 10),
 
-    // Marchés chargés match par match (sports-data:extra-markets) pour le football, tous réglés sur le score final.
+    // Marchés chargés match par match (sports-data:extra-markets) pour le football : réglés sur le score final, sauf
+    // 1re mi-temps (_h1), mi-temps / fin de match, corners et cartons, réglés avec les statistiques du match (V2-D09).
     // Coût chez The Odds API : 1 crédit par marché reçu (× régions) et PAR MATCH. Planifié seulement si
     // SPORTS_DATA_EXTRA=true : matchs qui commencent dans extra_markets_hours, plafond de crédits par jour.
     'extra_markets' => env('SPORTS_DATA_EXTRA_MARKETS',
-        'double_chance,draw_no_bet,btts,correct_score,spreads,alternate_spreads,alternate_totals,team_totals,alternate_team_totals,odd_even'),
+        'double_chance,draw_no_bet,btts,correct_score,spreads,alternate_spreads,alternate_totals,team_totals,alternate_team_totals,odd_even,'
+        .'h2h_h1,double_chance_h1,draw_no_bet_h1,totals_h1,btts_h1,correct_score_h1,halftime_fulltime,'
+        .'alternate_totals_corners,alternate_spreads_corners,alternate_team_totals_corners,alternate_totals_cards,alternate_spreads_cards'),
+    // Statistiques des matchs terminés (V2-D09) pour régler 1re mi-temps, corners et cartons : API-Football.
+    // STATISTICS_PROVIDER=apifootball (clé STATISTICS_API_KEY), « fake » en test, vide = désactivé (ces paris
+    // attendent puis sont annulés passé void_after_hours après le coup d'envoi).
+    'statistics' => [
+        'provider' => env('STATISTICS_PROVIDER', ''),
+        'url' => env('STATISTICS_API_URL', 'https://v3.football.api-sports.io'),
+        'key' => env('STATISTICS_API_KEY'),
+        'timeout' => (int) env('STATISTICS_TIMEOUT', 15),
+        'cron' => env('STATISTICS_CRON', '*/20 * * * *'),
+        // Délai avant d'annuler (remboursement, cote 1) un pari dont les statistiques ne sont jamais arrivées.
+        'void_after_hours' => (int) env('STATISTICS_VOID_AFTER_HOURS', 48),
+        // Écart toléré entre l'heure du coup d'envoi chez les deux fournisseurs, pour reconnaître le match.
+        'kickoff_tolerance_minutes' => (int) env('STATISTICS_KICKOFF_TOLERANCE', 20),
+    ],
     'extra_markets_enabled' => (bool) env('SPORTS_DATA_EXTRA', false),
     'extra_markets_cron' => env('SPORTS_DATA_EXTRA_CRON', '30 */3 * * *'),
     'extra_markets_hours' => (int) env('SPORTS_DATA_EXTRA_HOURS', 72),

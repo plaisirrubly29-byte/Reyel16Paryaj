@@ -66,6 +66,13 @@ Schedule::command('settlement:import-results')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Statistiques des matchs terminés (V2-D09 : mi-temps, corners, cartons), seulement pour ceux qui ont des paris en attente.
+Schedule::command('settlement:import-statistics')
+    ->cron((string) config('sports_data.statistics.cron'))
+    ->when(fn () => (string) config('sports_data.statistics.provider') !== '')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Rattrapage du règlement (P5-05) : tickets restés en attente alors que leurs matchs ont un résultat
 // (job en échec, règlement interrompu). Idempotent : ne paie jamais deux fois.
 Schedule::command('settlement:run')

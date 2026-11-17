@@ -7,6 +7,7 @@ use App\Modules\Betting\Enums\BetSelectionStatus;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Models\BetSelection;
 use App\Modules\Betting\Models\BetTicket;
+use App\Modules\Settlement\Exceptions\StatisticsPending;
 use App\Modules\Settlement\Models\Result;
 use App\Modules\Settlement\Models\Settlement;
 use App\Modules\SportsData\Enums\EventStatus;
@@ -65,6 +66,8 @@ class SettlementService
 
             try {
                 $status = $this->outcomes->resolve($selection->market_key, $selection->market_line, $selection->selection_key, $result);
+            } catch (StatisticsPending) {
+                continue; // 1re mi-temps, corners, cartons : réglée à l'arrivée des statistiques (V2-D09)
             } catch (InvalidArgumentException $e) {
                 $report->failed++;
                 Log::error('settlement.selection_unresolvable', ['bet_selection_id' => $selection->id, 'error' => $e->getMessage()]);
