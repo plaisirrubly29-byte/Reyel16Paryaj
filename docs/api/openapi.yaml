@@ -88,6 +88,13 @@ paths:
                     V2-E07 (D-19 §3) : code du parrain, prérempli depuis le lien ?parrain=CODE. Optionnel, saisi à
                     l'inscription seulement. Code inconnu : 422 (details.referral_code). Ignoré tant que
                     REFERRAL_ENABLED=false.
+                invite_code:
+                  type: [string, "null"]
+                  example: BETA2026
+                  description: |
+                    Bêta fermée (V2-F07) : exigé tant que REGISTRATION_INVITE_CODES n'est pas vide (majuscules ou non).
+                    Absent : 422 (details.invite_code, « inscriptions sur invitation ») ; inconnu : 422 (details.invite_code).
+                    Ignoré quand l'inscription est ouverte.
       responses:
         "201":
           description: Compte créé, session ouverte
@@ -1086,7 +1093,7 @@ paths:
                       currency: { type: string, example: HTG }
                       balance: { $ref: "#/components/schemas/Money" }
                       status: { type: string, enum: [active, frozen] }
-                      simulated: { type: boolean, description: "true en V1 : fonds fictifs" }
+                      simulated: { type: boolean, description: "true : fonds fictifs (WALLET_SIMULATED) ; false avec l'argent réel (V2-B04)" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
   /wallet/transactions:
     get:

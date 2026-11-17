@@ -35,6 +35,9 @@ export function RegisterPage() {
   // Lien de parrainage : …/register?parrain=CODE préremplit le code (le joueur peut le corriger).
   const [params] = useSearchParams();
   const [referralCode, setReferralCode] = useState(() => cleanCode(params.get('parrain') ?? ''));
+  // Bêta fermée (V2-F07) : code d'invitation reçu par lien (?invitation=CODE) ; le champ s'affiche aussi dès que le
+  // serveur répond qu'un code est exigé.
+  const [inviteCode, setInviteCode] = useState(() => cleanCode(params.get('invitation') ?? ''));
   const [accepted, setAccepted] = useState(false);
   const [mustAccept, setMustAccept] = useState(false);
   const termsId = useId();
@@ -42,6 +45,7 @@ export function RegisterPage() {
   const error = register.error instanceof ApiError ? register.error : null;
   const fieldErrors = error?.fieldErrors ?? {};
   const set = (field: keyof Form) => (e: { target: { value: string } }) => setForm({ ...form, [field]: e.target.value });
+  const showInvite = params.has('invitation') || inviteCode !== '' || fieldErrors.invite_code !== undefined;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -55,7 +59,8 @@ export function RegisterPage() {
     const terms = { terms_accepted: true as const, terms_version: LEGAL_VERSION };
     // L'âge minimum et la politique de mot de passe sont vérifiés par le serveur.
     const referral = referralCode ? { referral_code: referralCode } : {};
-    register.mutate({ ...(email ? form : rest), ...terms, ...referral }, { onSuccess: () => navigate('/account', { replace: true }) });
+    const invite = inviteCode ? { invite_code: inviteCode } : {};
+    register.mutate({ ...(email ? form : rest), ...terms, ...referral, ...invite }, { onSuccess: () => navigate('/account', { replace: true }) });
   }
 
   return (
@@ -151,6 +156,20 @@ export function RegisterPage() {
           value={form.password_confirmation}
           onChange={set('password_confirmation')}
         />
+        {showInvite && (
+          <TextField
+            label="Code d'invitation"
+            labelHidden
+            name="invite_code"
+            autoComplete="off"
+            icon="lock"
+            placeholder="Code d'invitation (bêta)"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(cleanCode(e.target.value))}
+            error={fieldErrors.invite_code}
+            hint="Pendant la bêta, les inscriptions se font sur invitation."
+          />
+        )}
         <TextField
           label="Code parrain (facultatif)"
           labelHidden

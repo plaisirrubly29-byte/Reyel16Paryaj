@@ -10,6 +10,13 @@ return [
     // Âge minimum pour ouvrir un compte (années).
     'minimum_age' => (int) env('IDENTITY_MINIMUM_AGE', 18),
 
+    // Bêta fermée (V2-F07) : codes d'invitation acceptés à l'inscription, séparés par des virgules (majuscules ou non).
+    // Vide (défaut) : inscription ouverte à tous.
+    'invite_codes' => array_values(array_filter(array_map(
+        fn (string $code) => strtoupper(trim($code)),
+        explode(',', (string) env('REGISTRATION_INVITE_CODES', '')),
+    ))),
+
     // V2-E01 : version en vigueur des textes d'information (conditions, confidentialité, règlement des paris, jeu
     // responsable), acceptée à l'inscription. Doit rester égale à LEGAL_VERSION du frontend (features/legal/legal.ts) :
     // tout changement de fond d'un texte = nouvelle version des deux côtés.
