@@ -195,4 +195,17 @@ return [
         'live_extra' => (float) env('SPORTS_DATA_MARGIN_LIVE_EXTRA', 0.02),
     ],
 
+    // Marchés maison du football (V2-D10), seulement ceux que The Odds API ne fournit pas : nombre exact de buts,
+    // tranches de buts, victoire sans encaisser, écart de victoire, résultat et plus/moins de 2,5 buts. Cotés par
+    // REYEL 16 (modèle de Poisson tiré du 1X2 et du plus/moins des bookmakers), réglés sur le score final.
+    // Marge plus forte et mise maximale plus basse : aucun bookmaker ne sert de repère à notre calcul.
+    'house_markets' => [
+        'enabled' => (bool) env('SPORTS_DATA_HOUSE_MARKETS', true),
+        'min_bookmakers' => (int) env('SPORTS_DATA_HOUSE_MARKETS_MIN_BOOKMAKERS', 2),
+        'margin' => (float) env('SPORTS_DATA_HOUSE_MARKETS_MARGIN', 0.12),
+        'max_odds' => (float) env('SPORTS_DATA_HOUSE_MARKETS_MAX_ODDS', 100),
+        // Mise maximale d'un ticket qui contient un marché maison, en unité mineure (1000_00 = 1 000 HTG).
+        'max_stake_minor' => (int) env('SPORTS_DATA_HOUSE_MARKETS_MAX_STAKE_MINOR', 1000_00),
+    ],
+
 ];

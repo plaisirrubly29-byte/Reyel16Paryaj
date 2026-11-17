@@ -39,6 +39,12 @@ final class MarketKeys
     /** @return list<string> tous les marchés pris en charge */
     public static function all(): array
     {
+        return [...self::provided(), ...HouseMarkets::KEYS];
+    }
+
+    /** @return list<string> marchés venant du fournisseur de cotes (les marchés maison sont calculés par REYEL 16) */
+    public static function provided(): array
+    {
         return [...self::FULL_TIME, ...self::STATISTICS];
     }
 

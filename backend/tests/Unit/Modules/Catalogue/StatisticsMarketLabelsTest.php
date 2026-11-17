@@ -3,6 +3,7 @@
 namespace Tests\Unit\Modules\Catalogue;
 
 use App\Modules\Catalogue\Http\Resources\MarketResource;
+use App\Modules\SportsData\Services\HouseMarkets;
 use App\Modules\SportsData\Services\MarketKeys;
 use PHPUnit\Framework\TestCase;
 
@@ -22,6 +23,17 @@ class StatisticsMarketLabelsTest extends TestCase
         $this->assertSame('X/1', MarketResource::selectionLabel('draw/home', null));
         $this->assertSame('2/2', MarketResource::selectionLabel('away/away', null));
         $this->assertSame('> 10.5', MarketResource::selectionLabel('over_10.5', null));
+    }
+
+    public function test_house_market_names_and_labels(): void
+    {
+        foreach (HouseMarkets::KEYS as $key) {
+            $this->assertNotSame($key, MarketResource::marketName($key, 'soccer'), "Libellé manquant : {$key}");
+        }
+        $labels = array_map(fn ($k) => MarketResource::selectionLabel($k, null), [
+            'goals_0', 'goals_5plus', 'range_2_3', 'range_4plus', 'home_clean', 'neither', 'home_by_1', 'away_by_3plus', 'draw', 'draw_and_under', 'home_and_over',
+        ]);
+        $this->assertSame(['0', '5+', '2-3', '4+', '1', 'Aucune', '1 par 1', '2 par 3+', 'X', 'X & -2.5', '1 & +2.5'], $labels);
     }
 
     public function test_market_keys_split_into_bet_type_and_measure(): void
