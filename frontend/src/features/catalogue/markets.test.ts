@@ -24,6 +24,12 @@ describe('marchés du match', () => {
     expect(marketColumns(market('totals_h1', ''), 2)).toBe(2);
   });
 
+  it('range les paris maison dans l\'onglet Spécial R16', () => {
+    expect(marketCategory(market('r16_exact_goals', 'Nombre exact de buts'))).toBe('Spécial R16');
+    expect(marketCategory(market('r16_winning_margin', 'Écart de victoire'))).toBe('Spécial R16');
+    expect(marketCategory(market('r16_result_total', 'Résultat et nombre de buts'))).toBe('Spécial R16');
+  });
+
   it('affiche les marchés à plusieurs lignes par paires', () => {
     expect(marketColumns(market('alternate_totals', ''), 8)).toBe(2);
     expect(marketColumns(market('team_totals', ''), 4)).toBe(2);

@@ -1,10 +1,11 @@
 import type { CatalogueMarket, CatalogueSelection } from './api/catalogue';
 
-export type MarketCategory = 'Résultat' | 'Buts' | 'Mi-temps' | 'Corners' | 'Cartons' | 'Handicap' | 'Score exact' | 'Joueurs' | 'Autres';
+export type MarketCategory =
+  | 'Résultat' | 'Spécial R16' | 'Buts' | 'Mi-temps' | 'Corners' | 'Cartons' | 'Handicap' | 'Score exact' | 'Joueurs' | 'Autres';
 
 /** Ordre des onglets de la page du match. */
 export const MARKET_CATEGORIES: readonly MarketCategory[] = [
-  'Résultat', 'Buts', 'Mi-temps', 'Corners', 'Cartons', 'Handicap', 'Score exact', 'Joueurs', 'Autres',
+  'Résultat', 'Spécial R16', 'Buts', 'Mi-temps', 'Corners', 'Cartons', 'Handicap', 'Score exact', 'Joueurs', 'Autres',
 ];
 
 function normalizeMarketText(value: string): string {
@@ -15,6 +16,8 @@ function normalizeMarketText(value: string): string {
 export function marketCategory(market: CatalogueMarket): MarketCategory {
   const text = normalizeMarketText(`${market.key} ${market.name}`);
 
+  // Paris maison, cotés par REYEL 16 (clé « r16_… ») : leur propre onglet.
+  if (market.key.startsWith('r16_')) return 'Spécial R16';
   // Corners, cartons, mi-temps d'abord : « Handicap corners » va dans Corners, « Score exact à la mi-temps » dans Mi-temps.
   if (/corner/.test(text)) return 'Corners';
   if (/_cards\b|carton/.test(text)) return 'Cartons';

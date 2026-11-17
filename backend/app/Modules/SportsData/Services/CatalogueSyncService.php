@@ -201,7 +201,7 @@ class CatalogueSyncService
 
         $isNew ? $report->eventsCreated++ : $report->eventsUpdated++;
 
-        foreach (MarketKeys::all() as $key) {
+        foreach (MarketKeys::provided() as $key) {
             // Sans fournisseur de statistiques, ces paris ne pourraient pas être réglés : marché non proposé.
             if (MarketKeys::needsStatistics($key) && (string) config('sports_data.statistics.provider') === '') {
                 continue;
@@ -231,6 +231,63 @@ class CatalogueSyncService
             if ($this->syncMarket($event, $market, $selections, $line)) {
                 $report->oddsChanged++;
             }
+        }
+
+        if (! $live) {
+            $this->syncHouseMarkets($event, $data, $report);
+        }
+    }
+
+    /**
+     * Marchés maison du football (V2-D10), cotés par REYEL 16 à partir du 1X2 et du plus/moins des bookmakers
+     * (HouseMarkets). Avant le match seulement, avec au moins min_bookmakers sur le 1X2 ; une erreur de calcul
+     * laisse les marchés maison tels quels sans toucher au reste du match.
+     */
+    private function syncHouseMarkets(Event $event, EventData $data, SyncReport $report): void
+    {
+        if (! HouseMarkets::enabled() || ! str_starts_with($data->sportKey, 'soccer')) {
+            return;
+        }
+
+        try {
+            [$h2h] = $this->pickMarket($data, 'h2h');
+            [$totals, , $line] = $this->pickMarket($data, 'totals');
+            if ($h2h === null || $totals === null || $line === null) {
+                return;
+            }
+
+            $results = array_values(array_filter(
+                $this->sourceOdds($data, 'h2h', null),
+                fn (array $odds) => isset($odds['home'], $odds['draw'], $odds['away']) && count($odds) === 3,
+            ));
+            $overs = $this->sourceOdds($data, 'totals', $line);
+            if (count($results) < (int) config('sports_data.house_markets.min_bookmakers', 2) || $overs === []) {
+                return;
+            }
+
+            $fair = fn (array $sources, string $key) => array_sum(array_map(function (array $odds) use ($key) {
+                $implied = array_map(fn (string $o) => 1 / (float) $o, $odds);
+
+                return $implied[$key] / array_sum($implied);
+            }, $sources)) / count($sources);
+
+            $markets = HouseMarkets::build(
+                ['home' => $fair($results, 'home'), 'draw' => $fair($results, 'draw'), 'away' => $fair($results, 'away')],
+                (float) $line,
+                $fair($overs, 'over'),
+                $data->homeTeam,
+                $data->awayTeam,
+                (float) config('sports_data.house_markets.margin', 0.12),
+            );
+
+            $updatedAt = $h2h->updatedAt->min($totals->updatedAt);
+            foreach ($markets as $key => $odds) {
+                if ($this->syncMarket($event, new MarketData($key, 'reyel16', $updatedAt, []), $odds, null)) {
+                    $report->oddsChanged++;
+                }
+            }
+        } catch (Throwable $e) {
+            Log::warning('sports_data.house_markets_failed', ['id' => $data->externalId, 'error' => $e->getMessage()]);
         }
     }
 

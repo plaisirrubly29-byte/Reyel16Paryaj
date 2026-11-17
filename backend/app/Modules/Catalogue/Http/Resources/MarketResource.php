@@ -3,6 +3,7 @@
 namespace App\Modules\Catalogue\Http\Resources;
 
 use App\Modules\SportsData\Models\Market;
+use App\Modules\SportsData\Services\HouseMarkets;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -72,6 +73,12 @@ class MarketResource extends JsonResource
             'alternate_team_totals_corners' => 'Corners par équipe',
             'alternate_totals_cards' => 'Nombre de cartons',
             'alternate_spreads_cards' => 'Handicap cartons',
+            // Marchés maison (V2-D10), cotés par REYEL 16.
+            'r16_exact_goals' => 'Nombre exact de buts',
+            'r16_goal_range' => 'Tranche de buts',
+            'r16_win_to_nil' => 'Victoire sans encaisser',
+            'r16_winning_margin' => 'Écart de victoire',
+            'r16_result_total' => 'Résultat et nombre de buts',
             default => $key,
         };
     }
@@ -99,6 +106,16 @@ class MarketResource extends JsonResource
             $key === 'under' => "< {$line}",
             $key === 'yes' => 'Oui',
             $key === 'no' => 'Non',
+            // Marchés maison (V2-D10) : 0 … 5+ buts, 0-1 / 2-3 / 4+, 1 / 2 / Aucune, « 1 par 2 », « X & -2.5 ».
+            (bool) preg_match('/^goals_(\d)$/', $key, $m) => $m[1],
+            $key === 'goals_5plus' => '5+',
+            (bool) preg_match('/^range_(\d)_(\d)$/', $key, $m) => "{$m[1]}-{$m[2]}",
+            $key === 'range_4plus' => '4+',
+            $key === 'home_clean' => '1',
+            $key === 'away_clean' => '2',
+            $key === 'neither' => 'Aucune',
+            (bool) preg_match('/^(home|away)_by_(\d)(plus)?$/', $key, $m) => $team($m[1]).' par '.$m[2].(isset($m[3]) ? '+' : ''),
+            (bool) preg_match('/^(home|draw|away)_and_(over|under)$/', $key, $m) => $outcome($m[1]).' & '.($m[2] === 'over' ? '+' : '-').HouseMarkets::RESULT_TOTAL_LINE,
             $key === 'odd' => 'Impair',
             $key === 'even' => 'Pair',
             (bool) preg_match('/^(over|under)_(.+)$/', $key, $m) => ($m[1] === 'over' ? '> ' : '< ').$m[2],

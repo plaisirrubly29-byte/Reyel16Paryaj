@@ -7,6 +7,7 @@ use App\Modules\Settlement\Enums\ResultStatus;
 use App\Modules\Settlement\Exceptions\StatisticsPending;
 use App\Modules\Settlement\Models\MatchStatistics;
 use App\Modules\Settlement\Models\Result;
+use App\Modules\SportsData\Services\HouseMarkets;
 use App\Modules\SportsData\Services\MarketKeys;
 use InvalidArgumentException;
 
@@ -51,6 +52,12 @@ class OutcomeResolver
 
         if ($marketKey === MarketKeys::HALFTIME_FULLTIME) {
             return $this->halftimeFulltime($selectionKey, $home <=> $away, (int) $result->home_score <=> (int) $result->away_score)
+                ? BetSelectionStatus::Won : BetSelectionStatus::Lost;
+        }
+
+        // Marchés maison (V2-D10) : même règle que pour leur cote (HouseMarkets::won).
+        if (HouseMarkets::isHouse($marketKey)) {
+            return (HouseMarkets::won($marketKey, $selectionKey, $home, $away) ?? $this->unknown($marketKey, $selectionKey))
                 ? BetSelectionStatus::Won : BetSelectionStatus::Lost;
         }
 

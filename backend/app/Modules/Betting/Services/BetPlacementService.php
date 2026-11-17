@@ -12,6 +12,7 @@ use App\Modules\Compliance\Services\ResponsibleGamingService;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Models\Selection;
+use App\Modules\SportsData\Services\HouseMarkets;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
@@ -134,6 +135,7 @@ class BetPlacementService
             $selections = $this->lockSelections($picks);
             $this->assertAvailable($picks, $selections);
             $this->assertOddsUnchanged($picks, $selections);
+            $this->assertHouseMarketStake($selections, $stakeMinor, $wallet->currency);
 
             // Cotes du serveur uniquement. Produit gardé à 6 décimales pour le gain, arrondi à 3 pour l'affichage.
             $product = $selections->reduce(fn (string $carry, Selection $s) => bcmul($carry, (string) $s->odds, 6), '1');
@@ -277,6 +279,27 @@ class BetPlacementService
                 'selections' => $changed,
             ]);
         }
+    }
+
+    /**
+     * Marchés maison (V2-D10), cotés par REYEL 16 sans bookmaker de référence : mise plafonnée plus bas
+     * (sports_data.house_markets.max_stake_minor) pour tout ticket qui en contient un.
+     *
+     * @param  Collection<int, Selection>  $selections
+     */
+    private function assertHouseMarketStake(Collection $selections, int $stakeMinor, string $currency): void
+    {
+        $max = (int) config('sports_data.house_markets.max_stake_minor');
+        if ($stakeMinor <= $max || ! $selections->contains(fn (Selection $s) => HouseMarkets::isHouse($s->market->key))) {
+            return;
+        }
+
+        throw new ApiException('stake_out_of_range', __('Mise maximale sur les paris spéciaux REYEL 16 : :max.', [
+            'max' => number_format(intdiv($max, 100), 0, ',', ' ')." {$currency}",
+        ]), 422, [
+            'min' => ['minor' => (int) config('betting.min_stake_minor'), 'currency' => $currency],
+            'max' => ['minor' => $max, 'currency' => $currency],
+        ]);
     }
 
     /** @return array<string, mixed> règles appliquées, figées sur le ticket */

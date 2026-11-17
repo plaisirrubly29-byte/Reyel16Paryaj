@@ -95,6 +95,7 @@ l'admin.
 | V2-D07 | Cash-out (encaisser avant la fin) | P3 | Benginio #175 | Rubly (bouton et confirmation) #176 | V2-D06 | Montant calculé côté serveur. Cote revérifiée. Ledger cohérent. |
 | V2-D08 | Jeux virtuels : football et courses, par un prestataire tiers (D-11) | P3 | Rubly (prestataire tiers, après le simulateur) #208 | Rubly (accueil, épreuve, résultats, « Mes paris ») #209 | D-11, V2-D05 | D-11 validée (avis juridique, prestataire, règles). Mises et gains dans le ledger. Limites de jeu responsable appliquées. |
 | V2-D09 | Marchés 1re mi-temps, mi-temps / fin de match, corners et cartons, réglés avec les statistiques d'API-Football | P2 | Rubly (demandé par Rubly le 2026-11-17, fait avec le code serveur) | Rubly (onglets Mi-temps, Corners, Cartons) | V2-A01 | Marchés proposés seulement si les statistiques sont actives. Match reconnu par l'heure, les équipes et le score. Pari sans statistiques annulé après 48 h. |
+| V2-D10 | Marchés maison (seulement ce que The Odds API ne fournit pas) : nombre exact de buts, tranches, victoire sans encaisser, écart de victoire, résultat et plus/moins | P2 | Rubly (demandé par Rubly le 2026-11-17, fait avec le code serveur) | Rubly (onglet Spécial R16) | V2-D03 | Cotes calculées depuis le 1X2 et le plus/moins (au moins 2 bookmakers), marge 12 %, mise max 1 000 HTG, réglés sur le score final. |
 
 ## Phase E — Expérience joueur
 
