@@ -216,6 +216,15 @@ class CatalogueSyncService
                 continue;
             }
 
+            // Argent réel : cote juste (moyenne des bookmakers) + marge de l'opérateur (V2-D03, D-18).
+            if (OddsMargin::enabled()) {
+                $selections = OddsMargin::apply(
+                    $selections,
+                    $this->sourceOdds($data, $key, $line),
+                    OddsMargin::rate($data->sportKey, $key, $live),
+                );
+            }
+
             if ($this->syncMarket($event, $market, $selections, $line)) {
                 $report->oddsChanged++;
             }
@@ -288,6 +297,32 @@ class CatalogueSyncService
         }
 
         return [null, [], null, $error];
+    }
+
+    /**
+     * Cotes de chaque bookmaker pour ce marché et cette ligne (clé de sélection => cote), pour la cote juste
+     * (V2-D03). Un bookmaker dont le marché est invalide ou d'une autre ligne est ignoré.
+     *
+     * @return list<array<string, string>>
+     */
+    private function sourceOdds(EventData $data, string $key, ?string $line): array
+    {
+        $sources = [];
+        foreach ($data->markets as $market) {
+            if ($market->key !== $key || count($market->selections) < 2) {
+                continue;
+            }
+            try {
+                [$selections, $marketLine] = $this->selections($data, $market);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+            if ($marketLine === $line) {
+                $sources[] = array_map(fn (array $s) => $s['odds'], $selections);
+            }
+        }
+
+        return $sources;
     }
 
     /**
