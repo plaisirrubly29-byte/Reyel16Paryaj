@@ -106,7 +106,13 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npm audit --audit-level=high
+      # Audit des dépendances : strict (faille élevée) sur ce qui est livré dans le navigateur des joueurs ; les outils
+      # de développement (Vite, Vitest, ESLint…) ne bloquent que sur une faille critique, car ils ne tournent jamais
+      # chez les joueurs (ex. picomatch, faille élevée sans correctif publié le 2026-11-17).
+      - name: Audit des dépendances livrées aux joueurs
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit des outils de développement
+        run: npm audit --audit-level=critical
 
   e2e:
     name: E2E (parcours complet, Playwright)
