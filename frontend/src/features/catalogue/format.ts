@@ -1,7 +1,12 @@
+// Formateurs créés une seule fois (V2-E05) : en créer un à chaque match coûtait ~25 % du calcul de l'accueil.
+// Mêmes options que toLocaleTimeString / toLocaleDateString, donc même affichage.
+const TIME = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const WEEKDAY_DATE = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
 /** « Aujourd'hui 15:30 », « Demain 17:00 » ou « sam. 18/10 · 15:00 » (heure locale du navigateur). */
 export function formatKickoff(iso: string, now: Date = new Date()): { day: string; time: string } {
   const date = new Date(iso);
-  const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const time = TIME.format(date);
 
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
@@ -10,7 +15,7 @@ export function formatKickoff(iso: string, now: Date = new Date()): { day: strin
     ? "Aujourd'hui"
     : days === 1
       ? 'Demain'
-      : date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+      : WEEKDAY_DATE.format(date);
 
   return { day, time };
 }
