@@ -239,8 +239,8 @@ class CatalogueSyncService
     }
 
     /**
-     * Marchés maison du football (V2-D10), cotés par REYEL 16 à partir du 1X2 et du plus/moins des bookmakers
-     * (HouseMarkets). Avant le match seulement, avec au moins min_bookmakers sur le 1X2 ; une erreur de calcul
+     * Marchés maison du football (V2-D10), cotés par REYEL 16 à partir de notre 1X2 publié et du plus/moins des
+     * bookmakers (HouseMarkets). Avant le match seulement, avec au moins min_bookmakers sur le 1X2 ; une erreur de calcul
      * laisse les marchés maison tels quels sans toucher au reste du match.
      */
     private function syncHouseMarkets(Event $event, EventData $data, SyncReport $report): void
@@ -271,13 +271,22 @@ class CatalogueSyncService
                 return $implied[$key] / array_sum($implied);
             }, $sources)) / count($sources);
 
+            // Probabilités du 1X2 tirées de NOTRE 1X2 publié (marge et plafonds compris), avec une marge au moins égale
+            // à la sienne : un même pari (ex. « Match nul » de l'écart de victoire) n'est jamais mieux payé côté maison.
+            $published = $event->markets()->where('key', 'h2h')->first()?->selections()->pluck('odds', 'key')
+                ->map(fn ($o) => 1 / (float) $o)->all() ?? [];
+            if (! isset($published['home'], $published['draw'], $published['away']) || count($published) !== 3) {
+                return;
+            }
+            $published1x2 = array_sum($published);
+
             $markets = HouseMarkets::build(
-                ['home' => $fair($results, 'home'), 'draw' => $fair($results, 'draw'), 'away' => $fair($results, 'away')],
+                array_map(fn (float $p) => $p / $published1x2, $published),
                 (float) $line,
                 $fair($overs, 'over'),
                 $data->homeTeam,
                 $data->awayTeam,
-                (float) config('sports_data.house_markets.margin', 0.12),
+                max((float) config('sports_data.house_markets.margin', 0.12), $published1x2 - 1),
             );
 
             $updatedAt = $h2h->updatedAt->min($totals->updatedAt);
