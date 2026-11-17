@@ -101,6 +101,21 @@ class HouseMarketsTest extends TestCase
             ->assertJsonFragment(['key' => HouseMarkets::WINNING_MARGIN, 'name' => 'Écart de victoire']);
     }
 
+    public function test_a_house_outcome_never_pays_more_than_the_same_outcome_of_our_published_result_market(): void
+    {
+        config(['wallet.simulated' => false]); // marge de l'opérateur et plafonds appliqués au 1X2
+        $this->withTwoBookmakers();
+        $this->sync();
+
+        foreach (Event::all() as $event) {
+            $odds = fn (string $market, string $key) => (float) $event->markets()->where('key', $market)->sole()->selections()->where('key', $key)->value('odds');
+            $this->assertLessThanOrEqual($odds('h2h', 'draw'), $odds(HouseMarkets::WINNING_MARGIN, 'draw'), "Match {$event->external_id}");
+
+            $home = array_sum(array_map(fn ($k) => 1 / $odds(HouseMarkets::WINNING_MARGIN, $k), ['home_by_1', 'home_by_2', 'home_by_3plus']));
+            $this->assertGreaterThanOrEqual(1 / $odds('h2h', 'home') - 0.005, $home, "Victoire domicile, match {$event->external_id}");
+        }
+    }
+
     public function test_no_house_market_with_a_single_bookmaker_or_when_disabled(): void
     {
         $this->app->instance(SportsDataProvider::class, new FakeSportsDataProvider);
