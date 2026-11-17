@@ -31,6 +31,8 @@ class EventResource extends JsonResource
             'score' => $this->status === EventStatus::Live && $this->home_score !== null && $this->away_score !== null
                 ? ['home' => $this->home_score, 'away' => $this->away_score]
                 : null,
+            // Paris maison REYEL 16 disponibles sur la page du match (repère « Spécial R16 » de la liste, V2-D10).
+            'has_house_markets' => (bool) ($this->has_house_markets ?? false),
             // Le libellé d'un marché dépend du sport ("Nombre de buts" au football) : on rattache l'événement
             // déjà chargé (avec compétition et sport) pour éviter une requête par marché.
             'markets' => MarketResource::collection($this->markets->each->setRelation('event', $this->resource)),

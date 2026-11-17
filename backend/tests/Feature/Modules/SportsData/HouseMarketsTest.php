@@ -11,6 +11,7 @@ use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Data\EventData;
 use App\Modules\SportsData\Data\MarketData;
 use App\Modules\SportsData\Data\SelectionData;
+use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Selection;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
@@ -114,6 +115,17 @@ class HouseMarketsTest extends TestCase
             $home = array_sum(array_map(fn ($k) => 1 / $odds(HouseMarkets::WINNING_MARGIN, $k), ['home_by_1', 'home_by_2', 'home_by_3plus']));
             $this->assertGreaterThanOrEqual(1 / $odds('h2h', 'home') - 0.005, $home, "Victoire domicile, match {$event->external_id}");
         }
+    }
+
+    public function test_the_match_list_flags_matches_with_house_markets(): void
+    {
+        $this->withTwoBookmakers();
+        $this->sync();
+        Event::where('external_id', 'fake-2')->sole()->markets()->where('key', 'like', 'r16_%')->update(['status' => MarketStatus::Suspended]);
+
+        $flags = collect($this->getJson('/api/v1/events')->assertOk()->json('data'))->pluck('has_house_markets', 'home_team');
+
+        $this->assertSame(['Arsenal' => true, 'Liverpool' => false], $flags->only(['Arsenal', 'Liverpool'])->all());
     }
 
     public function test_no_house_market_with_a_single_bookmaker_or_when_disabled(): void

@@ -76,6 +76,22 @@ function catalogue(user: unknown = guest) {
   });
 }
 
+describe('repère des paris maison', () => {
+  it('signale « Spécial R16 » sur les matchs qui en ont et mène à leur onglet', async () => {
+    mockApi({
+      'GET /me': guest,
+      'GET /health': { status: 200, body: { status: 'ok', version: 'v1', time: '' } },
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([{ ...EVENTS[0], has_house_markets: true }, EVENTS[1]]) },
+    });
+    renderApp('/');
+
+    const badges = await screen.findAllByRole('link', { name: 'Spécial R16' });
+    expect(badges).toHaveLength(1);
+    expect(badges[0]).toHaveAttribute('href', '/events/1?paris=special-r16');
+  });
+});
+
 describe("page d'accueil : matchs", () => {
   it('affiche les matchs groupés par compétition avec les cotes 1 X 2', async () => {
     catalogue();

@@ -4,6 +4,7 @@ namespace App\Modules\Catalogue\Services;
 
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Services\HouseMarkets;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -41,7 +42,8 @@ class CatalogueQuery
      */
     public function withDisplayRelations(Builder $query, ?string $marketKey = null): Builder
     {
-        return $query->with([
+        // Repère « Spécial R16 » de la liste : le match a au moins un marché maison affichable (V2-D10).
+        return $query->withExists(['markets as has_house_markets' => fn ($q) => $q->displayable()->whereIn('key', HouseMarkets::KEYS)])->with([
             'competition.sport',
             'homeTeam',
             'awayTeam',

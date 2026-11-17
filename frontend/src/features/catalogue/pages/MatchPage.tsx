@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Alert } from '../../../shared/components/Alert';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
@@ -30,7 +30,11 @@ export function MatchPage() {
 }
 
 function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) {
-  const [category, setCategory] = useState<MarketCategory | 'Tous'>('Tous');
+  // ?paris=special-r16 (repère de la liste) : ouvre directement l'onglet des paris maison.
+  const [searchParams] = useSearchParams();
+  const [category, setCategory] = useState<MarketCategory | 'Tous'>(
+    searchParams.get('paris') === 'special-r16' ? 'Spécial R16' : 'Tous',
+  );
   const [search, setSearch] = useState('');
 
   if (query.isPending) return <div className="table-state"><Spinner label="Chargement du match…" /></div>;

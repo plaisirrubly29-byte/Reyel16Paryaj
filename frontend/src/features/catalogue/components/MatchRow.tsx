@@ -26,6 +26,15 @@ export function MatchRow({ event, marketKey = 'h2h' }: { event: CatalogueEvent; 
           <p className="match-line-competition">
             {competition.country ? `${competition.country} - ` : ''}{competition.name}
             {live && <span className="live-badge"><Icon name="live" size={12} />{live}</span>}
+            {event.has_house_markets && (
+              <Link
+                to={`/events/${event.id}?paris=special-r16`}
+                className="special-badge"
+                title="Paris spéciaux REYEL 16 : nombre exact de buts, écart de victoire…"
+              >
+                Spécial R16
+              </Link>
+            )}
           </p>
         </div>
         <div className="match-line-time">
