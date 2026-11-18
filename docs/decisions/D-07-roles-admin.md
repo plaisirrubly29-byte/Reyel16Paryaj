@@ -7,11 +7,15 @@
 | **Décideur** | Rubly PLAISIR (chef de projet) |
 | **Préparé le** | 2026-10-29 |
 | **Tranche aussi** | Points M3 et I2 de la revue de sécurité [P8-02](../security/P8-02-revue-securite.md) |
+| **Complétée par** | V2-G03 (#230) : rôles Risk & Fraud et Gestion des agents — 🟡 à valider |
 
 ## 1. Rôles
 
-Cinq rôles, tels que définis dans [`config/permissions.php`](../../backend/config/permissions.php) et la
-[matrice des permissions](../permissions-matrix.md) : **Super Admin, Opérations, Finance, Support, Conformité**.
+Sept rôles, tels que définis dans [`config/permissions.php`](../../backend/config/permissions.php) et la
+[matrice des permissions](../permissions-matrix.md) : **Super Admin, Opérations, Finance, Support, Conformité**,
+et depuis V2-G03 (#230, à valider) **Risk & Fraud** (plafonds de risque, exposition, alertes AML, mise maximale d'un
+joueur, suspension d'un marché ; ni ledger ni corrections financières) et **Gestion des agents** (agents et
+commissions en consultation, D-13 ; ni ledger global ni taux de commission).
 Un administrateur peut cumuler plusieurs rôles. **MFA (TOTP) obligatoire** pour tout compte ayant un rôle.
 
 Au lancement : **deux Super Admins** (Rubly PLAISIR et Benginio Jean-Baptiste), nommés par
@@ -26,6 +30,7 @@ sa propre demande.
 |---|---|---|
 | Correction d'un résultat déjà réglé (D-05 §5) | `results.enter` (Super Admin, Opérations) | `results.approve` (Super Admin, Opérations) |
 | Correction financière (écriture compensatoire sur un portefeuille) | `finance.correct` (Super Admin, Finance) | `finance.approve` (Super Admin, Finance) |
+| Modification des taux de commission des agents (D-13 AG-12, V2-G02) | `commissions.manage` (Super Admin, Finance) | `commissions.manage` (Super Admin, Finance) |
 
 Le **règlement** des tickets est automatique (jobs) ; il n'est relancé que par la commande serveur
 `settlement:run`. Aucune route d'administration ne lance de règlement en V1 : les permissions

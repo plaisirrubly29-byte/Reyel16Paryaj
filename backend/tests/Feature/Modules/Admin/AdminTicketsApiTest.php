@@ -103,12 +103,14 @@ class AdminTicketsApiTest extends TestCase
             ->assertJsonPath('data.ledger_entries.0.correctable', false);
     }
 
-    public function test_every_admin_role_can_consult_tickets_but_not_a_player(): void
+    public function test_every_admin_role_but_agent_management_can_consult_tickets_but_not_a_player(): void
     {
         $ticket = $this->ticket($this->player);
 
         foreach (RoleSlug::cases() as $role) {
-            $this->actingAsVerifiedAdmin($this->admin($role))->getJson("/api/v1/admin/tickets/{$ticket->id}")->assertOk();
+            // Gestion des agents (V2-G03) : jamais le détail des paris (D-13, AG-14).
+            $expected = $role === RoleSlug::AgentManager ? 403 : 200;
+            $this->actingAsVerifiedAdmin($this->admin($role))->getJson("/api/v1/admin/tickets/{$ticket->id}")->assertStatus($expected);
         }
 
         $this->actingAs($this->player)->getJson('/api/v1/admin/tickets')->assertForbidden();
