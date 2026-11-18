@@ -69,6 +69,8 @@ const LedgerPage = lazyPage(() => import('../admin/pages/LedgerPage'), 'LedgerPa
 const ReconciliationPage = lazyPage(() => import('../admin/pages/ReconciliationPage'), 'ReconciliationPage');
 const SettingsPage = lazyPage(() => import('../admin/pages/SettingsPage'), 'SettingsPage');
 const SettlementsPage = lazyPage(() => import('../admin/pages/SettlementsPage'), 'SettlementsPage');
+const OddsOverridesPage = lazyPage(() => import('../admin/pages/OddsOverridesPage'), 'OddsOverridesPage');
+const OddsOverrideDetailPage = lazyPage(() => import('../admin/pages/OddsOverrideDetailPage'), 'OddsOverrideDetailPage');
 const UserDetailPage = lazyPage(() => import('../admin/pages/UserDetailPage'), 'UserDetailPage');
 const TicketDetailPage = lazyPage(() => import('../admin/pages/TicketDetailPage'), 'TicketDetailPage');
 const TicketsPage = lazyPage(() => import('../admin/pages/TicketsPage'), 'TicketsPage');
@@ -134,6 +136,8 @@ export const routes = [
       section('', <AdminHomePage />),
       section('events', <EventsPage />),
       section('events/:id', <EventDetailPage />),
+      section('odds', <OddsOverridesPage />),
+      section('odds/:id', <OddsOverrideDetailPage />),
       section('settlements', <SettlementsPage />),
       section('settlements/:id', <CorrectionDetailPage />),
       section('users', <UsersPage />),

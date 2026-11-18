@@ -19,6 +19,24 @@ export const MARKET_STATUS_LABELS: Record<MarketStatus, string> = {
   settled: 'Réglé',
 };
 
+/**
+ * Sélection vue par l'administration. Repères d'une cote fixée à la main (V2-D03) : cote calculée (marge de
+ * l'opérateur), bookmaker de référence, meilleure cote suivie (repère contre l'arbitrage) ; null pour un marché maison.
+ */
+export type AdminSelection = {
+  id: string;
+  key: string;
+  label: string;
+  name: string;
+  /** Cote proposée aux joueurs. */
+  odds: string;
+  computed_odds?: string | null;
+  provider_odds?: string | null;
+  best_odds?: string | null;
+  /** true : cote fixée à la main en vigueur. */
+  adjusted?: boolean;
+};
+
 /** Marché vu par l'administration (GET /admin/markets/{id}, P6-02) : tous statuts, origine et fraîcheur. */
 export type AdminMarket = {
   id: string;
@@ -33,7 +51,7 @@ export type AdminMarket = {
   origin: { provider: string | null; external_id: string | null; bookmaker: string | null };
   freshness: { odds_updated_at: string | null; age_seconds: number | null; max_age_minutes: number; stale: boolean };
   bettable: boolean;
-  selections?: { id: string; key: string; label: string; name: string; odds: string }[];
+  selections?: AdminSelection[];
   updated_at: string | null;
 };
 

@@ -20,6 +20,7 @@ export type AdminSection = {
 export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin', label: "Vue d'ensemble", icon: 'dashboard', group: 'Pilotage', description: 'Indicateurs clés et activité récente.', permissions: ['dashboard.view'], end: true },
   { to: '/admin/events', label: 'Événements & marchés', icon: 'calendar', group: 'Opérations', description: 'Matchs, cotes et suspension des marchés.', permissions: ['events.view'] },
+  { to: '/admin/odds', label: 'Cotes ajustées', icon: 'trendUp', group: 'Opérations', description: 'Cotes fixées à la main : validation et retour à la cote calculée.', permissions: ['events.view'] },
   { to: '/admin/settlements', label: 'Résultats & règlement', icon: 'trophy', group: 'Opérations', description: 'Saisie des résultats et règlement des tickets.', permissions: ['results.enter', 'settlement.run'] },
   { to: '/admin/tickets', label: 'Tickets', icon: 'coupon', group: 'Opérations', description: 'Recherche et détail des paris placés.', permissions: ['tickets.view'] },
   { to: '/admin/users', label: 'Utilisateurs', icon: 'users', group: 'Opérations', description: 'Comptes joueurs, statuts et rôles.', permissions: ['users.view'] },
