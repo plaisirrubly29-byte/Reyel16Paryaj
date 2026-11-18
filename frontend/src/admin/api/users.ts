@@ -42,13 +42,8 @@ export const STATUS_LABELS: Record<AccountStatus, string> = {
   closed: 'Fermé',
 };
 
-export const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'Super Admin',
-  operations: 'Opérations',
-  finance: 'Finance',
-  support: 'Support',
-  compliance: 'Conformité',
-};
+/** Une seule liste des rôles : admin/roles.ts. */
+export { ROLE_LABELS } from '../roles';
 
 export function useAdminUsers(filters: UserFilters) {
   return useQuery({
@@ -108,6 +103,27 @@ export function useSetStakeLimit(id: string) {
       queryClient.setQueryData(['admin', 'users', id], user);
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'], predicate: (q) => q.queryKey[2] !== id });
     },
+  });
+}
+
+export type RolesChange = { roles: string[]; reason: string; idempotencyKey: string };
+
+/**
+ * Remplacer les rôles administratifs d'un compte (permission roles.manage, motif obligatoire, audité). Jamais sur son
+ * propre compte (403 cannot_modify_own_roles).
+ */
+export function useSetUserRoles(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ roles, reason, idempotencyKey }: RolesChange) =>
+      (await api<Envelope<{ id: string; roles: string[] }>>(`/admin/users/${encodeURIComponent(id)}/roles`, {
+        method: 'PUT',
+        body: { roles, reason },
+        idempotencyKey,
+      })).data,
+    // La réponse ne contient que les rôles : la fiche (type de compte, MFA) et les listes sont relues.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'], exact: false }),
   });
 }
 
