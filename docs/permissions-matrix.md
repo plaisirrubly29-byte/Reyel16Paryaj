@@ -8,38 +8,56 @@
 > Les permissions d'un rôle ne sont modifiables par aucune route : seule l'attribution des rôles l'est
 > (`PUT /admin/users/{id}/roles`, Super Admin uniquement, jamais sur soi-même, motif obligatoire).
 
+> **V2-G03 (#230), à valider :** colonnes Risk & Fraud et Gestion des agents ; ligne « Utilisateur — suspendre,
+> limiter sa mise maximale » scindée en deux ; lignes « Paramètres — plafonds de risque », « Agents » et
+> « Commissions des agents » ajoutées. Aucun accès des cinq rôles existants n'est retiré.
+
 Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · ❌ interdit
 
-| Ressource / action | Super Admin | Opérations | Finance | Support | Conformité |
-|---|---|---|---|---|---|
-| Vue d'ensemble | 👁 | 👁 | 👁 | 👁 | 👁 |
-| Événements & marchés — consulter | ✅ | ✅ | 👁 | 👁 | 👁 |
-| Marché — suspendre / masquer (motif) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Résultats — saisir / valider | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ |
-| Règlement — lancer / relancer | — | — | — | — | — |
-| Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 |
-| Utilisateur — suspendre, limiter sa mise maximale (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
-| Tickets — consulter | ✅ | 👁 | 👁 | 👁 | 👁 |
-| Ledger / rapprochement / transactions des prestataires de paiement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 |
-| Correction financière | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ |
-| Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Paramètres (limites, règles, fournisseur) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 |
-| Limites jeu responsable | 👁 | ❌ | ❌ | ❌ | ✅ |
-| Alertes AML — consulter / classer ou signaler (motif) | 👁 | ❌ | 👁 | ❌ | ✅ |
-| KYC — consulter les pièces, valider un dossier (motif) | ✅ | ❌ | ❌ | ✅ | ✅ |
-| KYC — refuser un dossier (motif) | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Audit & exports | 👁 | ❌ | 👁 | ❌ | 👁 |
-| Gérer les rôles des autres | ✅ (jamais les siens) | ❌ | ❌ | ❌ | ❌ |
+| Ressource / action | Super Admin | Opérations | Finance | Support | Conformité | Risk & Fraud | Gestion des agents |
+|---|---|---|---|---|---|---|---|
+| Vue d'ensemble | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 |
+| Événements & marchés — consulter | ✅ | ✅ | 👁 | 👁 | 👁 | 👁 | ❌ |
+| Marché — suspendre / masquer (motif) | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Résultats — saisir / valider | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Règlement — lancer / relancer | — | — | — | — | — | — | — |
+| Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 | 👁 (email et téléphone masqués) | 👁 (email et téléphone masqués) |
+| Utilisateur — suspendre (motif) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Utilisateur — limiter sa mise maximale (motif) | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Tickets et exposition — consulter | ✅ | 👁 | 👁 | 👁 | 👁 | 👁 | ❌ |
+| Ledger / rapprochement / transactions des prestataires de paiement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 | ❌ | ❌ |
+| Correction financière | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ | ❌ | ❌ |
+| Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Paramètres (limites, règles, fournisseur) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 | 👁 | ❌ |
+| Paramètres — plafonds de risque (perte maximale par match et par marché) | ✅ (versionné) | ❌ | ❌ | ❌ | 👁 | ✅ (versionné) | ❌ |
+| Limites jeu responsable | 👁 | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Alertes AML — consulter / classer ou signaler (motif) | 👁 | ❌ | 👁 | ❌ | ✅ | ✅ | ❌ |
+| KYC — consulter les pièces, valider un dossier (motif) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| KYC — refuser un dossier (motif) | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Audit & exports | 👁 | ❌ | 👁 | ❌ | 👁 | 👁 | ❌ |
+| Gérer les rôles des autres | ✅ (jamais les siens) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Agents — consulter / créer, rattacher un joueur, suspendre (motif) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Commissions des agents — consulter | 👁 | ❌ | 👁 | ❌ | ❌ | ❌ | 👁 |
+| Commissions des agents — modifier les taux | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ | ❌ | ❌ |
 
 Règles : aucun rôle ne peut s'accorder lui-même des permissions ; MFA obligatoire pour tous ces rôles ; 2️⃣ = l'initiateur et le validateur sont deux comptes différents (limites d'action : voir D-07 §3) ;
 toute action ✅/2️⃣ sur une donnée sensible est journalisée avec motif.
 Règlement : automatique (jobs), relancé seulement par la commande serveur `settlement:run` ; aucune route
 d'administration en V1 (`settlement.run` / `settlement.approve` réservées).
 
+Risk & Fraud (V2-G03) : plafonds de risque (seulement les paramètres du groupe « Risque », permission `risk.manage`),
+exposition, alertes AML, mise maximale d'un joueur, suspension d'un marché ; aucun accès au ledger ni aux corrections
+financières. Les multi-comptes (V2-C05, #158) lui seront ouverts avec cette tâche.
+Gestion des agents (V2-G03, D-13) : agents et commissions en consultation ; ni ledger global ni taux de commission
+(fixés par la Finance ou le Super Admin, à double validation). Les documents des agents sont validés par la
+Conformité (D-13, AG-10).
+Agents et commissions : **pas encore de route** (V2-G01, V2-G02). Comme pour le règlement, le test vérifie que leurs
+permissions sont réservées aux bons rôles ; les routes futures devront s'y rattacher.
+
 ## Tests API (P6-09)
 
 [`backend/tests/Feature/Modules/Admin/PermissionMatrixTest.php`](../backend/tests/Feature/Modules/Admin/PermissionMatrixTest.php) :
-un test par ligne du tableau. Chaque route de la ligne est appelée par un administrateur de chacun des cinq rôles
+un test par ligne du tableau. Chaque route de la ligne est appelée par un administrateur de chacun des sept rôles
 (MFA vérifiée) : rôle autorisé → la requête passe le contrôle de permission ; rôle interdit → `403 forbidden`.
 
 - Les permissions de `config/permissions.php` (et celles appliquées en base) sont comparées à ce tableau, rôle par rôle.

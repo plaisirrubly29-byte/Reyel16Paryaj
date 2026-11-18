@@ -25,7 +25,7 @@ use Tests\TestCase;
 /**
  * Matrice des permissions validée par l'API (P6-09) : un test par ligne de docs/permissions-matrix.md.
  *
- * Chaque route de la ligne est appelée par un administrateur de chacun des cinq rôles (MFA vérifiée) :
+ * Chaque route de la ligne est appelée par un administrateur de chacun des sept rôles (MFA vérifiée) :
  * - rôle autorisé : la requête passe le contrôle de permission (aucun 403 « forbidden », aucune erreur serveur) ;
  * - rôle interdit : 403 « forbidden », avant toute lecture de la cible.
  * Les écritures sont envoyées sans corps : un rôle autorisé reçoit la validation (422), rien n'est modifié.
@@ -46,7 +46,11 @@ class PermissionMatrixTest extends TestCase
 
     private const COMPLIANCE = 'compliance';
 
-    private const ALL = [self::SUPER_ADMIN, self::OPERATIONS, self::FINANCE, self::SUPPORT, self::COMPLIANCE];
+    private const RISK = 'risk_fraud';
+
+    private const AGENTS = 'agent_manager';
+
+    private const ALL = [self::SUPER_ADMIN, self::OPERATIONS, self::FINANCE, self::SUPPORT, self::COMPLIANCE, self::RISK, self::AGENTS];
 
     /** Identifiant inexistant : la permission est vérifiée avant la résolution du modèle (404 seulement si autorisé). */
     private const MISSING = 999999;
@@ -58,11 +62,13 @@ class PermissionMatrixTest extends TestCase
             'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
             'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
             'aml.view', 'audit.view', 'audit.export', 'roles.manage', 'kyc.view', 'kyc.approve', 'kyc.reject',
+            'risk.manage', 'agents.view', 'agents.manage', 'commissions.view', 'commissions.manage',
         ],
         self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view'],
         self::FINANCE => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data',
             'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'aml.view', 'audit.view', 'audit.export',
+            'commissions.view', 'commissions.manage',
         ],
         // Support : utilisateurs en données minimales (pas users.view_personal_data) ; examine et valide les dossiers KYC
         // (V2-C03), sans pouvoir les refuser.
@@ -72,6 +78,13 @@ class PermissionMatrixTest extends TestCase
             'ledger.view', 'settings.view', 'responsible_gaming.view', 'responsible_gaming.manage', 'aml.view', 'aml.review',
             'audit.view', 'audit.export', 'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
+        // V2-G03 : plafonds de risque (groupe Risque seulement), exposition, AML, mise maximale, suspension d'un marché.
+        self::RISK => [
+            'dashboard.view', 'events.view', 'markets.suspend', 'users.view', 'tickets.view', 'settings.view', 'risk.manage',
+            'aml.view', 'aml.review', 'audit.view', 'audit.export',
+        ],
+        // V2-G03, D-13 : agents et commissions en consultation ; ni ledger global ni taux de commission.
+        self::AGENTS => ['dashboard.view', 'users.view', 'agents.view', 'agents.manage', 'commissions.view'],
     ];
 
     /**
@@ -91,8 +104,9 @@ class PermissionMatrixTest extends TestCase
         ],
         'Règlement — lancer / relancer' => [], // aucune route : règlement automatique (job, commande settlement:run)
         'Utilisateurs — rechercher / consulter' => ['GET api/v1/admin/users', 'GET api/v1/admin/users/{user}'],
-        'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}', 'PUT api/v1/admin/users/{user}/stake-limit'],
-        'Tickets — consulter' => ['GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure'],
+        'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}'],
+        'Utilisateur — limiter sa mise maximale' => ['PUT api/v1/admin/users/{user}/stake-limit'],
+        'Tickets et exposition — consulter' => ['GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure'],
         'Ledger / rapprochement — consulter' => [
             'GET api/v1/admin/ledger', 'GET api/v1/admin/finance/reconciliation', 'GET api/v1/admin/finance/corrections',
             'GET api/v1/admin/finance/corrections/{correction}', 'GET api/v1/admin/users/{user}/wallet',
@@ -103,7 +117,9 @@ class PermissionMatrixTest extends TestCase
             'POST api/v1/admin/finance/corrections/{correction}/reject',
         ],
         'Solde joueur — dépôt / retrait' => ['POST api/v1/admin/users/{user}/wallet/adjustments'],
-        'Paramètres' => ['GET api/v1/admin/settings', 'GET api/v1/admin/settings/versions', 'GET api/v1/admin/system', 'PUT api/v1/admin/settings'],
+        'Paramètres' => ['GET api/v1/admin/settings', 'GET api/v1/admin/settings/versions', 'GET api/v1/admin/system'],
+        // Même route pour tous les paramètres : risk.manage n'y modifie que le groupe Risque (test de la ligne).
+        'Paramètres — plafonds de risque' => ['PUT api/v1/admin/settings'],
         'Limites jeu responsable' => ['GET api/v1/admin/users/{user}/responsible-gaming', 'POST api/v1/admin/users/{user}/responsible-gaming/reopen'],
         'Alertes AML — consulter / traiter' => [
             'GET api/v1/admin/aml/alerts', 'GET api/v1/admin/aml/alerts/{alert}', 'POST api/v1/admin/aml/alerts/{alert}/review',
@@ -115,6 +131,8 @@ class PermissionMatrixTest extends TestCase
         'KYC — refuser' => ['POST api/v1/admin/kyc/{submission}/reject'],
         'Audit & exports' => ['GET api/v1/admin/audit-logs', 'POST api/v1/admin/audit-logs/export'],
         'Gérer les rôles des autres' => ['PUT api/v1/admin/users/{user}/roles', 'DELETE api/v1/admin/users/{user}/mfa'],
+        'Agents — consulter / gérer' => [], // aucune route avant V2-G01 (#226)
+        'Commissions des agents — consulter / modifier les taux' => [], // aucune route avant V2-G02 (#228)
     ];
 
     /** @var array<string, User> */
@@ -197,21 +215,22 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', 'search', self::ALL, ['q' => 'Arsenal']);
     }
 
-    public function test_row_events_and_markets_are_readable_by_every_role(): void
+    public function test_row_events_and_markets_are_readable_by_every_role_but_agent_management(): void
     {
         $market = $this->event->markets()->firstOrFail();
+        $readers = array_values(array_diff(self::ALL, [self::AGENTS]));
 
-        $this->assertAccess('GET', 'events', self::ALL);
-        $this->assertAccess('GET', "events/{$this->event->id}", self::ALL);
-        $this->assertAccess('GET', "markets/{$market->id}", self::ALL);
-        $this->assertAccess('GET', "events/{$this->event->id}/results", self::ALL);
+        $this->assertAccess('GET', 'events', $readers);
+        $this->assertAccess('GET', "events/{$this->event->id}", $readers);
+        $this->assertAccess('GET', "markets/{$market->id}", $readers);
+        $this->assertAccess('GET', "events/{$this->event->id}/results", $readers);
     }
 
-    public function test_row_market_suspension_is_reserved_to_super_admin_and_operations(): void
+    public function test_row_market_suspension_is_reserved_to_super_admin_operations_and_risk(): void
     {
         $market = $this->event->markets()->firstOrFail();
 
-        $this->assertAccess('PATCH', "markets/{$market->id}", [self::SUPER_ADMIN, self::OPERATIONS]);
+        $this->assertAccess('PATCH', "markets/{$market->id}", [self::SUPER_ADMIN, self::OPERATIONS, self::RISK]);
         $this->assertSame('open', $market->fresh()->status->value, 'Aucune requête sans motif ne doit modifier le marché.');
     }
 
@@ -245,19 +264,22 @@ class PermissionMatrixTest extends TestCase
         $this->assertCount(0, $exposing, 'Une route de règlement doit être ajoutée à la ligne « Règlement » de ce test.');
     }
 
-    public function test_row_users_are_searchable_by_all_but_operations_and_support_sees_masked_contact_data(): void
+    public function test_row_users_are_searchable_by_all_but_operations_and_minimal_roles_see_masked_contact_data(): void
     {
-        $allowed = [self::SUPER_ADMIN, self::FINANCE, self::SUPPORT, self::COMPLIANCE];
+        $allowed = [self::SUPER_ADMIN, self::FINANCE, self::SUPPORT, self::COMPLIANCE, self::RISK, self::AGENTS];
 
         $this->assertAccess('GET', 'users', $allowed);
         $this->assertAccess('GET', "users/{$this->player->id}", $allowed);
 
-        // 👁 Support (D-07, I2) : email et téléphone masqués, ni profil ni rôles — dans la fiche comme dans la liste.
-        $this->requestAs(self::SUPPORT, 'GET', "users/{$this->player->id}")->assertOk()
-            ->assertJsonPath('data.phone', '•••• 3456')->assertJsonPath('data.email', 'je•••@example.com')
-            ->assertJsonMissingPath('data.profile')->assertJsonMissingPath('data.roles');
-        $listed = collect($this->requestAs(self::SUPPORT, 'GET', 'users')->assertOk()->json('data'))->firstWhere('id', (string) $this->player->id);
-        $this->assertSame(['•••• 3456', 'je•••@example.com'], [$listed['phone'], $listed['email']]);
+        // 👁 Support (D-07, I2), Risk & Fraud et Gestion des agents (V2-G03) : email et téléphone masqués, ni profil ni
+        // rôles — dans la fiche comme dans la liste.
+        foreach ([self::SUPPORT, self::RISK, self::AGENTS] as $role) {
+            $this->requestAs($role, 'GET', "users/{$this->player->id}")->assertOk()
+                ->assertJsonPath('data.phone', '•••• 3456')->assertJsonPath('data.email', 'je•••@example.com')
+                ->assertJsonMissingPath('data.profile')->assertJsonMissingPath('data.roles');
+            $listed = collect($this->requestAs($role, 'GET', 'users')->assertOk()->json('data'))->firstWhere('id', (string) $this->player->id);
+            $this->assertSame(['•••• 3456', 'je•••@example.com'], [$listed['phone'], $listed['email']], $role);
+        }
 
         foreach ([self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE] as $role) {
             $this->requestAs($role, 'GET', "users/{$this->player->id}")->assertOk()
@@ -270,16 +292,26 @@ class PermissionMatrixTest extends TestCase
     {
         $this->assertAccess('PATCH', "users/{$this->player->id}", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE]);
         $this->assertSame('active', $this->player->fresh()->status->value);
-        // Mise maximale propre au joueur (V2-D05) : même ligne, restriction plus légère qu'une suspension.
-        $this->assertAccess('PUT', "users/{$this->player->id}/stake-limit", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE]);
-        $this->assertNull($this->player->fresh()->max_stake_minor);
     }
 
-    public function test_row_tickets_are_readable_by_every_role(): void
+    /** Mise maximale propre au joueur (V2-D05) : users.suspend ou risk.manage (Risk & Fraud, V2-G03), sans droit de suspendre. */
+    public function test_row_player_stake_limit_is_set_by_super_admin_support_compliance_and_risk(): void
     {
-        $this->assertAccess('GET', 'tickets', self::ALL);
-        $this->assertAccess('GET', 'tickets/'.self::MISSING, self::ALL);
-        $this->assertAccess('GET', 'risk/exposure', self::ALL);
+        $this->assertAccess('PUT', "users/{$this->player->id}/stake-limit", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE, self::RISK]);
+        $this->assertNull($this->player->fresh()->max_stake_minor);
+
+        $this->requestAs(self::RISK, 'PUT', "users/{$this->player->id}/stake-limit", ['max_stake_minor' => 500_00, 'reason' => 'Comportement de parieur professionnel'])
+            ->assertOk();
+        $this->assertSame(500_00, $this->player->fresh()->max_stake_minor);
+    }
+
+    public function test_row_tickets_and_exposure_are_readable_by_every_role_but_agent_management(): void
+    {
+        $readers = array_values(array_diff(self::ALL, [self::AGENTS]));
+
+        $this->assertAccess('GET', 'tickets', $readers);
+        $this->assertAccess('GET', 'tickets/'.self::MISSING, $readers);
+        $this->assertAccess('GET', 'risk/exposure', $readers);
     }
 
     public function test_row_ledger_and_reconciliation_are_readable_by_super_admin_finance_and_compliance(): void
@@ -323,14 +355,37 @@ class PermissionMatrixTest extends TestCase
         $this->assertSame(1, LedgerEntry::where('reversal_of_id', $credit->id)->count());
     }
 
-    public function test_row_settings_are_versioned_by_super_admin_and_read_only_for_compliance(): void
+    public function test_row_settings_are_versioned_by_super_admin_and_read_only_for_compliance_and_risk(): void
     {
-        $readers = [self::SUPER_ADMIN, self::COMPLIANCE];
+        $readers = [self::SUPER_ADMIN, self::COMPLIANCE, self::RISK];
 
         $this->assertAccess('GET', 'settings', $readers);
         $this->assertAccess('GET', 'settings/versions', $readers);
         $this->assertAccess('GET', 'system', $readers);
-        $this->assertAccess('PUT', 'settings', [self::SUPER_ADMIN]);
+        // Paramètre hors du groupe Risque. base_version périmée : un rôle autorisé reçoit 409, rien n'est enregistré.
+        $this->assertAccess('PUT', 'settings', [self::SUPER_ADMIN], [
+            'values' => ['betting' => ['max_stake_minor' => 40_000_00]], 'base_version' => self::MISSING, 'reason' => 'Test de la matrice',
+        ]);
+    }
+
+    /** risk.manage (Risk & Fraud, V2-G03) : seulement les plafonds du groupe Risque, versionnés et audités comme les autres. */
+    public function test_row_risk_limits_are_set_by_super_admin_and_risk_only(): void
+    {
+        $limits = ['betting' => ['max_event_liability_minor' => 2_000_000_00, 'max_market_liability_minor' => 1_000_000_00]];
+
+        $this->assertAccess('PUT', 'settings', [self::SUPER_ADMIN, self::RISK], [
+            'values' => $limits, 'base_version' => self::MISSING, 'reason' => 'Test de la matrice',
+        ]);
+
+        // Un plafond et un autre paramètre dans la même demande : refusé en entier.
+        $this->requestAs(self::RISK, 'PUT', 'settings', [
+            'values' => ['betting' => ['max_event_liability_minor' => 2_000_000_00, 'allow_live' => true]], 'base_version' => 0, 'reason' => 'Ouverture du direct',
+        ])->assertForbidden()->assertJsonPath('error.code', 'forbidden');
+
+        $this->requestAs(self::RISK, 'PUT', 'settings', ['values' => $limits, 'base_version' => 0, 'reason' => 'Plafonds de lancement'])
+            ->assertOk()->assertJsonPath('data.version', 1);
+        $this->assertSame(2_000_000_00, config('betting.max_event_liability_minor'));
+        $this->assertFalse((bool) config('betting.allow_live'));
     }
 
     public function test_row_responsible_gaming_is_managed_by_compliance_and_read_only_for_super_admin(): void
@@ -340,13 +395,13 @@ class PermissionMatrixTest extends TestCase
     }
 
     /** Règles, revue et audit : AmlAlertTest. */
-    public function test_row_aml_alerts_are_reviewed_by_compliance_and_read_only_for_super_admin_and_finance(): void
+    public function test_row_aml_alerts_are_reviewed_by_compliance_and_risk_and_read_only_for_super_admin_and_finance(): void
     {
-        $readers = [self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE];
+        $readers = [self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE, self::RISK];
 
         $this->assertAccess('GET', 'aml/alerts', $readers);
         $this->assertAccess('GET', 'aml/alerts/'.self::MISSING, $readers);
-        $this->assertAccess('POST', 'aml/alerts/'.self::MISSING.'/review', [self::COMPLIANCE]);
+        $this->assertAccess('POST', 'aml/alerts/'.self::MISSING.'/review', [self::COMPLIANCE, self::RISK]);
     }
 
     public function test_row_kyc_is_reviewed_by_super_admin_support_and_compliance_and_rejected_by_compliance(): void
@@ -359,9 +414,9 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('POST', 'kyc/'.self::MISSING.'/reject', [self::SUPER_ADMIN, self::COMPLIANCE]);
     }
 
-    public function test_row_audit_and_exports_are_reserved_to_super_admin_finance_and_compliance(): void
+    public function test_row_audit_and_exports_are_reserved_to_super_admin_finance_compliance_and_risk(): void
     {
-        $allowed = [self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE];
+        $allowed = [self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE, self::RISK];
 
         $this->assertAccess('GET', 'audit-logs', $allowed);
         $this->assertAccess('POST', 'audit-logs/export', $allowed);
@@ -377,5 +432,30 @@ class PermissionMatrixTest extends TestCase
         $this->requestAs(self::SUPER_ADMIN, 'PUT', "users/{$superAdmin->id}/roles", ['roles' => [], 'reason' => 'Changement de poste'])
             ->assertForbidden()->assertJsonPath('error.code', 'cannot_modify_own_roles');
         $this->assertTrue($superAdmin->fresh()->hasRole(RoleSlug::SuperAdmin));
+    }
+
+    /**
+     * Lignes « Agents » et « Commissions des agents » (V2-G03) : pas encore de route (V2-G01, V2-G02). Comme pour le
+     * règlement, les permissions sont vérifiées rôle par rôle, et aucune route ne doit les exposer sans être ajoutée ici.
+     */
+    public function test_rows_agents_and_commissions_permissions_belong_to_the_right_roles_and_no_route_exposes_them(): void
+    {
+        $expected = [
+            'agents.view' => [self::SUPER_ADMIN, self::AGENTS],
+            'agents.manage' => [self::SUPER_ADMIN, self::AGENTS],
+            'commissions.view' => [self::SUPER_ADMIN, self::FINANCE, self::AGENTS],
+            'commissions.manage' => [self::SUPER_ADMIN, self::FINANCE],
+        ];
+
+        foreach ($expected as $permission => $roles) {
+            foreach (self::ALL as $role) {
+                $this->assertSame(in_array($role, $roles, true), Gate::forUser($this->admins[$role])->allows($permission), "{$permission} pour {$role}");
+            }
+        }
+
+        $exposing = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn (RouteDefinition $route) => collect($route->gatherMiddleware())
+                ->contains(fn ($m) => is_string($m) && (str_contains($m, 'agents.') || str_contains($m, 'commissions.'))));
+        $this->assertCount(0, $exposing, 'Une route des agents ou des commissions doit être ajoutée aux lignes « Agents » / « Commissions » de ce test.');
     }
 }

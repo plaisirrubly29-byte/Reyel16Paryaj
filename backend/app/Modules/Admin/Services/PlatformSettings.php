@@ -108,6 +108,17 @@ class PlatformSettings
     }
 
     /**
+     * Paramètres du groupe « Risque » (plafonds d'engagement, V2-D05) : les seuls que la permission risk.manage
+     * (rôle Risk & Fraud, V2-G03) permet de modifier sans settings.update.
+     *
+     * @return list<string>
+     */
+    public static function riskKeys(): array
+    {
+        return array_keys(array_filter(self::DEFINITIONS, fn (array $definition) => $definition['group'] === 'Risque'));
+    }
+
+    /**
      * Crée la version suivante. $baseVersion : version affichée à l'administrateur (0 si aucune) ; une version
      * enregistrée entre-temps est refusée (409) plutôt qu'écrasée.
      *

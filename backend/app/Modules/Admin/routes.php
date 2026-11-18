@@ -34,7 +34,7 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/users', [AdminUserController::class, 'index'])->middleware('permission:users.view');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->middleware('permission:users.view');
     Route::patch('/users/{user}', [AdminUserController::class, 'update'])->middleware(['permission:users.suspend', 'idempotent']);
-    Route::put('/users/{user}/stake-limit', [AdminUserController::class, 'stakeLimit'])->middleware(['permission:users.suspend', 'idempotent']);
+    Route::put('/users/{user}/stake-limit', [AdminUserController::class, 'stakeLimit'])->middleware(['permission:users.suspend|risk.manage', 'idempotent']);
 
     // Solde d'un joueur : consultation (ledger.view) ; dépôt / retrait reçu hors plateforme, réservé au Super Admin (motif).
     Route::get('/users/{user}/wallet', [AdminWalletController::class, 'show'])->middleware('permission:ledger.view');
@@ -94,5 +94,6 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     // Paramètres de la plateforme versionnés (P6-08)
     Route::get('/settings', [AdminSettingsController::class, 'show'])->middleware('permission:settings.view');
     Route::get('/settings/versions', [AdminSettingsController::class, 'versions'])->middleware('permission:settings.view');
-    Route::put('/settings', [AdminSettingsController::class, 'update'])->middleware(['permission:settings.update', 'idempotent']);
+    // risk.manage (Risk & Fraud, V2-G03) : seulement les plafonds du groupe Risque, vérifié par le contrôleur.
+    Route::put('/settings', [AdminSettingsController::class, 'update'])->middleware(['permission:settings.update|risk.manage', 'idempotent']);
 });
