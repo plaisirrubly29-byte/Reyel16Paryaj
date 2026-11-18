@@ -14,6 +14,7 @@ use App\Modules\Admin\Http\Controllers\AdminUserController;
 use App\Modules\Admin\Http\Controllers\AdminWalletController;
 use App\Modules\Admin\Http\Controllers\AmlAlertController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
+use App\Modules\Admin\Http\Controllers\OddsOverrideController;
 use App\Modules\Admin\Http\Controllers\ResultCorrectionController;
 use Illuminate\Support\Facades\Route;
 
@@ -56,6 +57,14 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     Route::get('/events/{event}', [AdminEventController::class, 'show'])->middleware('permission:events.view')->whereNumber('event');
     Route::get('/markets/{market}', [AdminMarketController::class, 'show'])->middleware('permission:events.view')->whereNumber('market');
     Route::patch('/markets/{market}', [AdminMarketController::class, 'update'])->middleware(['permission:markets.suspend', 'idempotent'])->whereNumber('market');
+
+    // Cotes fixées à la main (V2-D03, D-18) : consulter avec events.view ; fixer, valider, refuser, terminer avec odds.override.
+    Route::post('/markets/{market}/odds-overrides', [OddsOverrideController::class, 'store'])->middleware(['permission:odds.override', 'idempotent'])->whereNumber('market');
+    Route::get('/odds-overrides', [OddsOverrideController::class, 'index'])->middleware('permission:events.view');
+    Route::get('/odds-overrides/{override}', [OddsOverrideController::class, 'show'])->middleware('permission:events.view')->whereNumber('override');
+    Route::post('/odds-overrides/{override}/approve', [OddsOverrideController::class, 'approve'])->middleware(['permission:odds.override', 'idempotent'])->whereNumber('override');
+    Route::post('/odds-overrides/{override}/reject', [OddsOverrideController::class, 'reject'])->middleware(['permission:odds.override', 'idempotent'])->whereNumber('override');
+    Route::post('/odds-overrides/{override}/end', [OddsOverrideController::class, 'end'])->middleware(['permission:odds.override', 'idempotent'])->whereNumber('override');
 
     // Correction de résultat à double contrôle (P5-06) : demander (results.enter), valider (results.approve, jamais le
     // demandeur), refuser ou retirer (le service vérifie : demandeur ou results.approve) ; historique d'un match.

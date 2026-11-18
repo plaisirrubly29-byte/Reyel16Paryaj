@@ -25,6 +25,7 @@
 - `markets`
 - `selections`
 - `odds_snapshots`
+- `odds_overrides` (cotes fixées à la main, V2-D03)
 - `sports_data_api_calls` (journal des appels au fournisseur)
 
 ## Routes prévues
@@ -70,6 +71,22 @@ compte automatiquement).
 - Le faux fournisseur publie un plus/moins 2.5 buts sur les matchs de football (pas sur la NBA).
 - Catalogue : la liste `/api/v1/events` ne montre que le 1X2 ; le détail `/api/v1/events/{id}/markets` renvoie
   le 1X2 puis le plus/moins (« Nombre de buts » au football, « Total de points » ailleurs ; libellés `+2.5` / `-2.5`).
+
+## Cotes fixées à la main (V2-D03, décision D-18)
+
+- **Repères gardés à chaque synchronisation** (`selections`) : `computed_odds` (cote calculée : marge de l'opérateur avec
+  l'argent réel, `OddsMargin`), `provider_odds` (bookmaker de référence) et `best_odds` (meilleure cote suivie, repère
+  contre l'arbitrage) ; null pour un marché maison. Les mêmes informations dans `odds_snapshots` à chaque version.
+- `Services/OddsOverrideService`, routes `/api/v1/admin/markets/{id}/odds-overrides` et `/api/v1/admin/odds-overrides`
+  (module Admin) : Opérations et Super Admin (`odds.override`), motif obligatoire, audit (`odds.override_*`).
+- Écart de 20 % au plus avec la cote calculée (`config/odds.php`) : en vigueur tout de suite ; au-delà, un second
+  administrateur valide (jamais le demandeur, rôle de plus de 24 h).
+- En vigueur : `selections.adjusted = true`, nouvelle version de cote (les tickets placés gardent la leur), mention
+  `adjusted` au catalogue ; la synchronisation met à jour la cote calculée mais **n'écrase pas** la cote fixée. Les
+  marchés maison (V2-D10), calculés depuis le 1X2 publié, suivent une cote du 1X2 fixée à la main.
+- Fin : à la demande (`end`), ou à la date limite et au plus tard au début du match (`odds:expire-overrides`, chaque
+  minute) ; la cote calculée revient, nouvelle version. Une seule demande en attente ou en vigueur par sélection. Une
+  sélection retirée par le fournisseur emporte sa demande (l'historique reste dans l'audit).
 
 ## Crédits et budget
 

@@ -15,6 +15,7 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 | Vue d'ensemble | 👁 | 👁 | 👁 | 👁 | 👁 |
 | Événements & marchés — consulter | ✅ | ✅ | 👁 | 👁 | 👁 |
 | Marché — suspendre / masquer (motif) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Cotes — fixer à la main / valider (motif ; D-18) | ✅ (2️⃣ au-delà de ±20 %) | ✅ (2️⃣ au-delà de ±20 %) | ❌ | ❌ | ❌ |
 | Résultats — saisir / valider | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ |
 | Règlement — lancer / relancer | — | — | — | — | — |
 | Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 |

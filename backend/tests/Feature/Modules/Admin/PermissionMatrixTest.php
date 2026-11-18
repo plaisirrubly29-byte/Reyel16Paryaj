@@ -8,6 +8,7 @@ use App\Modules\Admin\Models\FinanceCorrection;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Models\OddsOverride;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\Wallet\Models\LedgerEntry;
@@ -54,12 +55,12 @@ class PermissionMatrixTest extends TestCase
     /** Permissions attendues par rôle, transcrites de docs/permissions-matrix.md (✅, 👁 et 2️⃣ ; *.approve = second validateur). */
     private const EXPECTED_PERMISSIONS = [
         self::SUPER_ADMIN => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'settlement.run',
+            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'settlement.run',
             'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
             'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
             'aml.view', 'audit.view', 'audit.export', 'roles.manage', 'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
-        self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view'],
+        self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'tickets.view'],
         self::FINANCE => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data',
             'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'aml.view', 'audit.view', 'audit.export',
@@ -83,8 +84,13 @@ class PermissionMatrixTest extends TestCase
         "Vue d'ensemble" => ['GET api/v1/admin/dashboard', 'GET api/v1/admin/alerts', 'GET api/v1/admin/search'],
         'Événements & marchés — consulter' => [
             'GET api/v1/admin/events', 'GET api/v1/admin/events/{event}', 'GET api/v1/admin/markets/{market}', 'GET api/v1/admin/events/{event}/results',
+            'GET api/v1/admin/odds-overrides', 'GET api/v1/admin/odds-overrides/{override}',
         ],
         'Marché — suspendre / masquer' => ['PATCH api/v1/admin/markets/{market}'],
+        'Cotes — fixer à la main / valider' => [
+            'POST api/v1/admin/markets/{market}/odds-overrides', 'POST api/v1/admin/odds-overrides/{override}/approve',
+            'POST api/v1/admin/odds-overrides/{override}/reject', 'POST api/v1/admin/odds-overrides/{override}/end',
+        ],
         'Résultats — saisir / valider' => [
             'POST api/v1/admin/events/{event}/result-corrections', 'GET api/v1/admin/result-corrections', 'GET api/v1/admin/result-corrections/{correction}',
             'POST api/v1/admin/result-corrections/{correction}/approve', 'POST api/v1/admin/result-corrections/{correction}/reject',
@@ -205,6 +211,21 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', "events/{$this->event->id}", self::ALL);
         $this->assertAccess('GET', "markets/{$market->id}", self::ALL);
         $this->assertAccess('GET', "events/{$this->event->id}/results", self::ALL);
+        $this->assertAccess('GET', 'odds-overrides', self::ALL);
+        $this->assertAccess('GET', 'odds-overrides/'.self::MISSING, self::ALL);
+    }
+
+    /** Double validation au-delà de ±20 % (demandeur ≠ validateur) : OddsOverrideApiTest. */
+    public function test_row_odds_overrides_are_reserved_to_super_admin_and_operations(): void
+    {
+        $market = $this->event->markets()->firstOrFail();
+        $allowed = [self::SUPER_ADMIN, self::OPERATIONS];
+
+        $this->assertAccess('POST', "markets/{$market->id}/odds-overrides", $allowed);
+        $this->assertAccess('POST', 'odds-overrides/'.self::MISSING.'/approve', $allowed);
+        $this->assertAccess('POST', 'odds-overrides/'.self::MISSING.'/reject', $allowed);
+        $this->assertAccess('POST', 'odds-overrides/'.self::MISSING.'/end', $allowed);
+        $this->assertSame(0, OddsOverride::count(), 'Aucune requête sans corps ne doit fixer de cote.');
     }
 
     public function test_row_market_suspension_is_reserved_to_super_admin_and_operations(): void

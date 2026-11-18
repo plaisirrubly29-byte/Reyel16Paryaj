@@ -38,6 +38,8 @@ class MarketResource extends JsonResource
                 'name' => $s->name,
                 // Cote en chaîne décimale (ex. "2.10") : jamais de nombre flottant.
                 'odds' => self::odds($s->odds),
+                // Cote fixée à la main par l'administration (V2-D03, D-18), au lieu de la cote calculée.
+                'adjusted' => (bool) $s->adjusted,
             ])->values(),
         ];
     }

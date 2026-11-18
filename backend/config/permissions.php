@@ -24,6 +24,7 @@ return [
         'dashboard.view' => "Vue d'ensemble",
         'events.view' => 'Consulter événements et marchés',
         'markets.suspend' => 'Suspendre / masquer un marché (motif)',
+        'odds.override' => 'Fixer une cote à la main, ou valider celle d\'un autre au-delà de 20 % d\'écart (motif)',
         'results.enter' => 'Saisir un résultat',
         'results.approve' => 'Valider un résultat saisi par un autre',
         'settlement.run' => 'Lancer / relancer un règlement',
@@ -52,14 +53,14 @@ return [
 
     'roles' => [
         'super_admin' => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve',
+            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve',
             'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend',
             'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view',
             'settings.update', 'responsible_gaming.view', 'aml.view', 'audit.view', 'audit.export', 'roles.manage',
             'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
         'operations' => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view',
+            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'tickets.view',
         ],
         'finance' => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view',
