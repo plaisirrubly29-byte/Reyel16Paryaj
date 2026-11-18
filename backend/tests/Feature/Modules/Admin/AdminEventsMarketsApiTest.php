@@ -63,10 +63,17 @@ class AdminEventsMarketsApiTest extends TestCase
             ]);
     }
 
-    public function test_every_admin_role_can_view_events_and_markets(): void
+    public function test_every_admin_role_but_agent_management_can_view_events_and_markets(): void
     {
         foreach (RoleSlug::cases() as $role) {
             $admin = $this->admin($role);
+
+            // Gestion des agents (V2-G03) : agents et commissions seulement, pas les événements.
+            if ($role === RoleSlug::AgentManager) {
+                $this->actingAsVerifiedAdmin($admin)->getJson('/api/v1/admin/events')->assertForbidden();
+
+                continue;
+            }
 
             $this->actingAsVerifiedAdmin($admin)->getJson('/api/v1/admin/events')->assertOk();
             $this->actingAsVerifiedAdmin($admin)->getJson("/api/v1/admin/events/{$this->event->id}")->assertOk();

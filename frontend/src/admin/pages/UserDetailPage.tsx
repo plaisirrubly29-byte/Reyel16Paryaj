@@ -14,6 +14,7 @@ import { moneySetting, usePlatformSettings } from '../api/settings';
 import { ROLE_LABELS, useAdjustUserWallet, useAdminUser, useAdminUserWallet, useChangeUserStatus, useSetStakeLimit, type AdminUser } from '../api/users';
 import { initials } from '../roles';
 import { PageHeader } from '../components/PageHeader';
+import { RolesForm } from '../components/RolesForm';
 import { StatusBadge } from '../components/StatusBadge';
 
 const dateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
@@ -56,6 +57,7 @@ export function UserDetailPage() {
             <UserDetails user={u} />
           </section>
           <StatusPanel user={u} />
+          <RolesForm user={u} />
           {!u.is_admin && <StakeLimitPanel user={u} />}
           {!u.is_admin && <WalletPanel user={u} />}
         </div>
@@ -214,13 +216,14 @@ function DepositLimitRefusal({ error, currency }: { error: ApiError; currency: s
 }
 
 /**
- * Mise maximale par ticket propre à ce joueur (V2-D05, permission users.suspend) : elle baisse la limite générale
- * pour lui seul, ou la retire. Les bornes (mise minimale et maximale générales) sont appliquées par l'API ;
- * elles ne sont rappelées ici que si l'administrateur peut lire les paramètres (settings.view).
+ * Mise maximale par ticket propre à ce joueur (V2-D05, permission users.suspend, ou risk.manage pour Risk & Fraud,
+ * V2-G03) : elle baisse la limite générale pour lui seul, ou la retire. Les bornes (mise minimale et maximale
+ * générales) sont appliquées par l'API ; elles ne sont rappelées ici que si l'administrateur peut lire les
+ * paramètres (settings.view).
  */
 function StakeLimitPanel({ user }: { user: AdminUser }) {
   const { data: me } = useMe();
-  const canChange = !!me?.permissions.includes('users.suspend');
+  const canChange = !!me?.permissions.includes('users.suspend') || !!me?.permissions.includes('risk.manage');
   const settings = usePlatformSettings(canChange && !!me?.permissions.includes('settings.view'));
   const change = useSetStakeLimit(user.id);
   const [amount, setAmount] = useState('');

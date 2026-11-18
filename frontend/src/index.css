@@ -651,6 +651,13 @@ p { margin: 0; }
 .filters-ledger { grid-template-columns: repeat(5, minmax(0, 1fr)) auto; }
 .settings-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--gap); margin: 0; padding: 0 0 1rem; border: 0; border-bottom: 1px solid #f0f2f6; }
 .settings-group legend { padding: 0; margin-bottom: 0.75rem; font-weight: 700; }
+
+/* Admin — rôles d'un compte (V2-G03) : une case par ligne, description sous le nom */
+.roles-list { display: flex; flex-direction: column; gap: 0.6rem; margin: 0; padding: 0; border: 0; }
+.role-option { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; column-gap: 0.6rem; text-align: left; }
+.role-option input { width: 1.15rem; height: 1.15rem; margin: 0.15rem 0 0; accent-color: var(--accent); }
+.role-option label { display: flex; flex-direction: column; gap: 0.1rem; cursor: pointer; }
+.role-option small { font-size: 0.82rem; }
 .setting-toggle { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 0.6rem; row-gap: 0.25rem; align-self: end; padding-bottom: 0.7rem; }
 .setting-toggle input { width: 1.15rem; height: 1.15rem; margin: 0; accent-color: var(--accent); }
 .setting-toggle label { font-weight: 600; font-size: 0.9rem; }
