@@ -126,9 +126,9 @@ export function BetSlipPanel() {
   function absorb(error: unknown): string {
     if (error instanceof ApiError && error.code === 'odds_changed') {
       const changes = ((error.details.selections ?? []) as OddsChange[])
-        .map((c) => ({ selectionId: c.selection_id, odds: c.odds, oddsVersion: c.odds_version }));
+        .map((c) => ({ selectionId: c.selection_id, odds: c.odds, oddsVersion: c.odds_version, label: c.label }));
       slip.updateOdds(changes);
-      return 'La cote a changé. Vérifiez la nouvelle cote, puis confirmez votre pari.';
+      return 'La cote ou la ligne a changé. Vérifiez votre sélection, puis confirmez votre pari.';
     }
     if (error instanceof ApiError && error.code === 'selection_unavailable') {
       slip.removeMany((error.details.selection_ids ?? []) as string[]);
@@ -145,7 +145,7 @@ export function BetSlipPanel() {
       {
         stakeMinor: Number(stakeMinor),
         currency: CURRENCY,
-        selections: slip.selections.map((s) => ({ selectionId: s.selectionId, odds: s.odds })),
+        selections: slip.selections.map((s) => ({ selectionId: s.selectionId, odds: s.odds, oddsVersion: s.oddsVersion })),
       },
       {
         onSuccess: (ticket) => {
@@ -176,7 +176,7 @@ export function BetSlipPanel() {
         tickets.push(await placeBetMutation.mutateAsync({
           stakeMinor: Number(singleStakes[i]),
           currency: CURRENCY,
-          selections: [{ selectionId: s.selectionId, odds: s.odds }],
+          selections: [{ selectionId: s.selectionId, odds: s.odds, oddsVersion: s.oddsVersion }],
         }));
         accepted.push(s.selectionId);
       } catch (error) {

@@ -42,12 +42,14 @@ export type BetTicket = {
 };
 
 /** Détail de l'erreur 409 odds_changed : la cote actuelle de chaque sélection qui a bougé. */
-export type OddsChange = { selection_id: string; odds: string; odds_version: number };
+/** label : libellé avec la ligne en vigueur (« > 3.5 ») ; absent des anciennes réponses. */
+export type OddsChange = { selection_id: string; odds: string; odds_version: number; label?: string };
 
 export type PlaceBetInput = {
   stakeMinor: number;
   currency: string;
-  selections: { selectionId: string; odds: string }[];
+  /** oddsVersion : version du marché vue ; le serveur refuse le pari si la ligne a changé à cote égale. */
+  selections: { selectionId: string; odds: string; oddsVersion: number }[];
 };
 
 export const BETS_KEY = ['bets'] as const;
@@ -81,7 +83,7 @@ export function usePlaceBet() {
       idempotencyKey: newIdempotencyKey(),
       body: {
         stake: { minor: input.stakeMinor, currency: input.currency },
-        selections: input.selections.map((s) => ({ selection_id: Number(s.selectionId), odds: s.odds })),
+        selections: input.selections.map((s) => ({ selection_id: Number(s.selectionId), odds: s.odds, odds_version: s.oddsVersion })),
       },
     })).data,
     onSuccess: () => {
