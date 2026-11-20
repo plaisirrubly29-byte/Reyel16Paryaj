@@ -9,14 +9,16 @@ import { AccountLayout } from '../features/account/AccountLayout';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { NotFoundPage } from '../features/legal/pages/NotFoundPage';
 import { Spinner } from '../shared/components/Spinner';
+import { RouteError } from './RouteError';
+import { importOrReload } from './staleAssets';
 
 /**
  * Écran chargé à la demande (V2-E05, site léger) : l'administration est dans des fichiers à part, que le joueur ne
- * télécharge jamais.
+ * télécharge jamais. Si le fichier a été effacé par un déploiement, la page se recharge sur la nouvelle version.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- n'importe quel composant exporté par le module
 function lazyPage<K extends string, M extends Record<K, ComponentType<any>>>(load: () => Promise<M>, name: K) {
-  return lazy(async () => ({ default: (await load())[name] as M[K] }));
+  return lazy(async () => ({ default: (await importOrReload(load))[name] as M[K] }));
 }
 
 /** Pages joueur moins visitées, chargées à la demande (V2-E05) : le premier chargement reste léger. */
@@ -89,6 +91,7 @@ function section(path: string, element: ReactNode, sectionPath = path.split('/')
 export const routes = [
   {
     element: <PublicLayout />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'sports', element: <SportsPage /> },
@@ -130,10 +133,11 @@ export const routes = [
     ],
   },
   // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
-  { path: 'admin/login', element: <div className="admin-login">{page(<LoginPage admin />)}</div> },
+  { path: 'admin/login', element: <div className="admin-login">{page(<LoginPage admin />)}</div>, errorElement: <RouteError /> },
   {
     path: 'admin',
     element: <Suspense fallback={adminLoading}><AdminLayout /></Suspense>,
+    errorElement: <RouteError />,
     children: [
       section('', <AdminHomePage />),
       section('events', <EventsPage />),

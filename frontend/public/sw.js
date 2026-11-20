@@ -8,7 +8,7 @@
  * - API (/api/…, /sanctum/…) et autres sites (polices Google) : jamais interceptés ni mis en cache. Soldes, paris et
  *   données personnelles viennent toujours du serveur, et rien de privé ne reste sur un appareil partagé.
  */
-const VERSION = 'v1';
+const VERSION = 'v2'; // v2 : vide les caches où une page HTML avait pris la place d'un script effacé
 const SHELL_CACHE = `reyel16-shell-${VERSION}`;
 const ASSET_CACHE = `reyel16-assets-${VERSION}`;
 const SCOPE = new URL(self.registration.scope).pathname; // « / » ou le sous-dossier de publication
@@ -77,6 +77,11 @@ async function asset(request) {
   const cached = await caches.match(request, { cacheName: ASSET_CACHE, ignoreVary: true });
   if (cached) return cached;
   const response = await fetch(request);
+  // Une page HTML à la place d'un fichier de l'application (ancienne version effacée par un déploiement) n'est jamais
+  // gardée : 404, pour que la page se recharge sur la nouvelle version au lieu de rester bloquée.
+  if ((response.headers.get('content-type') || '').includes('text/html')) {
+    return new Response('', { status: 404, statusText: 'Not Found' });
+  }
   if (response.ok) (await caches.open(ASSET_CACHE)).put(request, response.clone()).catch(() => {});
   return response;
 }
