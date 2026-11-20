@@ -71,6 +71,19 @@ jobs:
       - name: Tests
         run: php artisan test
 
+      # Audit du 18/11/2026, constat n° 5 : la suite ci-dessus tourne sur SQLite, où les verrous (lockForUpdate) et les
+      # déclencheurs « ajout seul » n'existent pas. Les tests de l'argent tournent donc aussi sur PostgreSQL, dans une
+      # base jetable (le nom doit contenir « test » : garde-fou des tests qui vident la base).
+      - name: Tests de l'argent sur PostgreSQL
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: reyel16_test
+        run: |
+          PGPASSWORD=secret createdb -h 127.0.0.1 -U reyel16 reyel16_test
+          php artisan test tests/Feature/Modules/Wallet tests/Feature/Modules/Betting \
+            tests/Feature/Modules/Settlement tests/Feature/Modules/Payments tests/Feature/AppendOnlyTruncateTest.php
+
       - name: Dependency audit
         run: composer audit
 
