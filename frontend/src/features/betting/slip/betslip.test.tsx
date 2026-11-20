@@ -113,8 +113,8 @@ describe('coupon : simple ou multiple', () => {
     expect(within(slip).getByText('R16-TICKET0002')).toBeInTheDocument();
     const posts = postedBodies(fetchMock);
     expect(posts.map((p) => p.body)).toEqual([
-      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 11, odds: '2.00' }] },
-      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 21, odds: '1.50' }] },
+      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 11, odds: '2.00', odds_version: 1 }] },
+      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 21, odds: '1.50', odds_version: 1 }] },
     ]);
     expect(posts[0].key).not.toBe(posts[1].key);
   });

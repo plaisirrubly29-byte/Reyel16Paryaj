@@ -781,6 +781,7 @@ paths:
                     properties:
                       selection_id: { type: integer, example: 462 }
                       odds: { type: string, example: "2.10", description: Cote vue par le joueur (détection de changement) }
+                      odds_version: { type: integer, minimum: 1, example: 3, description: "Version du marché vue par le joueur (catalogue). Facultative ; si elle diffère (changement de cote ou de ligne), 409 odds_changed" }
       responses:
         "201":
           description: Ticket créé (reçu immuable)
@@ -788,8 +789,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "409":
           description: |
-            odds_changed — cote changée, rien n'est créé. details.selections : [{ selection_id, odds, odds_version }]
-            avec la cote actuelle ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
+            odds_changed — cote ou ligne changée, rien n'est créé. details.selections : [{ selection_id, odds,
+            odds_version, label }] avec la cote, la version et le libellé (ligne comprise) actuels ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
             idempotency_key_reused — clé déjà utilisée pour un autre pari. La clé est figée sur le ticket : rejouer
             le même pari avec la même clé (même après une panne du serveur) renvoie le ticket existant, sans seconde mise.
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

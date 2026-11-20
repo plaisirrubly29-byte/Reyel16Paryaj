@@ -157,6 +157,47 @@ class PlaceBetTest extends TestCase
         $this->bet([[$this->selection(), '1.95']])->assertCreated()->assertJsonPath('data.total_odds', '1.95');
     }
 
+    /** Audit 2026-11-18 : la ligne passe de 2.5 à 3.5 à cote égale ; la version vue est périmée, le pari est refusé. */
+    public function test_a_changed_line_with_the_same_odds_is_refused_when_the_seen_version_is_stale(): void
+    {
+        $over = $this->selection('fake-1', 'totals', 'over');
+        $seenOdds = (string) $over->odds;
+        $seenVersion = $over->market->odds_version;
+        $this->fake->setOdds('fake-1', 'totals', ['Over' => $seenOdds, 'Under' => (string) $this->selection('fake-1', 'totals', 'under')->odds], '3.5');
+        app(CatalogueSyncService::class)->sync('soccer_epl');
+
+        $this->assertSame('3.5', rtrim(rtrim((string) $over->market->fresh()->line, '0'), '.'));
+        $this->assertSame($seenOdds, (string) $over->fresh()->odds);
+
+        $this->betSeen($over, $seenOdds, $seenVersion)
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'odds_changed')
+            ->assertJsonPath('error.details.selections.0.odds_version', $seenVersion + 1)
+            ->assertJsonPath('error.details.selections.0.label', '> 3.5');
+
+        $this->assertSame(0, BetTicket::count());
+        $this->assertSame(1000_00, $this->balance());
+
+        // Le joueur confirme la nouvelle ligne : accepté.
+        $this->betSeen($over, $seenOdds, $seenVersion + 1)->assertCreated();
+    }
+
+    public function test_the_current_version_is_accepted_and_the_version_stays_optional(): void
+    {
+        $home = $this->selection();
+
+        $this->betSeen($home, (string) $home->odds, $home->market->odds_version)->assertCreated();
+        $this->bet([[$home]])->assertCreated(); // anciens clients : sans odds_version
+    }
+
+    private function betSeen(Selection $selection, string $odds, int $version): TestResponse
+    {
+        return $this->actingAs($this->player)->postJson('/api/v1/bets', [
+            'stake' => ['minor' => 100_00, 'currency' => 'HTG'],
+            'selections' => [['selection_id' => $selection->id, 'odds' => $odds, 'odds_version' => $version]],
+        ], ['Idempotency-Key' => (string) Str::uuid()]);
+    }
+
     public function test_the_client_odds_is_never_the_authority(): void
     {
         $this->bet([[$this->selection(), '50.00']])->assertStatus(409);

@@ -254,7 +254,10 @@ class BetPlacementService
     }
 
     /**
-     * @param  list<array{selection_id: int|string, odds: string}>  $picks
+     * Refuse le pari si la cote vue a changé, ou si la version du marché vue (odds_version) n'est plus la bonne :
+     * un changement de ligne (totals/spreads 2.5 → 3.5) à cote égale change le pari sans changer la cote.
+     *
+     * @param  list<array{selection_id: int|string, odds: string, odds_version?: int|string}>  $picks
      * @param  Collection<int, Selection>  $selections
      */
     private function assertOddsUnchanged(array $picks, Collection $selections): void
@@ -264,12 +267,15 @@ class BetPlacementService
 
         foreach ($picks as $pick) {
             $selection = $found[(int) $pick['selection_id']];
-            if (bccomp($pick['odds'], (string) $selection->odds, 3) !== 0) {
+            $staleVersion = isset($pick['odds_version']) && (int) $pick['odds_version'] !== (int) $selection->market->odds_version;
+            if ($staleVersion || bccomp($pick['odds'], (string) $selection->odds, 3) !== 0) {
                 $changed[] = [
                     'selection_id' => (string) $selection->id,
                     'odds' => MarketResource::odds((string) $selection->odds), // même format que le catalogue
 
                     'odds_version' => $selection->market->odds_version,
+                    // Libellé avec la ligne en vigueur (ex. « > 3.5 ») : le coupon montre ce qui a changé.
+                    'label' => MarketResource::selectionLabel($selection->key, $selection->market->line),
                 ];
             }
         }

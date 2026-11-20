@@ -41,7 +41,8 @@ type BetSlip = {
   /** Retire plusieurs sélections (ex. celles que le serveur ne propose plus). */
   removeMany: (selectionIds: string[]) => void;
   /** Remplace la cote (et sa version) des sélections dont le serveur a changé la cote. */
-  updateOdds: (changes: { selectionId: string; odds: string; oddsVersion: number }[]) => void;
+  /** label : nouveau libellé quand la ligne a changé (« > 2.5 » → « > 3.5 »). */
+  updateOdds: (changes: { selectionId: string; odds: string; oddsVersion: number; label?: string }[]) => void;
   clear: () => void;
   /** Remplace tout le coupon (ex. rejouer un ticket de Mes paris), type de pari redéduit. */
   replace: (selections: SlipSelection[]) => void;
@@ -233,7 +234,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     removeMany: (ids) => { setFull(false); setSelections((current) => current.filter((s) => !ids.includes(s.selectionId))); },
     updateOdds: (changes) => setSelections((current) => current.map((s) => {
       const change = changes.find((c) => c.selectionId === s.selectionId);
-      return change ? { ...s, odds: change.odds, oddsVersion: change.oddsVersion } : s;
+      return change ? { ...s, odds: change.odds, oddsVersion: change.oddsVersion, label: change.label ?? s.label } : s;
     })),
     clear: () => { setFull(false); setSelections([]); },
     replace: (next) => { setFull(false); setChosenMode(null); setStakes({}); setSelections(next.slice(0, MAX_SELECTIONS)); },
