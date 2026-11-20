@@ -4,6 +4,8 @@ namespace App\Modules\IdentityAccess\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\IdentityAccess\Http\Middleware\EnforceSessionLifetime;
 use App\Modules\IdentityAccess\Http\Requests\LoginRequest;
 use App\Modules\IdentityAccess\Http\Requests\RegisterRequest;
@@ -38,8 +40,13 @@ class AuthController extends Controller
         return new UserResource($user->load('roles', 'profile'));
     }
 
-    public function logout(Request $request): Response
+    public function logout(Request $request, AuditLogger $audit): Response
     {
+        // Avant la fin de la session, pour connaître le compte (audit du 18/11/2026). Rien pour un visiteur.
+        if (($user = $request->user()) !== null) {
+            $audit->record(AuditAction::Logout, $user, actor: $user);
+        }
+
         Auth::guard('web')->logout();
         // Le garde sanctum garde sinon le compte en mémoire : la nouvelle session (invitée) serait enregistrée à son nom
         // et listée parmi ses appareils (V2-C06).

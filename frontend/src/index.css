@@ -661,15 +661,43 @@ p { margin: 0; }
 .change-list { margin: 0; padding-left: 1rem; font-size: 0.88rem; }
 .audit-detail summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; font-weight: 600; }
 .audit-detail pre { margin: 0.25rem 0 0.5rem; padding: 0.5rem; max-width: 36rem; overflow-x: auto; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 0.78rem; }
+/* Audit : détail lisible (identifiant masqué, IP), JSON brut replié pour les auditeurs. */
+.audit-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.25rem 0.9rem; margin: 0.5rem 0 0.4rem; font-size: 0.85rem; }
+.audit-facts > div { display: contents; }
+.audit-facts dt { color: var(--muted); }
+.audit-facts dd { margin: 0; font-weight: 600; color: var(--text); }
+.audit-tech summary { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+.audit-login { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+.audit-login svg { color: var(--muted); flex: none; }
+/* Audit : filtres compacts sur une ligne, bouton bleu marine (sélecteur double : passe avant .filters). */
+.filters.filters-audit { grid-template-columns: minmax(200px, 1.5fr) minmax(110px, 0.7fr) minmax(150px, 1fr) minmax(150px, 1fr) auto; gap: 0.75rem; max-width: 1040px; }
+.filters-audit .field label { font-size: 0.8rem; color: var(--muted); }
+.filters-audit .field input, .filters-audit .field select { min-height: 2.5rem; padding: 0.4rem 0.75rem; font-size: 0.92rem; }
+.filters-audit .btn-search { min-height: 2.5rem; padding: 0.4rem 1.1rem; border-radius: 10px; color: var(--navy); border: 1.5px solid var(--navy); font-weight: 700; font-size: 0.92rem; gap: 0.45rem; }
+.filters-audit .btn-search > span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.filters-audit .btn-search:hover:not(:disabled) { background: var(--navy); color: #fff; border-color: var(--navy); box-shadow: 0 4px 12px rgba(10, 26, 79, 0.25); transform: translateY(-1px); }
+/* Audit : seul le tableau défile, en-têtes figés. */
+.audit-table .table-wrap { max-height: max(320px, calc(100vh - 380px)); overflow-y: auto; }
+.audit-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); }
 
 @container admin-content (max-width: 900px) {
   .detail-grid { grid-template-columns: minmax(0, 1fr); }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filters-tickets, .filters-ledger { grid-template-columns: 1fr 1fr; }
   .filters-tickets .field:first-child { grid-column: 1 / -1; }
+  .filters.filters-audit { grid-template-columns: 1fr 1fr; max-width: none; }
+  .filters-audit .field:first-child { grid-column: 1 / -1; }
+  .filters-audit .btn-search { justify-self: start; }
+  /* Colonne étroite : libellé au-dessus de la valeur plutôt qu'à côté. */
+  .audit-facts { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+  .audit-facts dd { margin-bottom: 0.35rem; }
 }
 @container admin-content (max-width: 480px) {
   .filters-tickets, .filters-ledger { grid-template-columns: 1fr; }
+  .filters.filters-audit { grid-template-columns: 1fr; }
+  .filters-audit .btn-search { justify-self: stretch; }
+  /* Sur téléphone, pas de défilement imbriqué : la page défile normalement. */
+  .audit-table .table-wrap { max-height: none; overflow-y: visible; }
   .selections li { flex-direction: column; }
   .selection-side { flex-direction: row; align-items: center; }
 }
