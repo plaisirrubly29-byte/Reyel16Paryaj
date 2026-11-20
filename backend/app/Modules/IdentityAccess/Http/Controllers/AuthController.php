@@ -9,6 +9,7 @@ use App\Modules\IdentityAccess\Http\Requests\LoginRequest;
 use App\Modules\IdentityAccess\Http\Requests\RegisterRequest;
 use App\Modules\IdentityAccess\Http\Resources\UserResource;
 use App\Modules\IdentityAccess\Services\AuthService;
+use App\Modules\IdentityAccess\Services\LoginFailureCounter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -34,6 +35,8 @@ class AuthController extends Controller
 
         $this->startSession($request, $user);
         $this->auth->recordLogin($user);
+        // Connexion réussie : la vérification « humain » n'est plus exigée pour cet identifiant ni cette IP.
+        app(LoginFailureCounter::class)->clear(LoginFailureCounter::identifierFrom($request), $request->ip());
 
         return new UserResource($user->load('roles', 'profile'));
     }

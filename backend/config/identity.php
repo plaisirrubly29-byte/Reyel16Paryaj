@@ -30,8 +30,27 @@ return [
     ],
 
     // Limite globale de l'API pour un compte connecté (revue P8-02, F12) : requêtes par minute, par compte et jamais par
-    // IP (un cybercafé partage la même adresse). Les visiteurs n'y sont pas soumis : leurs routes ont leurs limites.
+    // IP (un cybercafé partage la même adresse).
     'api_rate_per_minute' => (int) env('API_ACCOUNT_RATE_PER_MINUTE', 120),
+
+    // Limite globale pour un visiteur non connecté (D-17, PS-5) : requêtes par minute, par IP, sur toute l'API, en plus
+    // des limites de chaque route. Large à cause des adresses partagées (cybercafés). 0 = sans limite (urgence).
+    // Derrière Cloudflare, TRUSTED_PROXIES doit être réglé, sinon tous les visiteurs semblent venir de quelques IP.
+    'api_guest_rate_per_minute' => (int) env('IDENTITY_API_GUEST_RATE_PER_MINUTE', 300),
+
+    // Vérification « humain » par Cloudflare Turnstile (D-17, PS-3/PS-4/PS-7) : inscription, mot de passe oublié, et
+    // connexion après plusieurs échecs. Désactivée tant que la clé secrète est vide (développement, tests, Staging
+    // avant les écrans #193).
+    'human_verification' => [
+        'turnstile_secret_key' => env('TURNSTILE_SECRET_KEY', ''),
+        // Noms d'hôte acceptés pour le jeton (le domaine du site), séparés par des virgules ; vide = non vérifié
+        // (clés de test de Cloudflare). À renseigner en Production.
+        'allowed_hostnames' => array_values(array_filter(array_map('trim', explode(',', (string) env('TURNSTILE_ALLOWED_HOSTNAMES', ''))))),
+        'timeout_seconds' => (int) env('TURNSTILE_TIMEOUT_SECONDS', 3),
+        // Connexion : vérification exigée après ce nombre d'échecs, par identifiant saisi ou par IP, sur la période.
+        'login_failures_before_challenge' => 3,
+        'login_failure_window_minutes' => 15,
+    ],
 
     // Double authentification, par compte (un code TOTP = 10^6 combinaisons).
     'mfa' => [

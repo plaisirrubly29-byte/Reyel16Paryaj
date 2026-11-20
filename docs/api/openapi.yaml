@@ -8,6 +8,24 @@ info:
 
     Conventions (format des réponses, codes d'erreur, pagination, idempotence) : docs/api/README.md.
     Toute erreur suit le schéma `Error`.
+
+    Limites globales (D-17, V2-F04) : 120 requêtes/min par compte connecté ; 300 requêtes/min par IP pour un visiteur
+    non connecté (IDENTITY_API_GUEST_RATE_PER_MINUTE, 0 = sans limite), sur toute l'API, en plus des limites propres
+    à chaque route. Au-delà : 429 `too_many_requests` (en-tête Retry-After). Les webhooks des prestataires de paiement
+    n'y sont pas comptés (ils ont leur propre limite), ni les requêtes refusées faute de connexion (401).
+
+    Protection contre les robots (D-17, PS-3/PS-4) : inscription, mot de passe oublié et connexion après 3 échecs
+    exigent `captcha_token`, le jeton du widget Cloudflare Turnstile, vérifié par le serveur. Désactivé tant que
+    TURNSTILE_SECRET_KEY n'est pas configurée.
+    - Le jeton est vérifié AVANT toute autre validation : sans jeton valide, aucune autre erreur n'est renvoyée.
+    - Un jeton ne sert qu'une fois et expire après 5 minutes : après toute réponse du serveur, l'écran réinitialise
+      le widget pour en obtenir un nouveau.
+    - Refus : 422 `captcha_failed`, `details.reason` = `required` (jeton absent), `invalid` (refusé, expiré ou déjà
+      utilisé) ou `unavailable` (Cloudflare injoignable).
+    - Cloudflare injoignable (PS-7) : inscription et mot de passe oublié refusés (`unavailable`) ; connexion laissée
+      passer, les limites de la connexion restant appliquées. Une alerte d'exploitation est envoyée.
+    - Connexion : les échecs sont comptés par identifiant saisi (téléphone ou email normalisé) et par IP, que le
+      compte existe ou non, sur 15 minutes ; une connexion réussie remet les compteurs à zéro.
 servers:
   - url: http://localhost:8000/api/v1
     description: Développement local
@@ -95,11 +113,16 @@ paths:
                     Bêta fermée (V2-F07) : exigé tant que REGISTRATION_INVITE_CODES n'est pas vide (majuscules ou non).
                     Absent : 422 (details.invite_code, « inscriptions sur invitation ») ; inconnu : 422 (details.invite_code).
                     Ignoré quand l'inscription est ouverte.
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Toujours exigé. Absent ou refusé :
+                    422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "201":
           description: Compte créé, session ouverte
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
-        "422": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/CaptchaOrValidationError" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/login:
     post:
@@ -123,12 +146,19 @@ paths:
                 phone: { type: string, example: "34123456" }
                 email: { type: string, format: email, example: "chef@example.com" }
                 password: { type: string }
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Exigé après 3 échecs de connexion en 15 minutes
+                    pour le même compte ou la même IP (remis à zéro après une connexion réussie) ; avant, il peut être omis.
+                    Absent ou refusé : 422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que
+                    TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "200":
           description: Session ouverte
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
         "422":
-          description: "`invalid_credentials` ou `validation_failed`"
+          description: "`invalid_credentials`, `validation_failed` ou `captcha_failed` (après 3 échecs : afficher le widget Turnstile si `details.reason` = `required`)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`account_suspended` — compte suspendu ou fermé ; `account_excluded` — auto-exclusion du joueur (jeu responsable)"
@@ -145,10 +175,19 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Toujours exigé. Absent ou refusé :
+                    422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "202": { description: Demande prise en compte }
-        "422": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/CaptchaOrValidationError" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/reset-password:
     post:
@@ -3269,6 +3308,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: { code: not_found, message: Ressource introuvable. } }
+    CaptchaOrValidationError:
+      description: "`validation_failed` (details par champ) ou `captcha_failed` (details.reason : required, invalid, unavailable)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            captcha_required:
+              value: { error: { code: captcha_failed, message: "Confirmez que vous n'êtes pas un robot.", details: { reason: required } } }
+            captcha_unavailable:
+              value: { error: { code: captcha_failed, message: "La vérification anti-robot est momentanément indisponible. Réessayez dans quelques minutes.", details: { reason: unavailable } } }
+
     TooManyRequests:
       description: Trop de tentatives
       headers:

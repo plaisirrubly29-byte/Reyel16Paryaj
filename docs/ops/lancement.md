@@ -52,6 +52,19 @@ Un seul « non » = **pas de lancement**.
 - [ ] `TRUSTED_PROXIES` vide si Caddy transmet en FastCGI (P1-06), sinon l'IP exacte du proxy (P8-02 B2)
 - [ ] Mots de passe base et Redis générés (`openssl rand -hex 32`), différents du Staging
 - [ ] `DB_PERSISTENT=true`, `CATALOGUE_CACHE_SECONDS=10`, `PHP_FPM_MAX_CHILDREN` ≈ 2 par vCPU (P8-03)
+  - [ ] Cache du catalogue : clé limitée aux paramètres autorisés, paramètres inconnus retirés de la requête
+        (audit du 18/11/2026, constat faible ; reporté le 2026-11-19, à faire avant l'ouverture au public).
+        Sinon un paramètre inventé (`?x=1`, `?x=2`…) contourne le cache et ramène la capacité du catalogue
+        d'environ 340 à 182 requêtes/s (P8-03 §5). Correction prête à faire : `CacheCatalogueResponse`.
+- [ ] **Protection contre les robots (D-17, V2-F04)**, dans cet ordre :
+  1. écrans avec le widget Turnstile livrés (#193) et essayés sur le Staging avec les clés de test de Cloudflare ;
+  2. `TURNSTILE_SECRET_KEY` et `TURNSTILE_ALLOWED_HOSTNAMES` (domaine du site) renseignés ;
+  3. derrière Cloudflare : `TRUSTED_PROXIES` réglé sur les plages de Cloudflare **avant** de basculer le DNS, sinon la
+     limite des visiteurs et toutes les limites par IP bloquent tout le monde ; vérifier que l'IP réelle du joueur
+     apparaît dans l'audit.
+- [ ] `IDENTITY_API_GUEST_RATE_PER_MINUTE=300` ; après l'ouverture, mesurer les 429 des visiteurs (logs, Cloudflare)
+      et ajuster si des adresses partagées (cybercafés, réseaux mobiles) sont bloquées, pour cette limite comme pour
+      celle du catalogue (120/min par IP). La mettre à 0 pendant un test de charge depuis une seule machine.
 - [ ] `SPORTS_DATA_PROVIDER` et sa clé selon D-02 ; quota suffisant pour le mois
 - [ ] `betting.allow_live` désactivé (paris en direct exclus de la V1, P8-02 E1)
 - [ ] `MONITORING_*` renseignés, mailer SMTP réel (P9-02)

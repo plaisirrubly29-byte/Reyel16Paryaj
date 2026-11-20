@@ -66,6 +66,24 @@ Comptes de démonstration (local) : `php artisan db:seed` — `joueur@example.co
 - `active` coupe l'accès d'un compte suspendu même si sa session est ouverte.
 - `permission` s'exécute avant la résolution des modèles de l'URL (403 sans révéler si l'identifiant existe).
 
+## Protection contre les robots et limite des visiteurs (V2-F04, D-17)
+
+- **Limite globale des visiteurs** : limiteur `api` (`AppServiceProvider`), 300 requêtes/min par IP pour un visiteur
+  non connecté (`IDENTITY_API_GUEST_RATE_PER_MINUTE`, 0 = sans limite), 120/min par compte connecté. Les webhooks de
+  paiement n'y sont pas soumis (`withoutMiddleware('throttle:api')`). Une requête refusée par `auth:sanctum` (401)
+  n'est pas comptée : l'authentification passe avant la limite.
+- **Vérification « humain »** : `Contracts/HumanVerifier`, implémentée par `Services/TurnstileVerifier` (appel HTTP à
+  Cloudflare, sans paquet). Middleware `human` (`RequireHumanVerification`), **avant la validation** du formulaire
+  (aucune énumération des comptes) :
+  - `human:always` : inscription, mot de passe oublié ; Cloudflare injoignable → refus (`unavailable`) ;
+  - `human:after-login-failures` : connexion, après 3 échecs en 15 min (`Services/LoginFailureCounter`, par
+    identifiant saisi normalisé et par IP, que le compte existe ou non ; remis à zéro par une connexion réussie) ;
+    Cloudflare injoignable → la connexion passe (décision du 2026-11-19), ses limites restant appliquées.
+  - Refus : `422 captcha_failed`, `details.reason` = `required`, `invalid` ou `unavailable`.
+  - Désactivée tant que `TURNSTILE_SECRET_KEY` est vide. Alerte d'exploitation `turnstile_unavailable` (Monitoring) ;
+    en Production sans clé, avertissement `security.turnstile_disabled` dans les logs (au plus une fois par heure).
+- Réutilisable pour l'envoi des codes SMS (V2-C01) : `->middleware('human:always')`.
+
 ## Règles à respecter
 
 - Mots de passe hachés (cast `hashed`), limitation des tentatives, pas d’énumération des comptes.
