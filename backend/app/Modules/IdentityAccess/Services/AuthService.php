@@ -18,6 +18,7 @@ class AuthService
     public function __construct(
         private readonly LedgerService $ledger,
         private readonly AuditLogger $audit,
+        private readonly LoginFailureCounter $failures,
     ) {}
 
     /**
@@ -125,6 +126,9 @@ class AuthService
      */
     private function recordFailure(?User $user, string $field, string $login, string $reason): void
     {
+        // Compté par identifiant saisi, que le compte existe ou non (D-17, PS-4 : vérification « humain » au-delà).
+        $this->failures->hit($field.':'.$login, request()->ip());
+
         $this->audit->record(AuditAction::LoginFailed, $user, metadata: [
             'reason' => $reason,
             'field' => $field,

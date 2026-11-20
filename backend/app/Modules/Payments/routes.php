@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/payments/webhooks/{provider}', PaymentWebhookController::class)
     ->where('provider', '[a-z0-9_]+')
-    ->middleware('throttle:payments-webhook');
+    ->middleware('throttle:payments-webhook')
+    // Pas de limite globale des visiteurs (D-17, PS-5) : le prestataire envoie par rafales depuis une même IP.
+    ->withoutMiddleware('throttle:api');
 
 // Dépôts du joueur connecté : ouvrir un dépôt ne crédite rien, seul le webhook vérifié du prestataire crédite.
 Route::middleware(['auth:sanctum', 'active'])->prefix('payments')->group(function () {

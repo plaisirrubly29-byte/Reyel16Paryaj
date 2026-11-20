@@ -3,6 +3,7 @@
 namespace App\Modules\Monitoring\Services;
 
 use App\Modules\Admin\Services\AlertService;
+use App\Modules\IdentityAccess\Contracts\HumanVerifier;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Event;
 use Carbon\CarbonImmutable;
@@ -10,7 +11,8 @@ use Carbon\CarbonImmutable;
 /**
  * Alertes à pousser à l'astreinte (P9-02). Réutilise les points d'attention de l'administration (AlertService :
  * règlement en retard, tâches en échec, rapprochement, fournisseur, sécurité) et ajoute ce qu'un écran ne voit pas :
- * erreurs de l'API, retard de synchronisation du catalogue, travailleur de file arrêté.
+ * erreurs de l'API, retard de synchronisation du catalogue, travailleur de file arrêté, vérification anti-robot
+ * (Turnstile) injoignable (D-17, PS-7).
  *
  * Les alertes « info » de l'administration (ex. marchés suspendus) ne sont pas poussées.
  */
@@ -20,6 +22,7 @@ class MonitoringService
         private readonly AlertService $alerts,
         private readonly ApiErrorRate $apiErrors,
         private readonly QueueHeartbeat $queue,
+        private readonly HumanVerifier $humanVerifier,
     ) {}
 
     /** @return list<array{key: string, severity: 'critical'|'warning', category: string, title: string, detail: string, link: string|null}> */
@@ -30,7 +33,25 @@ class MonitoringService
             fn (array $alert) => in_array($alert['severity'], ['critical', 'warning'], true),
         ));
 
-        return [...array_filter([$this->apiErrors(), $this->syncDelay(), $this->queueStopped()]), ...$admin];
+        return [...array_filter([$this->apiErrors(), $this->syncDelay(), $this->queueStopped(), $this->humanVerificationUnavailable()]), ...$admin];
+    }
+
+    /**
+     * Turnstile injoignable dans les 15 dernières minutes (D-17, PS-7) : inscriptions et mots de passe oubliés refusés
+     * pendant la panne ; la connexion passe. Disparaît d'elle-même 15 minutes après le dernier échec.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function humanVerificationUnavailable(): ?array
+    {
+        $at = $this->humanVerifier->lastUnavailableAt();
+        if ($at === null || CarbonImmutable::parse($at)->lt(now()->subMinutes(15))) {
+            return null;
+        }
+
+        return $this->alert('turnstile_unavailable', 'warning', 'Sécurité', 'Vérification anti-robot injoignable',
+            "Cloudflare Turnstile n'a pas répondu (dernier échec : {$at}). Inscriptions et mots de passe oubliés sont refusés pendant la panne ; la connexion passe. Voir https://www.cloudflarestatus.com et les logs (security.turnstile_unavailable).",
+            '/admin/system');
     }
 
     /** @return array<string, mixed>|null */
