@@ -5,12 +5,14 @@ import { Alert } from '../../shared/components/Alert';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
-import { since, useAdminEvent, useChangeMarketStatus, type AdminEvent, type AdminMarket } from '../api/events';
+import { since, useAdminEvent, useChangeMarketStatus, type AdminEvent, type AdminMarket, type AdminSelection } from '../api/events';
+import { deviationLabel, isOpen, useOddsOverrides, useOverrideAction, type OddsOverride } from '../api/odds';
 import {
   awaitsManualResult, CORRECTION_STATUS_LABELS, currentLabel, isFirstResult, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory,
   type ResultStatus,
 } from '../api/results';
 import { EventStatusBadge, MarketStatusBadge } from '../components/MarketStatusBadge';
+import { OddsOverrideForm } from '../components/OddsOverrideForm';
 import { PageHeader } from '../components/PageHeader';
 import { ReasonForm } from '../components/ReasonForm';
 import { dateTime } from '../api/events';
@@ -20,6 +22,9 @@ export function EventDetailPage() {
   const { id = '' } = useParams();
   const event = useAdminEvent(id);
   const e = event.data;
+  // Cotes fixées à la main de ce match (V2-D03) : la fiche du match ne les donne pas.
+  const overrides = useOddsOverrides({ event_id: id, page: 1 }, Boolean(e?.markets?.length));
+  const open = overrides.data?.data.filter(isOpen) ?? [];
 
   return (
     <section className="admin-page">
@@ -45,8 +50,11 @@ export function EventDetailPage() {
           <section className="admin-card stack">
             <h2 className="card-title">Marchés</h2>
             {e.markets?.length === 0 && <p className="muted">Aucun marché pour ce match.</p>}
+            <ErrorAlert error={overrides.error} onRetry={() => overrides.refetch()} />
             <ul className="market-list">
-              {e.markets?.map((m) => <MarketItem key={m.id} market={m} />)}
+              {e.markets?.map((m) => (
+                <MarketItem key={m.id} market={m} event={e} overrides={open.filter((o) => o.market_id === m.id)} />
+              ))}
             </ul>
           </section>
 
@@ -57,9 +65,18 @@ export function EventDetailPage() {
   );
 }
 
-/** Un marché : cotes, origine, fraîcheur, et suspension / réouverture avec motif (markets.suspend). */
-function MarketItem({ market }: { market: AdminMarket }) {
+/**
+ * Un marché : cotes et leurs repères, origine, fraîcheur ; suspension / réouverture avec motif (markets.suspend) ;
+ * cote fixée à la main (odds.override, V2-D03).
+ */
+function MarketItem({ market, event, overrides }: { market: AdminMarket; event: AdminEvent; overrides: OddsOverride[] }) {
   const { data: me } = useMe();
+  const selections = market.selections ?? [];
+  const overrideFor = (s: AdminSelection) => overrides.find((o) => o.selection.id === s.id);
+  // Fixer une cote : marché ouvert, match pas commencé, sélection sans demande en attente ou en vigueur.
+  const free = selections.filter((s) => !overrideFor(s));
+  const canOverride = Boolean(me?.permissions.includes('odds.override')) && market.status === 'open'
+    && new Date(event.starts_at).getTime() > Date.now() && free.length > 0;
   const change = useChangeMarketStatus(market);
   const canChange = me?.permissions.includes('markets.suspend') && (market.status === 'open' || market.status === 'suspended');
   const target = market.status === 'open' ? 'suspended' : 'open';
@@ -79,9 +96,9 @@ function MarketItem({ market }: { market: AdminMarket }) {
         </p>
       )}
 
-      <p className="selection-odds small">
-        {market.selections?.map((s) => <span key={s.id} className="odds-pill" title={s.name}>{s.label} {s.odds}</span>)}
-      </p>
+      <ul className="selections small" aria-label={`Cotes : ${market.name}`}>
+        {selections.map((s) => <SelectionRow key={s.id} selection={s} override={overrideFor(s)} />)}
+      </ul>
 
       <p className="muted small">
         Cote <strong className={market.freshness.stale ? 'text-warning' : undefined}>{market.freshness.stale ? 'périmée' : 'fraîche'}</strong>
@@ -105,7 +122,73 @@ function MarketItem({ market }: { market: AdminMarket }) {
           />
         </details>
       )}
+
+      {canOverride && (
+        <details className="market-action">
+          <summary>Fixer une cote</summary>
+          <OddsOverrideForm market={market} selections={free} />
+        </details>
+      )}
     </li>
+  );
+}
+
+/** Une sélection : cote proposée, mention « Ajustée », repères, et cote fixée à la main en attente ou en vigueur. */
+function SelectionRow({ selection: s, override }: { selection: AdminSelection; override?: OddsOverride }) {
+  const references = [
+    s.computed_odds && `calculée ${s.computed_odds}`,
+    s.provider_odds && `bookmaker ${s.provider_odds}`,
+    s.best_odds && `meilleure ${s.best_odds}`,
+  ].filter(Boolean);
+
+  return (
+    <li>
+      <div className="selection-main">
+        <strong>{s.label} · {s.name}</strong>
+        {references.length > 0 && <span className="muted">Repères : {references.join(' · ')}</span>}
+        {override?.status === 'pending' && (
+          <span>
+            Cote {override.odds} ({deviationLabel(override.deviation_percent)}) en attente de validation :{' '}
+            <Link to={`/admin/odds/${override.id}`}>voir la demande</Link>
+          </span>
+        )}
+        {override?.status === 'active' && (
+          <>
+            <span className="muted">
+              Fixée à la main par {override.requested_by?.name ?? '—'} jusqu'au {dateTime(override.expires_at)} :{' '}
+              <Link to={`/admin/odds/${override.id}`}>voir la demande</Link>
+            </span>
+            <EndOverride override={override} />
+          </>
+        )}
+      </div>
+      <div className="selection-side">
+        <span className="odds-pill" title={s.name}>{s.odds}</span>
+        {s.adjusted && <span className="badge status-suspended" title="Cote fixée à la main par l'administration">Ajustée</span>}
+      </div>
+    </li>
+  );
+}
+
+/** Revenir à la cote calculée avant la date limite (odds.override, motif obligatoire). */
+function EndOverride({ override }: { override: OddsOverride }) {
+  const { data: me } = useMe();
+  const action = useOverrideAction(override);
+  if (!me?.permissions.includes('odds.override')) return null;
+
+  return (
+    <details className="market-action">
+      <summary>Revenir à la cote calculée</summary>
+      <ReasonForm
+        id={`end-${override.id}`}
+        title="Revenir à la cote calculée"
+        description="La cote fixée à la main prend fin maintenant ; la cote calculée revient (nouvelle version de cote, les tickets placés gardent la leur)."
+        submitLabel="Revenir à la cote calculée"
+        variant="secondary"
+        successMessage="La cote calculée est de retour."
+        onSubmit={(reason, idempotencyKey) => action.mutateAsync({ action: 'end', reason, idempotencyKey })}
+      />
+    </details>
   );
 }
 
