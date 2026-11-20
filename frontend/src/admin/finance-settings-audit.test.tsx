@@ -294,6 +294,78 @@ describe('écran Audit & rapports', () => {
     click.mockRestore();
   });
 
+  it('propose dans le filtre les actions de sécurité (connexion, déconnexion, mot de passe, MFA)', async () => {
+    const fetchMock = mockApi({
+      'GET /me': me(['audit.view']),
+      'GET /admin/audit-logs': {
+        status: 200,
+        body: page([{
+          id: '201', action: 'mfa.verified', actor: { id: '7', email: 'conformite@example.com' }, subject: { type: 'user', id: '7' },
+          before: null, after: null, reason: null, metadata: { method: 'recovery_code' },
+          ip_address: '127.0.0.1', request_id: 'def', created_at: '2026-11-20T12:00:00+00:00',
+        }]),
+      },
+    });
+
+    renderApp('/admin/audit');
+
+    const table = await screen.findByRole('table', { name: "Journal d'audit" });
+    expect(within(table).getByText('MFA validé')).toBeInTheDocument();
+
+    const filter = screen.getByLabelText('Action');
+    for (const label of ['Échec de connexion', 'Connexion réussie', 'Déconnexion', 'Mot de passe réinitialisé', 'MFA activé', 'MFA validé', 'Alerte AML traitée', 'Dépôt manuel (hors plateforme)', 'Retrait manuel (hors plateforme)']) {
+      expect(within(filter).getByRole('option', { name: label })).toBeInTheDocument();
+    }
+
+    // L'alerte « essais de mots de passe » renvoie au journal filtré sur les échecs : le filtre existe.
+    await userEvent.selectOptions(filter, 'auth.login_failed');
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('/admin/audit-logs?'));
+      expect(urls[urls.length - 1]).toContain('action=auth.login_failed');
+    });
+  });
+
+  it("affiche le détail en clair : identifiant masqué, cause et adresse IP, le JSON brut replié à part", async () => {
+    mockApi({
+      'GET /me': me(['audit.view']),
+      'GET /admin/audit-logs': {
+        status: 200,
+        body: page([
+          {
+            id: '300', action: 'auth.login_failed', actor: null, subject: null, before: null, after: null, reason: null,
+            metadata: { reason: 'wrong_password', field: 'phone', login: '****1234' },
+            ip_address: '197.159.10.24', request_id: 'req-300', created_at: '2026-11-20T08:40:00+00:00',
+          },
+          {
+            id: '301', action: 'auth.password_reset', actor: { id: '41', email: 'ana@example.com' }, subject: { type: 'user', id: '41' },
+            before: null, after: { sessions_closed: true }, reason: null, metadata: null,
+            ip_address: '10.0.0.8', request_id: 'req-301', created_at: '2026-11-20T09:12:00+00:00',
+          },
+        ]),
+      },
+    });
+
+    renderApp('/admin/audit');
+
+    const table = await screen.findByRole('table', { name: "Journal d'audit" });
+    const [failed, reset] = Array.from(table.querySelectorAll<HTMLElement>('details.audit-detail'));
+    const facts = (el: HTMLElement) => el.querySelector('.audit-facts') as HTMLElement;
+
+    expect(within(facts(failed)).getByText('Identifiant saisi')).toBeInTheDocument();
+    expect(facts(failed)).toHaveTextContent('•••• 1234');
+    expect(facts(failed)).toHaveTextContent('mot de passe incorrect');
+    expect(facts(failed)).toHaveTextContent('Adresse IP197.159.10.24');
+    expect(facts(failed).textContent).not.toMatch(/[{}"]/); // plus d'accolades ni de guillemets dans la partie lisible
+
+    expect(facts(reset)).toHaveTextContent('Appareilstous déconnectés');
+    expect(facts(reset)).toHaveTextContent('Adresse IP10.0.0.8');
+
+    // La donnée exacte reste consultable, repliée sous « Données techniques ».
+    const tech = failed.querySelector('details.audit-tech') as HTMLElement;
+    expect(within(tech).getByText('Données techniques')).toBeInTheDocument();
+    expect(tech).toHaveTextContent('"login": "****1234"');
+  });
+
   it("sans audit.export, pas d'export", async () => {
     mockApi({
       'GET /me': me(['audit.view']),

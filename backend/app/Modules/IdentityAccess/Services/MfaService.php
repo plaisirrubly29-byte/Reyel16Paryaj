@@ -98,6 +98,8 @@ class MfaService
 
         $codes = $this->newRecoveryCodes($user);
         $user->forceFill(['mfa_confirmed_at' => now()])->save();
+        // Jamais le secret, le code ni les codes de secours (audit du 18/11/2026).
+        $this->audit->record(AuditAction::MfaEnabled, $user, after: ['mfa_enabled' => true], actor: $user);
         // Nouvel identifiant de session, comme verify : un identifiant fixé avant ne devient pas une session MFA (P8-02, F3).
         $session->migrate(true);
         $session->put(self::SESSION_KEY, $user->getKey());
@@ -131,6 +133,9 @@ class MfaService
         $session->migrate(true);
         $session->put(self::SESSION_KEY, $user->getKey());
         $this->touch($session);
+
+        // Méthode utilisée : un code de secours signale souvent un téléphone perdu. Jamais le code lui-même.
+        $this->audit->record(AuditAction::MfaVerified, $user, actor: $user, metadata: ['method' => $method]);
     }
 
     /**
