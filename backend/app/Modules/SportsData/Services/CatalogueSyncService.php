@@ -219,16 +219,22 @@ class CatalogueSyncService
                 continue;
             }
 
+            // Cote du bookmaker de référence et meilleure cote suivie, gardées pour l'administration (V2-D03) : repères
+            // d'une cote fixée à la main. Aucun appel de plus au fournisseur.
+            $sources = $this->sourceOdds($data, $key, $line);
+            $provider = array_map(fn (array $s) => $s['odds'], $selections);
+            $best = $this->bestOdds($provider, $sources);
+
             // Argent réel : cote juste (moyenne des bookmakers) + marge de l'opérateur (V2-D03, D-18).
             if (OddsMargin::enabled()) {
                 $selections = OddsMargin::apply(
                     $selections,
-                    $this->sourceOdds($data, $key, $line),
+                    $sources,
                     OddsMargin::rate($data->sportKey, $key, $live),
                 );
             }
 
-            if ($this->syncMarket($event, $market, $selections, $line)) {
+            if ($this->syncMarket($event, $market, $selections, $line, $provider, $best)) {
                 $report->oddsChanged++;
             }
         }
@@ -392,6 +398,28 @@ class CatalogueSyncService
         }
 
         return $sources;
+    }
+
+    /**
+     * Meilleure cote de chaque sélection parmi les bookmakers suivis (V2-D03) : repère contre l'arbitrage quand un
+     * administrateur fixe une cote à la main. Calcul en chaînes décimales.
+     *
+     * @param  array<string, string>  $provider  cotes du bookmaker de référence
+     * @param  list<array<string, string>>  $sources
+     * @return array<string, string>
+     */
+    private function bestOdds(array $provider, array $sources): array
+    {
+        $best = $provider;
+        foreach ($sources as $odds) {
+            foreach ($odds as $key => $value) {
+                if (isset($best[$key]) && bccomp((string) $value, (string) $best[$key], 3) > 0) {
+                    $best[$key] = $value;
+                }
+            }
+        }
+
+        return $best;
     }
 
     /**
@@ -826,10 +854,17 @@ class CatalogueSyncService
     }
 
     /**
+     * Cote proposée de chaque sélection : la cote calculée ($odds), sauf une cote fixée à la main en vigueur
+     * (selections.adjusted, V2-D03), que la synchronisation n'écrase pas. Cote calculée, cote du bookmaker de référence
+     * et meilleure cote suivie sont mises à jour à chaque passage, sans nouvelle version si la cote proposée ne change
+     * pas ($provider et $best : null pour un marché maison, sans bookmaker).
+     *
      * @param  array<string, array{name: string, odds: string}>  $odds
-     * @return bool true si les cotes ou la ligne ont changé (nouvelle version)
+     * @param  array<string, string>|null  $provider
+     * @param  array<string, string>|null  $best
+     * @return bool true si les cotes proposées ou la ligne ont changé (nouvelle version)
      */
-    private function syncMarket(Event $event, MarketData $source, array $odds, ?string $line): bool
+    private function syncMarket(Event $event, MarketData $source, array $odds, ?string $line, ?array $provider = null, ?array $best = null): bool
     {
         /** @var Market $market */
         $market = $event->markets()->firstOrNew(['key' => $source->key]);
@@ -839,10 +874,14 @@ class CatalogueSyncService
             return false;
         }
 
-        $current = $market->exists
-            ? $market->selections()->pluck('odds', 'key')->map(fn ($o) => $this->normalize((string) $o))->all()
-            : [];
-        $incoming = array_map(fn ($s) => $this->normalize($s['odds']), $odds);
+        // Une seule lecture des sélections (comme avant) : sert à la comparaison et aux mises à jour.
+        $existing = $market->exists ? $market->selections()->get()->keyBy('key') : collect();
+        $current = $existing->map(fn ($s) => $this->normalize((string) $s->odds))->all();
+        $incoming = [];
+        foreach ($odds as $key => $selection) {
+            $kept = $existing->get($key);
+            $incoming[$key] = $kept?->adjusted ? $this->normalize((string) $kept->odds) : $this->normalize($selection['odds']);
+        }
         ksort($current);
         ksort($incoming);
         // Un changement de ligne (ex. 2.5 → 3.5) change le pari même à cotes égales : nouvelle version.
@@ -867,20 +906,33 @@ class CatalogueSyncService
             'odds_updated_at' => $source->updatedAt,
         ])->save();
 
-        if (! $changed) {
-            return false;
+        foreach ($odds as $key => $selection) {
+            // Sélection déjà lue, sinon nouvelle ; save() n'écrit rien si rien n'a changé (test de charge P8-03).
+            $model = $existing->get($key) ?? $market->selections()->make(['key' => $key]);
+            $model->fill([
+                'name' => $selection['name'],
+                'odds' => $incoming[$key],
+                'computed_odds' => $this->normalize($selection['odds']),
+                'provider_odds' => isset($provider[$key]) ? $this->normalize($provider[$key]) : null,
+                'best_odds' => isset($best[$key]) ? $this->normalize($best[$key]) : null,
+            ])->save();
+
+            if ($changed) {
+                OddsSnapshot::create([
+                    'selection_id' => $model->id,
+                    'odds_version' => $market->odds_version,
+                    'odds' => $incoming[$key],
+                    'computed_odds' => $model->computed_odds,
+                    'provider_odds' => $model->provider_odds,
+                    'adjusted' => (bool) $model->adjusted,
+                    'line' => $line,
+                    'provider_updated_at' => $source->updatedAt,
+                ]);
+            }
         }
 
-        foreach ($odds as $key => $selection) {
-            $model = $market->selections()->updateOrCreate(['key' => $key], $selection);
-
-            OddsSnapshot::create([
-                'selection_id' => $model->id,
-                'odds_version' => $market->odds_version,
-                'odds' => $selection['odds'],
-                'line' => $line,
-                'provider_updated_at' => $source->updatedAt,
-            ]);
+        if (! $changed) {
+            return false;
         }
 
         // Une sélection disparue du fournisseur ne doit plus être proposée.

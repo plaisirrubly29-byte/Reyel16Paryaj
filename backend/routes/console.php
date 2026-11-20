@@ -60,6 +60,12 @@ Schedule::command('payments:payouts')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Cotes fixées à la main arrivées à leur date limite ou au début du match : retour à la cote calculée (V2-D03, D-18).
+Schedule::command('odds:expire-overrides')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))

@@ -1778,6 +1778,157 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
+  /admin/markets/{id}/odds-overrides:
+    post:
+      tags: [Admin]
+      summary: Fixer à la main la cote d'une sélection (permission odds.override, motif requis, auditée)
+      description: |
+        V2-D03 (D-18). Opérations et Super Admin. Écart de **20 % au plus** avec la cote calculée : cote en vigueur tout
+        de suite (`active`, nouvelle version de cote). Au-delà : `pending`, en attente d'un **second administrateur**
+        (`/admin/odds-overrides/{id}/approve`). La synchronisation n'écrase pas une cote en vigueur ; elle prend fin à la
+        date limite ou au début du match (`expired`), puis la cote calculée revient. Une seule modification en attente ou
+        en vigueur par sélection. Audit : `odds.override_requested` (et `odds.override_approved` quand elle prend effet
+        sans validation).
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selection_id, odds, reason]
+              properties:
+                selection_id: { type: string, description: Sélection de ce marché }
+                odds: { type: string, example: "1.80", description: "Cote décimale en chaîne, 2 décimales, de 1.01 à 1000.00" }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                expires_at: { type: [string, "null"], format: date-time, description: "Facultatif : avant le début du match ; par défaut le début du match" }
+      responses:
+        "201":
+          description: Modification enregistrée (active ou pending)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`override_already_exists` (details.override_id) ; `market_not_open` (marché suspendu, fermé ou réglé) ; `event_started`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "Validation : cote hors bornes, sélection d'un autre marché, date limite passée ou après le début du match", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides:
+    get:
+      tags: [Admin]
+      summary: Cotes fixées à la main (permission events.view)
+      description: Les demandes en attente d'abord, puis les plus récentes.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, ended, expired] } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/OddsOverride" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/odds-overrides/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une cote fixée à la main (permission events.view)
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/odds-overrides/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une cote en attente (permission odds.override, motif requis)
+      description: |
+        Second administrateur, différent du demandeur (`403 self_approval_forbidden`), dont le rôle n'a pas été attribué
+        depuis moins de 24 h (`403 approver_role_too_recent`). La cote entre en vigueur (nouvelle version). Match commencé
+        ou date limite passée : `409 override_expired`. Audit : `odds.override_approved`.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Cote en vigueur (status active)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403":
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`override_not_pending` ; `override_expired` ; `market_not_open`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser une cote en attente (permission odds.override, motif requis)
+      description: "Le demandeur peut retirer sa propre demande par ce refus. Aucune cote ne change. Audit : `odds.override_rejected`."
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Refusée (status rejected)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`override_not_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides/{id}/end:
+    post:
+      tags: [Admin]
+      summary: Revenir à la cote calculée (permission odds.override, motif requis)
+      description: |
+        Met fin à une cote en vigueur : la cote calculée revient (nouvelle version de cote). Audit : `odds.override_ended`.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Terminée (status ended)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`override_not_active`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
   /admin/users/{id}/responsible-gaming:
     get:
       tags: [Admin]
@@ -3629,8 +3780,46 @@ components:
         bettable: { type: boolean }
         selections:
           type: array
-          items: { type: object, properties: { id: { type: string }, key: { type: string }, label: { type: string }, name: { type: string }, odds: { type: string, example: "2.10" } } }
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              key: { type: string }
+              label: { type: string }
+              name: { type: string }
+              odds: { type: string, example: "2.10", description: "Cote proposée aux joueurs (calculée, ou fixée à la main)" }
+              computed_odds: { type: [string, "null"], example: "2.09", description: "V2-D03 : cote calculée par la synchronisation (marge de l'opérateur avec l'argent réel, D-18), avant toute cote fixée à la main" }
+              provider_odds: { type: [string, "null"], example: "2.15", description: "Cote du bookmaker de référence ; null pour un marché maison (V2-D10)" }
+              best_odds: { type: [string, "null"], example: "2.20", description: "Meilleure cote parmi les bookmakers suivis : repère pour une cote fixée à la main (au-dessus, risque d'arbitrage) ; null pour un marché maison" }
+              adjusted: { type: boolean, description: Cote fixée à la main en vigueur }
+              override: { oneOf: [{ $ref: "#/components/schemas/OddsOverride" }, { type: "null" }], description: "Fiche du marché : cote fixée à la main en attente ou en vigueur" }
         updated_at: { type: [string, "null"], format: date-time }
+    OddsOverride:
+      type: object
+      description: |
+        V2-D03 (D-18) : cote fixée à la main. Statuts : pending (écart de plus de 20 % avec la cote calculée, attend un
+        second administrateur) → active (cote proposée aux joueurs, nouvelle version de cote) → ended (fin demandée, retour
+        à la cote calculée) ou expired (date limite ou début du match atteints) ; rejected (refusée par le second
+        administrateur). Les tickets déjà placés gardent leur version de cote.
+      properties:
+        id: { type: string }
+        market_id: { type: string }
+        selection: { type: object, properties: { id: { type: string }, key: { type: string }, name: { type: string } } }
+        event: { type: object, properties: { id: { type: string }, home_team: { type: string }, away_team: { type: string }, starts_at: { type: string, format: date-time } } }
+        status: { type: string, enum: [pending, active, rejected, ended, expired] }
+        odds: { type: string, example: "1.80", description: Cote fixée }
+        computed_odds: { type: string, example: "2.09", description: Cote calculée au moment de la demande }
+        deviation_percent: { type: string, example: "-13.88", description: "Écart avec la cote calculée, en pourcentage (double validation au-delà de ±20)" }
+        requires_approval: { type: boolean }
+        reason: { type: string }
+        expires_at: { type: string, format: date-time, description: "Date limite, au plus le début du match" }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        requested_at: { type: string, format: date-time }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        ended_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } }, description: "null pour une expiration" }
+        ended_at: { type: [string, "null"], format: date-time }
     AuditLog:
       type: object
       properties:
@@ -3852,6 +4041,7 @@ components:
                     label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; > 2.5 / < 2.5 ; Oui / Non ; 1 (-0.5) / 2 (+0.5) ; 1 > 1.5 ; Impair / Pair ; 2-1" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
+                    adjusted: { type: boolean, description: "V2-D03 (D-18) : true quand la cote est fixée à la main par l'administration, au lieu de la cote calculée" }
     BetTicket:
       type: object
       description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.

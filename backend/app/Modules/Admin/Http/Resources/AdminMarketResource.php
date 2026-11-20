@@ -54,6 +54,15 @@ class AdminMarketResource extends JsonResource
                 'label' => MarketResource::selectionLabel($s->key, $this->line),
                 'name' => $s->name,
                 'odds' => MarketResource::odds($s->odds),
+                // Repères d'une cote fixée à la main (V2-D03) : cote calculée, bookmaker de référence, meilleure cote.
+                'computed_odds' => $s->computed_odds === null ? null : MarketResource::odds((string) $s->computed_odds),
+                'provider_odds' => $s->provider_odds === null ? null : MarketResource::odds((string) $s->provider_odds),
+                'best_odds' => $s->best_odds === null ? null : MarketResource::odds((string) $s->best_odds),
+                'adjusted' => (bool) $s->adjusted,
+                // Cote fixée à la main en attente ou en vigueur (fiche du marché seulement).
+                'override' => $s->relationLoaded('openOverride') && $s->openOverride !== null
+                    ? new OddsOverrideResource($s->openOverride->setRelation('selection', $s)->setRelation('market', $this->resource))
+                    : null,
             ])->values()),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

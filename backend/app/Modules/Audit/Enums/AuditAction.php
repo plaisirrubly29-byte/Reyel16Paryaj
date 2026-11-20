@@ -33,6 +33,13 @@ enum AuditAction: string
     case MarketSuspended = 'market.suspended';
     case MarketReopened = 'market.reopened';
 
+    // Cotes fixées à la main, double validation au-delà de 20 % d'écart (V2-D03, D-18)
+    case OddsOverrideRequested = 'odds.override_requested';
+    case OddsOverrideApproved = 'odds.override_approved';
+    case OddsOverrideRejected = 'odds.override_rejected';
+    case OddsOverrideEnded = 'odds.override_ended';
+    case OddsOverrideExpired = 'odds.override_expired';
+
     // Admin — corrections financières à double validation (P6-04)
     case FinanceCorrectionRequested = 'finance.correction_requested';
     case FinanceCorrectionApproved = 'finance.correction_approved';
