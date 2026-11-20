@@ -42,6 +42,16 @@ class SettlementLockTest extends TestCase
 
         // Données validées (pas de transaction de test) : visibles de la seconde connexion. Base jetable seulement.
         $this->artisan('migrate:fresh')->assertSuccessful();
+        try {
+            $this->assertSettlementWaitsForTheMatchLock();
+        } finally {
+            // Base jetable remise à vide, réussite ou échec : aucune donnée pour les tests suivants de la même passe.
+            $this->artisan('migrate:fresh')->assertSuccessful();
+        }
+    }
+
+    private function assertSettlementWaitsForTheMatchLock(): void
+    {
         $this->app->instance(SportsDataProvider::class, new FakeSportsDataProvider);
         app(CatalogueSyncService::class)->sync('soccer_epl');
         $event = Event::query()->firstOrFail();
