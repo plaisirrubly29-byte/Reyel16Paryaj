@@ -40,14 +40,38 @@ class SettlementService
         private readonly LedgerService $ledger,
     ) {}
 
-    /** Règle les sélections en attente d'un match qui a un résultat, puis les tickets devenus complets. */
+    /**
+     * Règle les sélections en attente d'un match qui a un résultat, puis les tickets devenus complets.
+     *
+     * Les sélections sont réglées sous le verrou du match, avec le résultat relu sous ce verrou (audit du 18/11/2026,
+     * constat n° 6). Une correction de résultat (ResultRecorder, même verrou) ne peut donc pas s'intercaler : soit elle
+     * attend la fin de ce règlement puis réévalue les sélections qu'il a réglées, soit elle passe avant et ce règlement
+     * lit le résultat corrigé. Sans verrou, les sélections réglées après la correction gardaient l'ancien score.
+     */
     public function settleEvent(Event $event): SettlementReport
     {
         $report = new SettlementReport;
 
-        $result = Result::currentFor($event);
+        $ticketIds = DB::transaction(fn () => $this->settleSelections($event, $report));
+
+        foreach (array_keys($ticketIds) as $ticketId) {
+            $this->settleTicket(BetTicket::findOrFail($ticketId), $report);
+        }
+
+        return $report;
+    }
+
+    /**
+     * Sous le verrou du match : issues du catalogue et sélections en attente.
+     *
+     * @return array<int, true> tickets dont une sélection vient d'être réglée
+     */
+    private function settleSelections(Event $event, SettlementReport $report): array
+    {
+        $event = Event::whereKey($event->id)->lockForUpdate()->first();
+        $result = $event === null ? null : Result::currentFor($event);
         if ($result === null) {
-            return $report;
+            return [];
         }
 
         $this->settleCatalogue($event, $result);
@@ -87,11 +111,7 @@ class SettlementService
             $ticketIds[$selection->bet_ticket_id] = true;
         }
 
-        foreach (array_keys($ticketIds) as $ticketId) {
-            $this->settleTicket(BetTicket::findOrFail($ticketId), $report);
-        }
-
-        return $report;
+        return $ticketIds;
     }
 
     /**
