@@ -50,9 +50,21 @@ class SyncCatalogueCommand extends Command
                     ->filter(fn ($s) => $s->active && ! $s->hasOutrights && Str::is($patterns, $s->key))
                     ->pluck('key');
             } catch (SportsDataException $e) {
-                $this->error("Liste des compétitions indisponible : {$e->getMessage()}");
+                // Panne passagère du fournisseur (502…) : les compétitions déjà au catalogue sont synchronisées quand
+                // même, pour que les cotes ne vieillissent pas jusqu'à la synchro suivante. Les nouvelles compétitions
+                // attendront la prochaine liste.
+                $matching = Competition::where('provider', $provider->name())->where('is_active', true)
+                    ->orderBy('external_key')->pluck('external_key')
+                    ->filter(fn (string $key) => Str::is($patterns, $key));
 
-                return self::FAILURE;
+                if ($matching->isEmpty()) {
+                    $this->error("Liste des compétitions indisponible : {$e->getMessage()}");
+
+                    return self::FAILURE;
+                }
+
+                $this->warn("Liste des compétitions indisponible ({$e->getMessage()}) : compétitions déjà au catalogue synchronisées.");
+                Log::warning('sports_data.sports_list_unavailable', ['reason' => $e->reason, 'fallback' => $matching->count()]);
             }
 
             $competitions = $matching->merge(array_diff($configured, $patterns))->unique()->sort()->values()->all();

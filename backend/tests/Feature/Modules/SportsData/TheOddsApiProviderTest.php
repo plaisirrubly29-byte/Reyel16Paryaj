@@ -375,6 +375,47 @@ class TheOddsApiProviderTest extends TestCase
         $this->assertSame(3, $attempts);
     }
 
+    public function test_free_calls_are_retried_after_a_temporary_gateway_error(): void
+    {
+        // Panne passagère de la passerelle de The Odds API (502 sur /sports, vue sur le Staging) : sans nouvel
+        // essai, toute la synchro s'arrêtait.
+        Http::fake(['*' => Http::sequence()
+            ->push(['message' => 'Bad Gateway'], 502)
+            ->push(['message' => 'Service Unavailable'], 503)
+            ->push([['key' => 'soccer_epl', 'group' => 'Soccer', 'title' => 'EPL', 'active' => true, 'has_outrights' => false]], 200)]);
+
+        $this->assertSame('soccer_epl', $this->provider()->sports()[0]->key);
+        Http::assertSentCount(3);
+    }
+
+    public function test_free_calls_are_not_retried_on_other_errors(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'erreur'], 500)]);
+
+        try {
+            $this->provider()->sports();
+            $this->fail('Aucune exception pour une erreur 500.');
+        } catch (SportsDataException $e) {
+            $this->assertSame(SportsDataException::UNAVAILABLE, $e->reason);
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_paid_calls_are_never_retried_after_a_gateway_error(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'Bad Gateway'], 502)]);
+
+        try {
+            $this->provider()->events('soccer_epl');
+            $this->fail('Aucune exception pour une erreur 502.');
+        } catch (SportsDataException $e) {
+            $this->assertSame(SportsDataException::UNAVAILABLE, $e->reason);
+        }
+
+        Http::assertSentCount(1);
+    }
+
     public function test_missing_key_is_refused_before_any_call(): void
     {
         config(['sports_data.theodds.key' => null]);
