@@ -359,6 +359,43 @@ class CatalogueSyncTest extends TestCase
         $this->assertSame(3, Event::count());
     }
 
+    public function test_without_the_competition_list_the_known_competitions_are_still_synced(): void
+    {
+        // Première synchro normale : les compétitions entrent au catalogue.
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->artisan('sports-data:sync')->assertSuccessful();
+
+        // Panne passagère de /sports (502 chez The Odds API) : les cotes des compétitions connues sont quand même
+        // rafraîchies, au lieu de vieillir jusqu'à la synchro suivante.
+        $this->fake = new class extends FakeSportsDataProvider
+        {
+            public function sports(): array
+            {
+                throw new SportsDataException(SportsDataException::UNAVAILABLE, 'The Odds API 502 sur /sports');
+            }
+        };
+        $this->app->instance(SportsDataProvider::class, $this->fake);
+        $this->fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.95', 'Chelsea' => '3.60', 'Draw' => '3.30'])
+            ->setOddsUpdatedAt(CarbonImmutable::now());
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions déjà au catalogue synchronisées')
+            ->expectsOutputToContain('compétitions : basketball_nba, soccer_epl')
+            ->assertSuccessful();
+
+        $this->assertSame(2, $this->h2h('fake-1')->odds_version);
+    }
+
+    public function test_without_the_competition_list_nor_known_competitions_the_sync_fails(): void
+    {
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->fake->failWith(SportsDataException::UNAVAILABLE);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Liste des compétitions indisponible')
+            ->assertFailed();
+    }
+
     public function test_a_competition_removed_from_the_list_leaves_the_catalogue_and_comes_back_when_listed_again(): void
     {
         config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
