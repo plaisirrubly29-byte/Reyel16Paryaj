@@ -8,6 +8,7 @@ use App\Modules\Admin\Http\Resources\AdminUserResource;
 use App\Modules\Admin\Support\UserSearch;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Betting\Services\PlayerStakeLimit;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\IdentityAccess\Services\AccountStatusService;
@@ -61,5 +62,16 @@ class AdminUserController extends Controller
             : $accounts->reactivate($request->user(), $user, $data['reason']);
 
         return new AdminUserResource($user->load(['roles', 'profile']));
+    }
+
+    /** Mise maximale par ticket propre au joueur (V2-D05) ; null la retire. */
+    public function stakeLimit(Request $request, User $user, PlayerStakeLimit $limits): AdminUserResource
+    {
+        $data = $request->validate([
+            'max_stake_minor' => ['present', 'nullable', 'integer', 'min:'.(int) config('betting.min_stake_minor'), 'max:'.(int) config('betting.max_stake_minor')],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        return new AdminUserResource($limits->set($request->user(), $user, $data['max_stake_minor'], $data['reason'])->load(['roles', 'profile']));
     }
 }

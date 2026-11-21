@@ -123,13 +123,15 @@ class ResultCorrectionApiTest extends TestCase
         return $this->actingAsVerifiedAdmin($as)->postJson("/api/v1/admin/{$uri}", $body, ['Idempotency-Key' => (string) Str::uuid()]);
     }
 
-    private function requestCorrection(?User $as = null, string $home = '1', string $away = '2', string $status = 'final'): TestResponse
+    /** Football : le score saisi est celui du temps réglementaire (D-03), confirmé par défaut. */
+    private function requestCorrection(?User $as = null, string $home = '1', string $away = '2', string $status = 'final', bool $regulationTime = true): TestResponse
     {
         return $this->adminPost($as ?? $this->operations, "events/{$this->event->id}/result-corrections", [
             'status' => $status,
             'home_score' => $status === 'final' ? $home : null,
             'away_score' => $status === 'final' ? $away : null,
             'reason' => 'Score officiel publié par la ligue',
+            'regulation_time' => $regulationTime,
         ]);
     }
 
@@ -225,7 +227,8 @@ class ResultCorrectionApiTest extends TestCase
 
     public function test_invalid_or_useless_requests_are_refused(): void
     {
-        $this->requestCorrection()->assertStatus(409)->assertJsonPath('error.code', 'no_result_to_correct');
+        // Avant le match : pas encore de résultat manuel possible (V2-D04).
+        $this->requestCorrection()->assertStatus(409)->assertJsonPath('error.code', 'result_too_early');
 
         $this->bet($this->player(), [['fake-1', 'home']]);
         $this->finish('2', '1');
@@ -433,5 +436,95 @@ class ResultCorrectionApiTest extends TestCase
             ->assertJsonPath('data.results.1.correction_reason', 'Score officiel publié par la ligue')
             ->assertJsonPath('data.corrections.0.status', 'approved')
             ->assertJsonPath('data.corrections.0.impact.tickets_count', 1);
+    }
+
+    // Premier résultat saisi à la main, le fournisseur n'en publiant pas (V2-D04)
+
+    public function test_a_missing_result_is_entered_then_approved_by_another_admin_and_settled(): void
+    {
+        $player = $this->player();
+        $ticket = $this->bet($player, [['fake-1', 'home']]);
+        $this->travelTo('2026-10-21 18:30:00'); // 3 h 30 après le coup d'envoi, rien du fournisseur
+
+        $id = $this->requestCorrection(home: '2', away: '1')->assertCreated()
+            ->assertJsonPath('data.kind', 'initial')
+            ->assertJsonPath('data.current', null)
+            ->assertJsonPath('data.proposed', ['status' => 'final', 'score' => '2-1'])
+            ->json('data.id');
+
+        // Rien n'est réglé avant la seconde validation.
+        $this->assertSame('pending', $ticket->fresh()->status->value);
+        $this->assertNull(Result::currentFor($this->event));
+        $this->approve($id, $this->operations)->assertForbidden()->assertJsonPath('error.code', 'self_approval_forbidden');
+
+        $this->approve($id)->assertOk()
+            ->assertJsonPath('data.status', 'approved')
+            ->assertJsonPath('data.impact.pending_tickets_count', 1);
+
+        $result = Result::currentFor($this->event);
+        $this->assertSame(['manual', '2', '1', 1], [$result->source, $result->home_score, $result->away_score, $result->version]);
+        $this->assertSame('won', $ticket->fresh()->status->value);
+        $this->assertSame(self::BALANCE - self::STAKE + 210_00, $this->balance($player));
+        $this->assertDatabaseHas('audit_logs', ['action' => 'result.correction_approved', 'actor_id' => $result->entered_by]);
+    }
+
+    public function test_a_manual_result_waits_3_hours_after_kick_off(): void
+    {
+        $this->travelTo('2026-10-21 17:59:00');
+        $this->requestCorrection()->assertStatus(409)
+            ->assertJsonPath('error.code', 'result_too_early')
+            ->assertJsonPath('error.details.available_at', '2026-10-21T18:00:00+00:00');
+
+        $this->travelTo('2026-10-21 18:00:00');
+        $this->requestCorrection()->assertCreated();
+    }
+
+    /**
+     * D-03 : football réglé sur le temps réglementaire. Match de coupe : 1-1 à la 90e, 2-1 après prolongation.
+     * Le saisisseur doit confirmer le score du temps réglementaire ; avec 1-1, le nul gagne et la victoire perd.
+     */
+    public function test_football_is_settled_on_the_regulation_time_score(): void
+    {
+        $onDraw = $this->player();
+        $onHome = $this->player();
+        $drawTicket = $this->bet($onDraw, [['fake-1', 'draw']]);
+        $homeTicket = $this->bet($onHome, [['fake-1', 'home']]);
+        $this->travelTo('2026-10-21 19:00:00');
+
+        $this->requestCorrection(home: '2', away: '1', regulationTime: false)
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'regulation_time_required');
+
+        $id = $this->requestCorrection(home: '1', away: '1')->assertCreated()->json('data.id');
+        $this->approve($id)->assertOk();
+
+        $this->assertSame('won', $drawTicket->fresh()->status->value);
+        $this->assertSame('lost', $homeTicket->fresh()->status->value);
+        $drawOdds = (string) $this->selection('fake-1', 'draw')->odds;
+        $this->assertSame(self::BALANCE - self::STAKE + (int) bcmul((string) self::STAKE, $drawOdds, 0), $this->balance($onDraw));
+    }
+
+    public function test_a_cancelled_match_needs_no_regulation_time_confirmation(): void
+    {
+        $ticket = $this->bet($this->player(), [['fake-1', 'home']]);
+        $this->travelTo('2026-10-21 19:00:00');
+
+        $id = $this->requestCorrection(status: 'cancelled', regulationTime: false)->assertCreated()->json('data.id');
+        $this->approve($id)->assertOk();
+
+        $this->assertSame('void', $ticket->fresh()->status->value);
+    }
+
+    public function test_a_provider_result_arriving_meanwhile_wins_over_the_pending_manual_one(): void
+    {
+        $ticket = $this->bet($this->player(), [['fake-1', 'home']]);
+        $this->travelTo('2026-10-21 19:00:00');
+        $id = $this->requestCorrection(home: '0', away: '1')->assertCreated()->json('data.id');
+
+        $this->fake->setResult('fake-1', '2', '1');
+        $this->assertTrue(app(ResultImportService::class)->import('soccer_epl')->succeeded());
+
+        $this->approve($id)->assertStatus(409)->assertJsonPath('error.code', 'result_changed');
+        $this->assertSame('won', $ticket->fresh()->status->value); // réglé sur le résultat du fournisseur
     }
 }

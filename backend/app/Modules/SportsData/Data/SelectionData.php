@@ -14,6 +14,8 @@ final readonly class SelectionData
         public string $odds,
         /** Ligne du marché (handicap, total) ; null pour un marché vainqueur. */
         public ?string $point = null,
+        /** Équipe visée par un marché d'équipe (team_totals : « Arsenal » + Over 1.5) ; null sinon. */
+        public ?string $description = null,
     ) {
         if (! preg_match('/^\d+(\.\d{1,3})?$/', $odds) || bccomp($odds, '1', 3) <= 0) {
             throw new InvalidArgumentException("Cote invalide : {$odds}");

@@ -20,6 +20,8 @@ class WelcomeCreditTest extends TestCase
             'password' => 'motdepasse123',
             'password_confirmation' => 'motdepasse123',
             'birth_date' => now()->subYears(25)->toDateString(),
+            'terms_accepted' => true,
+            'terms_version' => config('identity.terms_version'),
         ]);
     }
 

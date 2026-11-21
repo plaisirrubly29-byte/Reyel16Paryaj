@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'active'])->prefix('responsible-gaming')->group(function () {
     Route::get('/', [ResponsibleGamingController::class, 'show']);
     Route::put('/limits/{period}', [ResponsibleGamingController::class, 'updateLimit'])->middleware('idempotent');
+    Route::put('/deposit-limits/{period}', [ResponsibleGamingController::class, 'updateDepositLimit'])->middleware('idempotent');
+    Route::put('/loss-limits/{period}', [ResponsibleGamingController::class, 'updateLossLimit'])->middleware('idempotent');
+    Route::put('/session-reminder', [ResponsibleGamingController::class, 'updateSessionReminder'])->middleware('idempotent');
+    Route::get('/history', [ResponsibleGamingController::class, 'history']);
     Route::post('/pause', [ResponsibleGamingController::class, 'pause'])->middleware('idempotent');
     Route::post('/self-exclusion', [ResponsibleGamingController::class, 'selfExclude'])->middleware(['idempotent', 'throttle:mfa']);
 });

@@ -24,6 +24,7 @@ return [
         'dashboard.view' => "Vue d'ensemble",
         'events.view' => 'Consulter événements et marchés',
         'markets.suspend' => 'Suspendre / masquer un marché (motif)',
+        'odds.override' => 'Fixer une cote à la main, ou valider celle d\'un autre au-delà de 20 % d\'écart (motif)',
         'results.enter' => 'Saisir un résultat',
         'results.approve' => 'Valider un résultat saisi par un autre',
         'settlement.run' => 'Lancer / relancer un règlement',
@@ -40,6 +41,11 @@ return [
         'settings.update' => 'Modifier les paramètres (versionnés)',
         'responsible_gaming.view' => 'Consulter les limites de jeu responsable',
         'responsible_gaming.manage' => 'Gérer les limites de jeu responsable',
+        'aml.view' => 'Consulter les alertes AML',
+        'aml.review' => 'Classer ou signaler une alerte AML (motif)',
+        'kyc.view' => 'Consulter les dossiers KYC (pièce d’identité, selfie)',
+        'kyc.approve' => 'Valider un dossier KYC',
+        'kyc.reject' => 'Refuser un dossier KYC (motif)',
         'audit.view' => "Consulter le journal d'audit",
         'audit.export' => "Exporter le journal d'audit",
         'roles.manage' => 'Attribuer les rôles des autres administrateurs (jamais les siens)',
@@ -47,26 +53,29 @@ return [
 
     'roles' => [
         'super_admin' => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve',
+            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve',
             'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend',
             'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view',
-            'settings.update', 'responsible_gaming.view', 'audit.view', 'audit.export', 'roles.manage',
+            'settings.update', 'responsible_gaming.view', 'aml.view', 'audit.view', 'audit.export', 'roles.manage',
+            'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
         'operations' => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view',
+            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'tickets.view',
         ],
         'finance' => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view',
-            'users.view_personal_data', 'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve',
+            'users.view_personal_data', 'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'aml.view',
             'audit.view', 'audit.export',
         ],
         'support' => [
             'dashboard.view', 'events.view', 'users.view', 'users.suspend', 'tickets.view',
+            'kyc.view', 'kyc.approve',
         ],
         'compliance' => [
             'dashboard.view', 'events.view', 'users.view', 'users.view_personal_data', 'users.suspend',
             'tickets.view', 'ledger.view', 'settings.view', 'responsible_gaming.view',
-            'responsible_gaming.manage', 'audit.view', 'audit.export',
+            'responsible_gaming.manage', 'aml.view', 'aml.review', 'audit.view', 'audit.export',
+            'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
     ],
 

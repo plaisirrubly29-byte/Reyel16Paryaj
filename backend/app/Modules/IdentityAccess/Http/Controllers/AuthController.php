@@ -4,10 +4,14 @@ namespace App\Modules\IdentityAccess\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\IdentityAccess\Http\Middleware\EnforceSessionLifetime;
 use App\Modules\IdentityAccess\Http\Requests\LoginRequest;
 use App\Modules\IdentityAccess\Http\Requests\RegisterRequest;
 use App\Modules\IdentityAccess\Http\Resources\UserResource;
 use App\Modules\IdentityAccess\Services\AuthService;
+use App\Modules\IdentityAccess\Services\LoginFailureCounter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -19,7 +23,7 @@ class AuthController extends Controller
 
     public function register(RegisterRequest $request): JsonResponse
     {
-        $user = $this->auth->register($request->validated());
+        $user = $this->auth->register($request->validated(), $request->ip(), $request->userAgent());
 
         $this->startSession($request, $user);
 
@@ -33,13 +37,23 @@ class AuthController extends Controller
 
         $this->startSession($request, $user);
         $this->auth->recordLogin($user);
+        // Connexion réussie : la vérification « humain » n'est plus exigée pour cet identifiant ni cette IP.
+        app(LoginFailureCounter::class)->clear(LoginFailureCounter::identifierFrom($request), $request->ip());
 
         return new UserResource($user->load('roles', 'profile'));
     }
 
-    public function logout(Request $request): Response
+    public function logout(Request $request, AuditLogger $audit): Response
     {
+        // Avant la fin de la session, pour connaître le compte (audit du 18/11/2026). Rien pour un visiteur.
+        if (($user = $request->user()) !== null) {
+            $audit->record(AuditAction::Logout, $user, actor: $user);
+        }
+
         Auth::guard('web')->logout();
+        // Le garde sanctum garde sinon le compte en mémoire : la nouvelle session (invitée) serait enregistrée à son nom
+        // et listée parmi ses appareils (V2-C06).
+        Auth::guard('sanctum')->forgetUser();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -59,5 +73,7 @@ class AuthController extends Controller
 
         // Nouvel identifiant de session après authentification (anti fixation de session).
         $request->session()->regenerate();
+        // Point de départ de la durée maximale de la session (EnforceSessionLifetime).
+        $request->session()->put(EnforceSessionLifetime::STARTED_AT, now()->getTimestamp());
     }
 }

@@ -8,6 +8,24 @@ info:
 
     Conventions (format des réponses, codes d'erreur, pagination, idempotence) : docs/api/README.md.
     Toute erreur suit le schéma `Error`.
+
+    Limites globales (D-17, V2-F04) : 120 requêtes/min par compte connecté ; 300 requêtes/min par IP pour un visiteur
+    non connecté (IDENTITY_API_GUEST_RATE_PER_MINUTE, 0 = sans limite), sur toute l'API, en plus des limites propres
+    à chaque route. Au-delà : 429 `too_many_requests` (en-tête Retry-After). Les webhooks des prestataires de paiement
+    n'y sont pas comptés (ils ont leur propre limite), ni les requêtes refusées faute de connexion (401).
+
+    Protection contre les robots (D-17, PS-3/PS-4) : inscription, mot de passe oublié et connexion après 3 échecs
+    exigent `captcha_token`, le jeton du widget Cloudflare Turnstile, vérifié par le serveur. Désactivé tant que
+    TURNSTILE_SECRET_KEY n'est pas configurée.
+    - Le jeton est vérifié AVANT toute autre validation : sans jeton valide, aucune autre erreur n'est renvoyée.
+    - Un jeton ne sert qu'une fois et expire après 5 minutes : après toute réponse du serveur, l'écran réinitialise
+      le widget pour en obtenir un nouveau.
+    - Refus : 422 `captcha_failed`, `details.reason` = `required` (jeton absent), `invalid` (refusé, expiré ou déjà
+      utilisé) ou `unavailable` (Cloudflare injoignable).
+    - Cloudflare injoignable (PS-7) : inscription et mot de passe oublié refusés (`unavailable`) ; connexion laissée
+      passer, les limites de la connexion restant appliquées. Une alerte d'exploitation est envoyée.
+    - Connexion : les échecs sont comptés par identifiant saisi (téléphone ou email normalisé) et par IP, que le
+      compte existe ou non, sur 15 minutes ; une connexion réussie remet les compteurs à zéro.
 servers:
   - url: http://localhost:8000/api/v1
     description: Développement local
@@ -16,10 +34,17 @@ tags:
   - name: System
   - name: Auth
   - name: Catalogue
+  - name: Lottery
+    description: Borlette — tirages et résultats publiés par le fournisseur (404 tant que LOTTERY_ENABLED=false)
   - name: Bets
   - name: Wallet
   - name: ResponsibleGaming
+  - name: Complaints
+    description: Réclamations du joueur (V2-G04)
+  - name: Rewards
+    description: Fidélité, parrainage et bonus (V2-E07, D-19) — 404 tant que les programmes sont désactivés
   - name: Admin
+  - name: Payments
 
 paths:
   /health:
@@ -52,7 +77,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, phone, password, password_confirmation, birth_date]
+              required: [name, phone, password, password_confirmation, birth_date, terms_accepted, terms_version]
               properties:
                 name: { type: string, maxLength: 100 }
                 phone: { type: string, description: "Numéro haïtien local, 8 chiffres (espaces/tirets et préfixe +509/509 acceptés)", example: "+509 3412-3456" }
@@ -61,11 +86,43 @@ paths:
                 password_confirmation: { type: string }
                 birth_date: { type: string, format: date, example: "1998-05-21" }
                 country: { type: string, minLength: 2, maxLength: 2, example: HT }
+                terms_accepted:
+                  type: boolean
+                  const: true
+                  description: |
+                    V2-E01 : case « J'accepte les conditions d'utilisation et le règlement des paris » cochée. Absente ou
+                    false : 422 (details.terms_accepted).
+                terms_version:
+                  type: string
+                  example: "2026-11-02"
+                  description: |
+                    V2-E01 : version des textes affichés au joueur (LEGAL_VERSION du frontend, en tête de /conditions).
+                    Le serveur enregistre l'acceptation (version, date, IP). Version différente de la version en vigueur
+                    côté serveur : 422 (details.terms_version), le joueur recharge la page.
+                referral_code:
+                  type: [string, "null"]
+                  example: RY7K2M9P
+                  description: |
+                    V2-E07 (D-19 §3) : code du parrain, prérempli depuis le lien ?parrain=CODE. Optionnel, saisi à
+                    l'inscription seulement. Code inconnu : 422 (details.referral_code). Ignoré tant que
+                    REFERRAL_ENABLED=false.
+                invite_code:
+                  type: [string, "null"]
+                  example: BETA2026
+                  description: |
+                    Bêta fermée (V2-F07) : exigé tant que REGISTRATION_INVITE_CODES n'est pas vide (majuscules ou non).
+                    Absent : 422 (details.invite_code, « inscriptions sur invitation ») ; inconnu : 422 (details.invite_code).
+                    Ignoré quand l'inscription est ouverte.
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Toujours exigé. Absent ou refusé :
+                    422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "201":
           description: Compte créé, session ouverte
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
-        "422": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/CaptchaOrValidationError" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/login:
     post:
@@ -89,12 +146,19 @@ paths:
                 phone: { type: string, example: "34123456" }
                 email: { type: string, format: email, example: "chef@example.com" }
                 password: { type: string }
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Exigé après 3 échecs de connexion en 15 minutes
+                    pour le même compte ou la même IP (remis à zéro après une connexion réussie) ; avant, il peut être omis.
+                    Absent ou refusé : 422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que
+                    TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "200":
           description: Session ouverte
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
         "422":
-          description: "`invalid_credentials` ou `validation_failed`"
+          description: "`invalid_credentials`, `validation_failed` ou `captcha_failed` (après 3 échecs : afficher le widget Turnstile si `details.reason` = `required`)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`account_suspended` — compte suspendu ou fermé ; `account_excluded` — auto-exclusion du joueur (jeu responsable)"
@@ -111,10 +175,19 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Toujours exigé. Absent ou refusé :
+                    422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "202": { description: Demande prise en compte }
-        "422": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/CaptchaOrValidationError" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/reset-password:
     post:
@@ -255,6 +328,199 @@ paths:
           description: OK
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/kyc:
+    get:
+      tags: [Auth]
+      summary: Vérification d'identité du joueur connecté (statut, dernier dossier)
+      description: |
+        V2-C03. status : none (aucun dossier), pending (en revue), approved, rejected (le joueur peut envoyer un
+        nouveau dossier). rejection_reason : motif du dernier refus, à montrer au joueur. deposit_threshold : cumul
+        des dépôts autorisés sans identité vérifiée ; tout retrait exige un KYC validé.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/KycStatus" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Auth]
+      summary: Envoyer un dossier KYC (pièce d'identité + selfie)
+      description: |
+        V2-C03. multipart/form-data. Fichiers de 5 Mo au plus : pièce en jpg, jpeg, png, webp ou pdf ; selfie en jpg,
+        jpeg, png ou webp. Verso exigé pour cin et driving_licence (422 kyc_back_required), ignoré pour passport.
+        Fichiers chiffrés par le serveur, visibles seulement des administrateurs kyc.view (chaque ouverture auditée).
+        Pas de clé d'idempotence : un second envoi est refusé tant qu'un dossier est en attente. Limite : 10 envois
+        par heure et par joueur (429).
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document_type, front, selfie]
+              properties:
+                document_type: { type: string, enum: [cin, passport, driving_licence, nif] }
+                front: { type: string, format: binary, description: Recto de la pièce (page photo du passeport) }
+                back: { type: string, format: binary, description: "Verso : exigé pour cin et driving_licence" }
+                selfie: { type: string, format: binary }
+      responses:
+        "201":
+          description: Dossier envoyé, en attente de revue
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/KycStatus" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: kyc_already_pending ; kyc_already_approved
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: validation_failed ; kyc_back_required ; kyc_not_for_admins
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { description: Trop d'envois }
+  /me/loyalty:
+    get:
+      tags: [Rewards]
+      summary: Points de fidélité du joueur connecté (solde, palier, échange, bonus en cours)
+      description: |
+        V2-E07, règles de D-19. 1 point par tranche de 100 HTG misés, crédité au règlement du pari (gagné ou perdu ;
+        pas les paris annulés ou remboursés, ni les mises payées avec le bonus). Palier selon les points gagnés sur
+        12 mois glissants. 404 not_found tant que LOYALTY_ENABLED=false (le frontend affiche alors « Bientôt »).
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LoyaltyState" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/loyalty/history:
+    get:
+      tags: [Rewards]
+      summary: Mouvements de points (gains, échanges, expirations, corrections), le plus récent d'abord
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LoyaltyEntry" } }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/loyalty/redeem:
+    post:
+      tags: [Rewards]
+      summary: Échanger des points contre un bonus
+      description: |
+        V2-E07. points : multiple de exchange.step, au moins exchange.min_points, au plus le solde. Le bonus
+        (points / 100 × taux du palier) va sur le solde bonus, avec conditions de mise (D-19 §4). Renvoie l'état à jour.
+        Compte suspendu ou auto-exclu : 403 account_restricted.
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [points]
+              properties:
+                points: { type: integer, minimum: 1, example: 500 }
+      responses:
+        "200":
+          description: Points échangés
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LoyaltyState" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: account_restricted
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: validation_failed ; loyalty_insufficient_points ; loyalty_below_minimum ; loyalty_invalid_step
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /me/referral:
+    get:
+      tags: [Rewards]
+      summary: Parrainage du joueur connecté (code, lien, règles, filleuls)
+      description: |
+        V2-E07, règles de D-19 §3. Filleul qualifié dans les 30 jours après son inscription : identité vérifiée,
+        dépôt réel ≥ 500 HTG et paris réglés ≥ 500 HTG ; le parrain reçoit alors reward en bonus (20 par mois au plus).
+        Filleul lié au parrain (V2-C05) : status blocked, signalé à la Conformité. Le nom du filleul est masqué.
+        404 not_found tant que REFERRAL_ENABLED=false.
+      x-task: V2-E07
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ReferralState" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/sessions:
+    get:
+      tags: [Auth]
+      summary: Appareils connectés au compte
+      x-task: V2-C06
+      description: |
+        Sessions ouvertes du compte, l'appareil en cours d'abord. Une session se ferme après SESSION_LIFETIME
+        d'inactivité, et au plus tard 12 h après la connexion pour un joueur, 8 h pour un compte administratif.
+        Un administrateur inactif depuis 30 min doit saisir un nouveau code MFA (403 mfa_required, data.mfa.verified false dans /me).
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, description: "Empreinte SHA-256 de la session (jamais l'identifiant lui-même)" }
+                        ip_address: { type: [string, "null"] }
+                        user_agent: { type: [string, "null"] }
+                        last_active_at: { type: string, format: date-time }
+                        current: { type: boolean, description: Appareil de la requête }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    delete:
+      tags: [Auth]
+      summary: Déconnecter tous les autres appareils
+      x-task: V2-C06
+      description: La session en cours reste ouverte. Audité (sessions.revoked) si au moins un appareil est déconnecté.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Autres appareils déconnectés }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/sessions/{session}:
+    delete:
+      tags: [Auth]
+      summary: Déconnecter un autre appareil
+      x-task: V2-C06
+      description: Audité (sessions.revoked). La session en cours se ferme avec POST /auth/logout.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: session, in: path, required: true, schema: { type: string }, description: "id renvoyé par GET /me/sessions" }
+      responses:
+        "204": { description: Appareil déconnecté }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404":
+          description: "not_found — aucun appareil de ce compte avec cet id"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "409":
+          description: "current_session — c'est l'appareil en cours"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   /sports:
     get:
@@ -335,6 +601,188 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
         "404": { description: Match inconnu ou plus proposé }
 
+  /lottery/draws:
+    get:
+      tags: [Lottery]
+      summary: Tirages de borlette actifs, avec le prochain tirage et le dernier résultat
+      description: |
+        Public. Tirages proposés par le fournisseur (ex. New York Midi, Floride Soir), triés par heure locale.
+        Répond 404 tant que la borlette n'est pas activée (LOTTERY_ENABLED=false).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LotteryDraw" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /lottery/results:
+    get:
+      tags: [Lottery]
+      summary: Résultats publiés des tirages, du plus récent au plus ancien
+      description: |
+        Public. Un résultat n'est publié qu'après l'heure du tirage et n'est jamais modifié par la synchronisation.
+        Répond 404 tant que la borlette n'est pas activée (LOTTERY_ENABLED=false).
+      parameters:
+        - { name: draw, in: query, description: Clé du tirage (voir /lottery/draws), schema: { type: string, example: ny_midday } }
+        - { name: date, in: query, description: Date locale du tirage, schema: { type: string, format: date } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PerPage" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LotteryResult" } }
+                  links: { type: object }
+                  meta: { type: object }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /lottery/games:
+    get:
+      tags: [Lottery]
+      summary: Jeux en vente, avec leurs options, mises min/max et barème des gains
+      description: |
+        V2-D09. Public. `sales_open` false et `games` vide tant que la vente est fermée : interrupteur
+        LOTTERY_SALES_ENABLED coupé, ou barème absent de config/lottery.php (décision D-12). Un jeu sans barème
+        n'est pas listé. Le gain d'une ligne = mise × multiplicateur du lot gagnant (arrondi au centime inférieur).
+        Répond 404 tant que la borlette n'est pas activée (LOTTERY_ENABLED=false).
+      x-task: V2-D09
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sales_open: { type: boolean }
+                      close_before_minutes: { type: integer, minimum: 0, description: "Fin des ventes, en minutes avant l'heure du tirage" }
+                      max_plays_per_ticket: { type: integer, minimum: 1 }
+                      games: { type: array, items: { $ref: "#/components/schemas/LotteryGame" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /lottery/tickets:
+    get:
+      tags: [Lottery]
+      summary: Fiches de borlette du joueur connecté (plus récentes d'abord)
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LotteryTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Lottery]
+      summary: Valider une fiche de borlette pour le prochain tirage ouvert (mise débitée)
+      description: |
+        V2-D09. Une fiche = un tirage, une date, 1 à max_plays_per_ticket lignes. Tout ou rien : une ligne refusée
+        refuse la fiche, rien n'est débité.
+
+        - **Tirage** : `draw` = clé du tirage. Sans `date`, la fiche vise la prochaine occurrence encore ouverte
+          (aujourd'hui, ou le prochain jour du tirage). Avec `date` (date locale du tirage), elle doit être cette
+          occurrence-là ; sinon 409 lottery_draw_closed (details.next_date) : le joueur ne joue jamais pour un autre
+          jour sans le savoir.
+        - **Fin des ventes** : heure du tirage − close_before_minutes (heure d'Haïti).
+        - **Lignes** : `numbers` en chaînes (« 07 » garde son zéro). bolet : 1 boule de 2 chiffres ; maryaj : 2 boules
+          de 2 chiffres différentes ; loto3 : 3 chiffres ; loto4 : 4 chiffres et option 1, 2 ou 3 ; loto5 : 5 chiffres
+          et option 1 ou 2. `option` null pour les autres jeux.
+        - **Mises** : chaque ligne entre min_stake et max_stake de son jeu ; devise du portefeuille.
+        - **Contrôles, dans la transaction et sous verrou** : jeu responsable (pause, limites de mise, comme un pari
+          sportif), solde, boules bloquées (422 lottery_number_blocked), plafond d'engagement par boule, tirage et
+          date (422 lottery_number_limit, details.remaining_stake = mise encore acceptée sur cette boule).
+        - **Ledger** : une écriture `stake` du total (related type lottery_ticket).
+
+        Clé d'idempotence obligatoire : un rejeu renvoie la même fiche (200) ; la même clé pour une autre fiche donne
+        409 idempotency_key_reused.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [draw, plays]
+              properties:
+                draw: { type: string, example: NYM }
+                date: { type: string, format: date, description: "Date locale du tirage visée (facultative, conseillée)" }
+                plays:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [game, numbers, stake]
+                    properties:
+                      game: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+                      option: { type: [integer, "null"], minimum: 1, maximum: 3 }
+                      numbers: { type: array, minItems: 1, maxItems: 2, items: { type: string, pattern: "^[0-9]{2,5}$" } }
+                      stake: { $ref: "#/components/schemas/Money" }
+            example:
+              draw: NYM
+              date: "2026-11-12"
+              plays:
+                - { game: bolet, option: null, numbers: ["25"], stake: { minor: 5000, currency: HTG } }
+                - { game: maryaj, option: null, numbers: ["25", "07"], stake: { minor: 2000, currency: HTG } }
+                - { game: loto4, option: 1, numbers: ["2507"], stake: { minor: 1000, currency: HTG } }
+      responses:
+        "200":
+          description: Rejeu d'une fiche déjà acceptée avec la même clé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
+        "201":
+          description: Fiche acceptée, mise débitée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: lottery_sales_closed (vente fermée ou barème absent) ; betting_paused (pause ou auto-exclusion)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: lottery_draw_closed (details.next_date, details.closes_at) ; idempotency_key_reused
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: |
+            validation_failed (details par ligne : plays.0.numbers…) ; lottery_draw_unknown ; insufficient_funds ;
+            stake_limit_exceeded (jeu responsable) ; lottery_number_blocked (details.play, details.numbers) ;
+            lottery_number_limit (details.play, details.numbers, details.remaining_stake) ; not_a_player
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /lottery/tickets/{id}:
+    get:
+      tags: [Lottery]
+      summary: Détail d'une fiche de borlette du joueur, avec le résultat du tirage une fois publié
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /bets:
     post:
       tags: [Bets]
@@ -372,6 +820,7 @@ paths:
                     properties:
                       selection_id: { type: integer, example: 462 }
                       odds: { type: string, example: "2.10", description: Cote vue par le joueur (détection de changement) }
+                      odds_version: { type: integer, minimum: 1, example: 3, description: "Version du marché vue par le joueur (catalogue). Facultative ; si elle diffère (changement de cote ou de ligne), 409 odds_changed" }
       responses:
         "201":
           description: Ticket créé (reçu immuable)
@@ -379,8 +828,8 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "409":
           description: |
-            odds_changed — cote changée, rien n'est créé. details.selections : [{ selection_id, odds, odds_version }]
-            avec la cote actuelle ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
+            odds_changed — cote ou ligne changée, rien n'est créé. details.selections : [{ selection_id, odds,
+            odds_version, label }] avec la cote, la version et le libellé (ligne comprise) actuels ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
             idempotency_key_reused — clé déjà utilisée pour un autre pari. La clé est figée sur le ticket : rejouer
             le même pari avec la même clé (même après une panne du serveur) renvoie le ticket existant, sans seconde mise.
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -388,12 +837,19 @@ paths:
           description: |
             validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
             direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ;
-            multiple_not_allowed ; stake_out_of_range (details.min / max) ; currency_mismatch ; insufficient_funds ;
+            multiple_not_allowed ; stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée
+            par un administrateur pour ce joueur, V2-D05) ; currency_mismatch ; insufficient_funds ;
             jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
-            limit_minor, remaining_minor).
+            limit_minor, remaining_minor) ; loss_limit_exceeded (V2-E06 : si le pari est perdu, la perte nette de la
+            période dépasserait la limite du joueur ; mêmes details) ; risk_limit_exceeded (V2-D05 : le pari ferait dépasser la perte maximale
+            acceptée sur le match ou le marché ; details.scope event|market, details.event_id ; ni plafond ni
+            exposition ne sont communiqués).
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423": { description: "Compte suspendu ou fermé, ou portefeuille gelé" }
         "428": { description: En-tête Idempotency-Key manquant }
+        "429":
+          description: "too_many_requests — plus de 10 paris par minute pour ce joueur (BETTING_MAX_BETS_PER_MINUTE, V2-C06) ; en-tête Retry-After"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     get:
       tags: [Bets]
       summary: Mes tickets (plus récents d'abord)
@@ -401,6 +857,8 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: type, in: query, schema: { type: string, enum: [single, multiple] } }
+        - { name: days, in: query, description: Tickets placés depuis N jours, schema: { type: integer, enum: [1, 7, 30, 90] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -475,6 +933,126 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/deposit-limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de dépôt (journalisé)
+      description: |
+        Même règle que les limites de mise : une baisse (ou une première limite) s'applique tout de suite et annule une
+        hausse en attente ; une hausse ou une suppression (amount_minor null) attend le délai de réflexion. Chaque dépôt
+        est ensuite contrôlé sur les périodes glissantes : au-delà, 422 deposit_limit_exceeded.
+      x-task: V2-B06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 500000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/loss-limits/{period}:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Fixer, relever ou supprimer une limite de pertes (journalisé)
+      description: |
+        Perte nette de la période glissante = mises moins gains et remboursements (0 si le joueur est gagnant). Même
+        règle que les limites de mise : baisse immédiate, hausse ou suppression après le délai de réflexion. POST /bets
+        compte le nouveau pari comme perdu : au-delà, 422 loss_limit_exceeded.
+      x-task: V2-E06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, enum: [day, week, month] } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor]
+              properties:
+                amount_minor: { type: [integer, "null"], minimum: 1, example: 200000, description: "Unité mineure ; null : supprimer la limite" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/session-reminder:
+    put:
+      tags: [ResponsibleGaming]
+      summary: Choisir l'intervalle du rappel de durée de session (journalisé)
+      description: |
+        L'écran affiche un rappel toutes les `minutes` depuis `session.started_at` (heure de la connexion). Désactivé par
+        défaut ; le changement s'applique tout de suite, dans les deux sens.
+      x-task: V2-E06
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minutes]
+              properties:
+                minutes: { type: [integer, "null"], enum: [15, 30, 60, null], description: "null : rappel désactivé" }
+      responses:
+        "200":
+          description: Nouvel état
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ResponsibleGaming" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /responsible-gaming/history:
+    get:
+      tags: [ResponsibleGaming]
+      summary: Historique des dépenses du joueur connecté, par jour et par mois
+      description: |
+        Les 30 derniers jours puis les 12 derniers mois, du plus récent au plus ancien, périodes sans mouvement
+        comprises. Découpage dans le fuseau d'affichage (America/Port-au-Prince). net = gains + remboursements - mises
+        (positif si le joueur a gagné plus qu'il n'a misé).
+      x-task: V2-E06
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      timezone: { type: string, example: America/Port-au-Prince }
+                      days:
+                        type: array
+                        items:
+                          allOf:
+                            - { type: object, properties: { date: { type: string, format: date } } }
+                            - $ref: "#/components/schemas/SpendingTotals"
+                      months:
+                        type: array
+                        items:
+                          allOf:
+                            - { type: object, properties: { month: { type: string, example: "2026-11" } } }
+                            - $ref: "#/components/schemas/SpendingTotals"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
   /responsible-gaming/pause:
     post:
       tags: [ResponsibleGaming]
@@ -555,7 +1133,7 @@ paths:
                       currency: { type: string, example: HTG }
                       balance: { $ref: "#/components/schemas/Money" }
                       status: { type: string, enum: [active, frozen] }
-                      simulated: { type: boolean, description: "true en V1 : fonds fictifs" }
+                      simulated: { type: boolean, description: "true : fonds fictifs (WALLET_SIMULATED) ; false avec l'argent réel (V2-B04)" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
   /wallet/transactions:
     get:
@@ -578,6 +1156,165 @@ paths:
                   links: { $ref: "#/components/schemas/PaginationLinks" }
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /complaints:
+    get:
+      tags: [Complaints]
+      summary: Réclamations du joueur connecté (plus récentes d'abord)
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, in_progress, investigation, resolved, closed] } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK (sans messages ni historique ; détail par GET /complaints/{id})
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Complaint" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Complaints]
+      summary: Ouvrir une réclamation (numéro unique, pièces jointes facultatives)
+      description: |
+        V2-G04. multipart/form-data. Lien facultatif vers un ticket (bet_id) ou une écriture du portefeuille
+        (ledger_entry_id) **du joueur** : un identifiant d'un autre joueur ou inconnu donne 422 complaint_link_invalid,
+        sans révéler s'il existe. Au plus un des deux liens. Le lien vers un agent viendra avec V2-G01.
+        Pièces : 5 au plus, 5 Mo chacune, jpg, jpeg, png, webp ou pdf ; chiffrées par le serveur, visibles du joueur et
+        des administrateurs complaints.view (chaque ouverture par un administrateur est auditée).
+        Statut initial : new. Numéro lisible : REC-AAAA-NNNNNN (séquence par année).
+        Limite : 5 réclamations par heure et par joueur (429). Réservé aux joueurs (422 not_a_player pour un administrateur).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category, subject, description]
+              properties:
+                category: { type: string, enum: [bet, transaction, account, other] }
+                subject: { type: string, minLength: 5, maxLength: 120 }
+                description: { type: string, minLength: 20, maxLength: 5000 }
+                bet_id: { type: string, description: Ticket du joueur concerné }
+                ledger_entry_id: { type: string, description: Écriture du portefeuille du joueur concernée }
+                attachments[]:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Réclamation ouverte (status new)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422":
+          description: validation_failed ; complaint_link_invalid ; not_a_player
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /complaints/{id}:
+    get:
+      tags: [Complaints]
+      summary: Détail d'une réclamation du joueur, avec les réponses et l'historique des statuts
+      description: |
+        V2-G04. Notes internes de l'équipe jamais renvoyées. Les réponses de l'équipe sont signées « Service client »
+        (author.name), sans l'identité de l'administrateur. 404 pour la réclamation d'un autre joueur.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /complaints/{id}/messages:
+    post:
+      tags: [Complaints]
+      summary: Ajouter un message (et des pièces) à sa réclamation
+      description: |
+        V2-G04. multipart/form-data, mêmes règles de pièces qu'à l'ouverture. Refusé sur une réclamation closed
+        (409 complaint_closed : la rouvrir d'abord). Un message du joueur sur une réclamation resolved ne la rouvre pas.
+        Limite : 20 messages par heure et par joueur (429).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 5000 }
+                attachments[]:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Message ajouté ; renvoie la réclamation à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_closed
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /complaints/{id}/reopen:
+    post:
+      tags: [Complaints]
+      summary: Rouvrir sa réclamation resolved ou closed (motif requis)
+      description: |
+        V2-G04. La réclamation repasse en in_progress. Possible jusqu'à complaints.reopen_window_days (30 jours par
+        défaut) après le passage en resolved ; au-delà, 422 complaint_reopen_expired (ouvrir une nouvelle réclamation).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Réclamation rouverte (status in_progress)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_not_reopenable (statut ni resolved ni closed ; details.status)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: validation_failed ; complaint_reopen_expired
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /complaints/{id}/attachments/{attachment}:
+    get:
+      tags: [Complaints]
+      summary: Pièce jointe d'une réclamation du joueur (déchiffrée)
+      description: V2-G04. Contenu brut (Content-Type du fichier), Cache-Control no-store. Pièces des notes internes inaccessibles (404).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: attachment, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fichier
+          content:
+            image/*: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /admin/users/{id}/roles:
     put:
@@ -724,7 +1461,8 @@ paths:
       description: |
         Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
         Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
-        settlement_overdue, finance_corrections, reconciliation, failed_jobs, mfa_failures.
+        settlement_overdue, finance_corrections, reconciliation, aml_alerts (aml.view), failed_jobs, mfa_failures, role_changes,
+        login_failures (échecs de connexion répétés sur 1 h, par compte ou par adresse IP, revue P8-02 F12).
       security: [{ sessionCookie: [] }]
       responses:
         "200":
@@ -896,6 +1634,39 @@ paths:
           description: "`invalid_status_transition`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/users/{id}/stake-limit:
+    put:
+      tags: [Admin]
+      summary: Mise maximale par ticket propre à un joueur (motif requis, audité)
+      description: |
+        Permission users.suspend (V2-D05). Baisse la limite générale betting.max_stake_minor pour ce joueur ; null la
+        retire. Audit user.stake_limit_changed (avant / après, motif). Comptes joueurs uniquement (422 not_a_player).
+      x-task: V2-D05
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [max_stake_minor, reason]
+              properties:
+                max_stake_minor:
+                  type: [integer, "null"]
+                  description: Entre betting.min_stake_minor et betting.max_stake_minor ; null = limite générale.
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Limite appliquée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminUser" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: validation_failed ; not_a_player (compte administrateur)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
   /admin/users/{id}/wallet:
     get:
       tags: [Admin]
@@ -928,6 +1699,9 @@ paths:
         ou est payé auprès de l'opérateur, puis l'opération est inscrite au ledger (écriture deposit ou withdrawal).
         Compte administrateur : 422 not_a_player. Retrait supérieur au solde : 422 insufficient_funds ; solde gelé :
         423 wallet_frozen. Audit : wallet.deposited / wallet.withdrawn.
+        KYC (V2-C03) : 422 kyc_required pour tout retrait sans identité vérifiée (details.kyc_status), et pour un dépôt
+        qui porterait le cumul des dépôts au-delà de kyc.deposit_threshold_minor (details.threshold_minor,
+        details.deposited_minor).
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -950,7 +1724,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
-          description: "`validation_failed`, `not_a_player` ou `insufficient_funds`"
+          description: "`validation_failed`, `not_a_player`, `insufficient_funds`, `kyc_required` (retrait sans KYC validé, ou dépôt au-delà du seuil KYC) ou `deposit_limit_exceeded` (dépôt au-delà d'une limite de dépôt du joueur ; details : period, limit_minor, remaining_minor)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`wallet_frozen`"
@@ -1044,6 +1818,157 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
+  /admin/markets/{id}/odds-overrides:
+    post:
+      tags: [Admin]
+      summary: Fixer à la main la cote d'une sélection (permission odds.override, motif requis, auditée)
+      description: |
+        V2-D03 (D-18). Opérations et Super Admin. Écart de **20 % au plus** avec la cote calculée : cote en vigueur tout
+        de suite (`active`, nouvelle version de cote). Au-delà : `pending`, en attente d'un **second administrateur**
+        (`/admin/odds-overrides/{id}/approve`). La synchronisation n'écrase pas une cote en vigueur ; elle prend fin à la
+        date limite ou au début du match (`expired`), puis la cote calculée revient. Une seule modification en attente ou
+        en vigueur par sélection. Audit : `odds.override_requested` (et `odds.override_approved` quand elle prend effet
+        sans validation).
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selection_id, odds, reason]
+              properties:
+                selection_id: { type: string, description: Sélection de ce marché }
+                odds: { type: string, example: "1.80", description: "Cote décimale en chaîne, 2 décimales, de 1.01 à 1000.00" }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                expires_at: { type: [string, "null"], format: date-time, description: "Facultatif : avant le début du match ; par défaut le début du match" }
+      responses:
+        "201":
+          description: Modification enregistrée (active ou pending)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`override_already_exists` (details.override_id) ; `market_not_open` (marché suspendu, fermé ou réglé) ; `event_started`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "Validation : cote hors bornes, sélection d'un autre marché, date limite passée ou après le début du match", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides:
+    get:
+      tags: [Admin]
+      summary: Cotes fixées à la main (permission events.view)
+      description: Les demandes en attente d'abord, puis les plus récentes.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, ended, expired] } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/OddsOverride" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/odds-overrides/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une cote fixée à la main (permission events.view)
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/odds-overrides/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une cote en attente (permission odds.override, motif requis)
+      description: |
+        Second administrateur, différent du demandeur (`403 self_approval_forbidden`), dont le rôle n'a pas été attribué
+        depuis moins de 24 h (`403 approver_role_too_recent`). La cote entre en vigueur (nouvelle version). Match commencé
+        ou date limite passée : `409 override_expired`. Audit : `odds.override_approved`.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Cote en vigueur (status active)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403":
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`override_not_pending` ; `override_expired` ; `market_not_open`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser une cote en attente (permission odds.override, motif requis)
+      description: "Le demandeur peut retirer sa propre demande par ce refus. Aucune cote ne change. Audit : `odds.override_rejected`."
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Refusée (status rejected)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`override_not_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides/{id}/end:
+    post:
+      tags: [Admin]
+      summary: Revenir à la cote calculée (permission odds.override, motif requis)
+      description: |
+        Met fin à une cote en vigueur : la cote calculée revient (nouvelle version de cote). Audit : `odds.override_ended`.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Terminée (status ended)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`override_not_active`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
   /admin/users/{id}/responsible-gaming:
     get:
       tags: [Admin]
@@ -1058,6 +1983,113 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminResponsibleGaming" } } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/kyc:
+    get:
+      tags: [Admin]
+      summary: Dossiers KYC (permission kyc.view)
+      description: |
+        V2-C03. Filtres status (pending : plus ancien d'abord, file de revue ; sinon plus récent d'abord) et user_id.
+        Permission kyc.view : Super Admin, Conformité, Support.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminKycSubmission" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/kyc/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'un dossier KYC, avec la liste de ses fichiers (permission kyc.view)
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminKycSubmission" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/kyc/{id}/files/{file}:
+    get:
+      tags: [Admin]
+      summary: Pièce ou selfie déchiffré (permission kyc.view, ouverture auditée)
+      description: |
+        V2-C03. Contenu brut (Content-Type du fichier), Cache-Control no-store. Chaque ouverture est auditée
+        (kyc.document_viewed). À afficher dans l'écran de revue, jamais à enregistrer.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: file, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fichier
+          content:
+            image/*: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/kyc/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider un dossier KYC (permission kyc.approve, motif requis, audité)
+      description: |
+        V2-C03. Super Admin, Conformité, Support. Le compte passe en kyc_status approved. Audit kyc.approved.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Dossier validé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminKycSubmission" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: kyc_not_pending (dossier déjà traité)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/kyc/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser un dossier KYC (permission kyc.reject, motif requis, montré au joueur)
+      description: |
+        V2-C03. Super Admin et Conformité. Le compte passe en kyc_status rejected ; le motif est montré au joueur (GET /me/kyc), qui peut envoyer un nouveau dossier. Audit kyc.rejected.
+      x-task: V2-C03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Dossier refusé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminKycSubmission" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: kyc_not_pending (dossier déjà traité)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/users/{id}/responsible-gaming/reopen:
     post:
       tags: [Admin]
@@ -1124,12 +2156,20 @@ paths:
   /admin/events/{id}/result-corrections:
     post:
       tags: [Admin]
-      summary: Demander la correction du résultat d'un match (motif requis, audité) — rien ne change avant validation
+      summary: Demander la correction du résultat d'un match, ou son premier résultat (motif requis, audité) — rien ne change avant validation
       description: |
         Permission results.enter. Une seule demande en attente par match. La réponse contient l'aperçu de l'impact
         (tickets dont l'issue change, montants). Une correction envoyée par le fournisseur après règlement crée aussi
         une demande (requested_by null), à valider de la même façon.
-      x-task: P5-06
+
+        **Premier résultat (V2-D04)** : si le fournisseur n'a publié aucun résultat, la demande crée le premier
+        (`kind: initial`, `current: null`), au plus tôt 3 h après le coup d'envoi (BETTING_MANUAL_RESULT_MIN_HOURS_AFTER_START).
+        Sa validation par un autre administrateur enregistre le résultat (source `manual`) et règle les tickets.
+        Si le fournisseur publie entre-temps, la validation est refusée (`result_changed`).
+
+        **Temps réglementaire (D-03)** : pour le football, le score est celui de la fin du temps réglementaire
+        (90 min + arrêts de jeu), sans prolongation ni tirs au but ; `regulation_time: true` est exigé pour un résultat `final`.
+      x-task: P5-06, V2-D04
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -1146,6 +2186,9 @@ paths:
                 home_score: { type: [string, "null"], example: "1", description: "Obligatoire si final" }
                 away_score: { type: [string, "null"], example: "2", description: "Obligatoire si final" }
                 reason: { type: string, minLength: 5, maxLength: 500 }
+                regulation_time:
+                  type: boolean
+                  description: "Le score est celui du temps réglementaire (D-03). Exigé à true pour le football si status = final"
       responses:
         "201":
           description: Demande créée, en attente
@@ -1153,9 +2196,9 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: "`no_result_to_correct`, `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
+          description: "`result_too_early` (premier résultat avant 3 h après le coup d'envoi, details.available_at), `result_unchanged`, `correction_window_closed` (plus de 72 h après le premier règlement, details.deadline) ou `correction_already_pending`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
-        "422": { description: "`invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "`regulation_time_required` (football : confirmer le score du temps réglementaire), `invalid_result` ou `validation_failed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "428": { description: En-tête Idempotency-Key manquant }
   /admin/result-corrections:
     get:
@@ -1307,6 +2350,90 @@ paths:
         "422":
           description: "Validation (motif), ou `export_too_large` (details.count, details.max)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/aml/alerts:
+    get:
+      tags: [Admin]
+      summary: File des alertes AML (permission aml.view)
+      description: |
+        Chaque dépôt et retrait passé au ledger est contrôlé, en file, après sa validation ; une règle déclenchée crée une
+        alerte sans rien bloquer. Règles : `large_deposit` (un dépôt d'au moins 50 000 HTG), `cumulative_deposits` (ce dépôt
+        porte les dépôts des 7 derniers jours à 150 000 HTG ou plus), `withdrawal_without_play` (retrait alors que les dépôts
+        des 72 dernières heures ont été misés à moins de 10 %). Seuils provisoires (config/compliance.php, aml).
+        Conformité : traite ; Super Admin et Finance : lecture seule.
+      x-task: V2-C04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, dismissed, reported] } }
+        - { name: rule, in: query, schema: { type: string, enum: [large_deposit, cumulative_deposits, withdrawal_without_play] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Alertes, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AmlAlert" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/aml/alerts/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une alerte AML (permission aml.view)
+      x-task: V2-C04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AmlAlert" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/aml/alerts/{id}/review:
+    post:
+      tags: [Admin]
+      summary: Classer ou signaler une alerte AML (permission aml.review, motif requis)
+      description: |
+        `dismissed` : fausse alerte ou activité justifiée ; `reported` : soupçon, à déclarer. Une seule décision par alerte,
+        auditée avec le motif (`aml.alert_reviewed`). Une alerte sur son propre compte est traitée par un autre administrateur.
+      x-task: V2-C04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, reason]
+              properties:
+                decision: { type: string, enum: [dismissed, reported] }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Alerte traitée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AmlAlert" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: "Permission refusée, ou `self_review_forbidden`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`alert_not_open` : déjà classée ou signalée"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/settings:
     get:
       tags: [Admin]
@@ -1351,6 +2478,12 @@ paths:
                         allow_multiple: { type: boolean }
                         max_selections: { type: integer, minimum: 1, maximum: 30 }
                         allow_live: { type: boolean }
+                        max_event_liability_minor: { type: integer, minimum: 1, description: "Perte maximale sur un match (V2-D05)" }
+                        max_market_liability_minor: { type: integer, minimum: 1, description: "Perte maximale sur un marché, <= max_event_liability_minor" }
+                    kyc:
+                      type: object
+                      properties:
+                        deposit_threshold_minor: { type: integer, minimum: 0, description: "Dépôts libres jusqu'à ce cumul (V2-C03) ; 0 = KYC avant tout dépôt" }
                     wallet:
                       type: object
                       properties:
@@ -1469,6 +2602,370 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/payments:
+    get:
+      tags: [Admin]
+      summary: Transactions des prestataires de paiement (permission ledger.view)
+      description: Journal en lecture seule ; Finance, Conformité et Super Admin. Sans les webhooks (voir le détail).
+      x-task: V2-B01
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed, expired, review] } }
+        - { name: direction, in: query, schema: { type: string, enum: [deposit, payout] } }
+        - { name: provider, in: query, schema: { type: string, example: moncash } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: reference, in: query, description: "Notre référence (pay_…) ou celle du prestataire", schema: { type: string } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Transactions, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminPaymentTransaction" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/payments/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une transaction, avec les webhooks reçus (permission ledger.view)
+      x-task: V2-B01
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminPaymentTransaction" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/withdrawals:
+    get:
+      tags: [Admin]
+      summary: File des retraits des joueurs (permission withdrawals.view, proposée)
+      description: |
+        V2-B03 (à venir ; en attendant, `GET /admin/payments` liste aussi les versements). Suivi des retraits versés
+        automatiquement, sans validation manuelle (décision de Rubly du 2026-11-13). Rôles proposés (ligne « Retraits »
+        de la matrice, à valider) : Super Admin et Finance, Conformité en lecture. Numéro du destinataire masqué sans
+        `users.view_personal_data`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [requested, first_approved, processing, paid, failed, rejected, cancelled, review] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: reference, in: query, description: "Notre référence (pay_…) ou celle du prestataire", schema: { type: string } }
+        - { name: from, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - { name: to, in: query, description: Jour inclus, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminWithdrawal" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/withdrawals/{id}:
+    get:
+      tags: [Admin]
+      summary: Fiche d'un retrait — joueur, KYC, alertes AML ouvertes, historique (permission withdrawals.view, proposée)
+      description: Chaque ouverture de la fiche est auditée (`withdrawal.viewed`), comme les données personnelles.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminWithdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /payments/methods:
+    get:
+      tags: [Payments]
+      summary: Moyens de paiement activés et montants de dépôt acceptés
+      description: |
+        Une entrée par moyen que le joueur choisit sur le formulaire de dépôt : Plop Plop propose MonCash et NatCash
+        (`method` moncash ou natcash, envoyé tel quel à Plop Plop en `payment_method` : le joueur arrive directement sur
+        la page de l'opérateur). `method` null : prestataire sans choix. Liste vide quand aucun prestataire n'est activé
+        (aucun dépôt en ligne possible).
+      x-task: V2-B02
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      methods:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            provider: { type: string, example: plopplop }
+                            method: { type: [string, "null"], example: moncash }
+                            label: { type: string, example: MonCash }
+                      min_amount: { $ref: "#/components/schemas/Money" }
+                      max_amount: { $ref: "#/components/schemas/Money" }
+                      withdrawal:
+                        type: object
+                        description: "V2-B03 : moyens et bornes des retraits (methods vide : aucun retrait en ligne)"
+                        properties:
+                          methods:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                provider: { type: string, example: plopplop }
+                                method: { type: string, example: moncash }
+                                label: { type: string, example: MonCash }
+                          min_amount: { $ref: "#/components/schemas/Money" }
+                          max_amount: { $ref: "#/components/schemas/Money" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /payments/deposits:
+    get:
+      tags: [Payments]
+      summary: Dépôts du joueur connecté (plus récents d'abord)
+      x-task: V2-B05
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Deposit" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Payments]
+      summary: Ouvrir un dépôt chez un prestataire de paiement
+      description: |
+        Ne crédite rien : le joueur confirme sur la page du prestataire (`redirect_url`), puis seul le webhook signé du
+        prestataire crédite le solde, une seule fois. Contrôles avant l'appel au prestataire : compte joueur, portefeuille
+        actif, seuil de dépôts sans identité vérifiée (V2-C03, réglage `kyc.deposit_threshold_minor`) puis limites de
+        dépôt du joueur (V2-B06), en comptant ses dépôts encore en attente. 10 dépôts par minute.
+        Faux prestataire (`fake`, hors production) : `redirect_url` est la page simulée
+        `/api/v1/payments/fake/checkout/{reference}`, qui envoie un vrai webhook signé puis renvoie sur
+        `FRONTEND_URL/wallet?depot={reference}`.
+      x-task: V2-B02
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, amount_minor]
+              properties:
+                provider: { type: string, example: plopplop }
+                method: { type: [string, "null"], example: moncash, description: "Moyen choisi parmi ceux de GET /payments/methods ; obligatoire pour un prestataire qui en propose (Plop Plop : moncash ou natcash)" }
+                amount_minor: { type: integer, example: 150000, description: "Unité mineure ; bornes de GET /payments/methods (100,00 à 100 000,00 HTG par défaut)" }
+      responses:
+        "201":
+          description: Dépôt ouvert, en attente de confirmation
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Deposit" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422":
+          description: |
+            validation_failed ; payment_provider_unavailable ; payment_method_unavailable (moyen absent ou non proposé ;
+            details.methods) ; not_a_player ; kyc_required (cumul des dépôts au-delà
+            du seuil sans identité vérifiée ; details.kyc_status, threshold_minor, deposited_minor) ;
+            deposit_limit_exceeded (journalisé ; details.period, limit_minor, remaining_minor)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423": { description: "`wallet_frozen` : portefeuille gelé", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "502": { description: "`payment_provider_error` : le prestataire ne répond pas (dépôt marqué failed)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /payments/deposits/{reference}:
+    get:
+      tags: [Payments]
+      summary: Suivre un dépôt du joueur connecté
+      description: Interrogé par la page Solde au retour du prestataire, jusqu'à un statut final.
+      x-task: V2-B05
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string, example: pay_01jbz8k3m2v7q9x4w5r6t0y1ab } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Deposit" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /payments/withdrawals:
+    get:
+      tags: [Payments]
+      summary: Retraits du joueur connecté (plus récents d'abord)
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Withdrawal" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      tags: [Payments]
+      summary: Demander un retrait vers un compte de paiement mobile
+      description: |
+        Le montant est **réservé tout de suite** : une écriture `withdrawal` débite le solde dans la même transaction que
+        la demande, sous le verrou du portefeuille (découvert refusé). Le versement part ensuite **automatiquement**,
+        sans validation manuelle (décision de Rubly du 2026-11-13, à la place de la double validation) : la commande
+        `payments:payouts` (chaque minute) vérifie le solde du portefeuille marchand puis verse chez le prestataire
+        (Plop Plop : jeton de retrait signé, 120 s entre deux versements). Annulation par le joueur avant l'envoi ou
+        échec du versement : écriture `reversal` qui rend le montant, une seule fois.
+
+        Contrôles avant la réservation : compte joueur, portefeuille actif, KYC validé (V2-C03 ; contrôle coupé
+        seulement en développement par `PAYMENTS_WITHDRAWALS_REQUIRE_KYC=false`), moyen de retrait activé, montant dans les bornes de
+        `GET /payments/methods` (`withdrawal`), un seul retrait en cours par joueur, plafond par joueur sur 24 heures
+        glissantes (`PAYMENTS_WITHDRAWAL_DAILY_MAX_MINOR`). 5 demandes par minute. Audit : `withdrawal.requested`, puis
+        `withdrawal.paid` ou `withdrawal.failed`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, method, recipient, amount_minor]
+              properties:
+                provider: { type: string, example: plopplop }
+                method: { type: string, example: moncash, description: "Un des moyens de retrait du prestataire (GET /payments/methods)" }
+                recipient: { type: string, pattern: "^[0-9]{8}$", example: "34123456", description: "Numéro qui reçoit l'argent (8 chiffres). Doit-il être celui du compte ? À valider" }
+                amount_minor: { type: integer, example: 250000, description: "Unité mineure ; bornes de GET /payments/methods (withdrawal)" }
+      responses:
+        "201":
+          description: Retrait demandé (status requested), montant réservé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Withdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: "`withdrawal_already_pending` : un retrait est déjà en cours (details.reference)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: |
+            validation_failed ; not_a_player ; kyc_required (KYC absent, en attente ou refusé ; details.kyc_status) ;
+            payment_provider_unavailable ; insufficient_funds (details.balance) ; withdrawal_daily_limit_exceeded
+            (details.limit_minor, remaining_minor)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "423": { description: "`wallet_frozen` : portefeuille gelé", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /payments/withdrawals/{reference}:
+    get:
+      tags: [Payments]
+      summary: Suivre un retrait du joueur connecté
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string, example: pay_01jc7a2b3c4d5e6f7g8h9j0k1m } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Withdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /payments/withdrawals/{reference}/cancel:
+    post:
+      tags: [Payments]
+      summary: Annuler son retrait tant qu'il n'est pas envoyé au prestataire
+      description: |
+        Possible au statut `requested`, tant que le versement n'est pas parti ; le montant réservé est rendu (écriture `reversal`).
+        Rejoué, renvoie le même résultat. Audit : `withdrawal.cancelled`.
+      x-task: V2-B03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Retrait annulé (status cancelled), montant rendu
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Withdrawal" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`withdrawal_not_cancellable` : déjà envoyé au prestataire, versé, refusé ou annulé"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /payments/webhooks/{provider}:
+    post:
+      tags: [Payments]
+      summary: Webhook d'un prestataire de paiement (signé, idempotent)
+      description: |
+        Sans compte ni session : la signature du prestataire fait foi. Plop Plop (`plopplop`) : en-tête
+        X-Webhook-Signature « sha256=<HMAC-SHA256 du corps brut avec le client_secret> », événements transaction.created
+        et transaction.status_changed (ok, failed, no / pending) ; identifiant retenu « <événement>:<transaction_id>:<statut> ».
+        Faux prestataire (`fake`) : en-tête X-Fake-Signature
+        « t=<horodatage>,v1=<HMAC-SHA256 de "<horodatage>.<corps>"> », refusé au-delà de 5 minutes. Chaque webhook est
+        journalisé. Un même événement n'a qu'un effet : rejoué, il renvoie le même résultat. Un dépôt réussi est crédité
+        une seule fois, si le montant et la devise correspondent (sinon `review`, sans crédit) ; reçu après
+        l'expiration du dépôt, il est crédité quand même (`applied_late`).
+        Versement d'un retrait (V2-B03) : succès → retrait `paid` ; échec → `failed` et montant rendu au joueur (écriture
+        `reversal`, une seule fois) ; montant ou devise différents → `review`, sans rien rendre.
+      x-task: V2-B01
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, example: moncash } }
+      requestBody:
+        required: true
+        description: Format propre à chaque prestataire.
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        "200":
+          description: Événement enregistré (avec ou sans effet)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      outcome: { type: string, enum: [applied, applied_late, review, ignored, unknown_transaction] }
+        "400": { description: "`invalid_payload` : contenu illisible ou incomplet", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { description: "`invalid_signature` : signature absente, fausse ou trop ancienne", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { description: Trop de requêtes (300 par minute et par IP) }
   /admin/finance/reconciliation:
     get:
       tags: [Admin]
@@ -1608,6 +3105,314 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "422": { $ref: "#/components/responses/ValidationError" }
 
+  /admin/lottery/tickets:
+    get:
+      tags: [Admin]
+      summary: Fiches de borlette (permission tickets.view)
+      description: V2-D09. Tous les rôles administratifs. Joueur réduit à son identifiant et son nom. Plus récentes d'abord.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string } }
+        - { name: draw, in: query, schema: { type: string } }
+        - { name: date, in: query, description: Date locale du tirage, schema: { type: string, format: date } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: user_id, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminLotteryTicket" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/lottery/exposure:
+    get:
+      tags: [Admin]
+      summary: Engagement par boule pour un tirage et une date (permission tickets.view)
+      description: |
+        V2-D09. Pour chaque combinaison jouée (jeu, option, numéros) des fiches en cours : mises cumulées et gain
+        maximal si elle sort (pire cas, au multiplicateur le plus élevé du jeu), comparé au plafond. Trié par gain
+        maximal décroissant ; 200 lignes au plus. Boules bloquées signalées.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: draw, in: query, required: true, schema: { type: string } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: game, in: query, schema: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      draw: { type: object, properties: { key: { type: string }, name: { type: string } } }
+                      date: { type: string, format: date }
+                      closes_at: { type: string, format: date-time }
+                      tickets_count: { type: integer }
+                      total_stake: { $ref: "#/components/schemas/Money" }
+                      numbers:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            game: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+                            option: { type: [integer, "null"] }
+                            numbers: { type: array, items: { type: string } }
+                            stake: { $ref: "#/components/schemas/Money" }
+                            max_payout: { $ref: "#/components/schemas/Money" }
+                            limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Plafond de gain de cette boule ; null = aucun }
+                            blocked: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/lottery/blocked-numbers:
+    get:
+      tags: [Admin]
+      summary: Boules bloquées en vigueur (permission tickets.view)
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: draw, in: query, schema: { type: string } }
+        - { name: date, in: query, description: "Blocages valables ce jour-là (y compris ceux de tous les jours)", schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/LotteryBlockedNumber" } } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: Bloquer une boule (permission markets.suspend, motif requis, audité)
+      description: |
+        V2-D09. Bloque la vente d'une boule de 2 chiffres (toutes les lignes qui la contiennent : bolet, maryaj, et
+        les lots de loto 4 / loto 5) ou d'un numéro de loto précis. draw null = tous les tirages ; date null = tous
+        les jours. Les fiches déjà vendues ne changent pas. Audit lottery.number_blocked.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [number, reason]
+              properties:
+                number: { type: string, pattern: "^[0-9]{2,5}$" }
+                draw: { type: [string, "null"] }
+                date: { type: [string, "null"], format: date }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "201":
+          description: Boule bloquée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryBlockedNumber" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: lottery_number_already_blocked (même numéro, tirage et date)
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422":
+          description: validation_failed ; lottery_draw_unknown
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/lottery/blocked-numbers/{id}:
+    delete:
+      tags: [Admin]
+      summary: Débloquer une boule (permission markets.suspend, motif requis, audité)
+      description: V2-D09. Le blocage est clos (conservé dans l'historique), jamais effacé. Audit lottery.number_unblocked.
+      x-task: V2-D09
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Blocage clos
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryBlockedNumber" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: lottery_block_already_lifted
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /admin/complaints:
+    get:
+      tags: [Admin]
+      summary: File des réclamations (permission complaints.view)
+      description: |
+        V2-G04. Sans filtre status : réclamations ouvertes (new, in_progress, investigation), plus anciennes d'abord.
+        Avec status resolved ou closed : plus récentes d'abord. older_than_hours : ouvertes depuis au moins N heures
+        (dernière activité du joueur sans réponse de l'équipe, voir awaiting_staff).
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, in_progress, investigation, resolved, closed] } }
+        - { name: category, in: query, schema: { type: string, enum: [bet, transaction, account, other] } }
+        - { name: user_id, in: query, schema: { type: string } }
+        - { name: assigned_to, in: query, schema: { type: string }, description: "Identifiant d'un administrateur, ou me, ou none" }
+        - { name: older_than_hours, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 40 }, description: Numéro de réclamation (REC-…) ou référence de ticket }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminComplaint" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/complaints/{id}:
+    get:
+      tags: [Admin]
+      summary: Fiche d'une réclamation — messages, notes internes et historique complet (permission complaints.view)
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/complaints/{id}/messages:
+    post:
+      tags: [Admin]
+      summary: Répondre au joueur ou ajouter une note interne (permission complaints.manage)
+      description: |
+        V2-G04. multipart/form-data, mêmes règles de pièces que le joueur. visibility player : réponse visible du joueur,
+        qui est notifié (V2-E04 quand il sera fait) ; une première réponse fait passer une réclamation new en
+        in_progress. visibility internal : note jamais montrée au joueur. Refusé sur closed (409 complaint_closed).
+        Audit complaint.replied ou complaint.note_added.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [body, visibility]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 5000 }
+                visibility: { type: string, enum: [player, internal] }
+                attachments[]:
+                  type: array
+                  maxItems: 5
+                  items: { type: string, format: binary }
+      responses:
+        "201":
+          description: Message ajouté ; renvoie la fiche à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_closed
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/complaints/{id}/status:
+    post:
+      tags: [Admin]
+      summary: Changer le statut (permission complaints.manage, motif requis, audité)
+      description: |
+        V2-G04. Transitions autorisées :
+        new → in_progress, investigation, resolved ; in_progress → investigation, resolved ;
+        investigation → in_progress, resolved ; resolved → closed ; resolved ou closed → in_progress (réouverture).
+        Toute autre transition : 409 complaint_invalid_transition (details.from, details.to, details.allowed).
+        Le motif d'un passage en resolved est montré au joueur (resolution) ; les autres restent internes.
+        Une réclamation resolved passe seule en closed après complaints.auto_close_days (7 jours par défaut) sans
+        réouverture. Audit complaint.status_changed.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [in_progress, investigation, resolved, closed] }
+                reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        "200":
+          description: Statut changé ; renvoie la fiche à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: complaint_invalid_transition
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/complaints/{id}/assignee:
+    put:
+      tags: [Admin]
+      summary: Attribuer la réclamation à un administrateur, ou la libérer (permission complaints.manage)
+      description: |
+        V2-G04. assignee_id null : réclamation libérée. L'administrateur choisi doit avoir complaints.manage
+        (422 complaint_assignee_invalid). Audit complaint.assigned.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [assignee_id], properties: { assignee_id: { type: [string, "null"] } } } } }
+      responses:
+        "200":
+          description: Attribution enregistrée
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminComplaintDetail" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: validation_failed ; complaint_assignee_invalid
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /admin/complaints/{id}/attachments/{attachment}:
+    get:
+      tags: [Admin]
+      summary: Pièce jointe déchiffrée (permission complaints.view, ouverture auditée)
+      description: V2-G04. Contenu brut (Content-Type du fichier), Cache-Control no-store. Audit complaint.attachment_viewed.
+      x-task: V2-G04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: attachment, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Fichier
+          content:
+            image/*: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   parameters:
     IdempotencyKey:
@@ -1655,6 +3460,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: { code: not_found, message: Ressource introuvable. } }
+    CaptchaOrValidationError:
+      description: "`validation_failed` (details par champ) ou `captcha_failed` (details.reason : required, invalid, unavailable)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            captcha_required:
+              value: { error: { code: captcha_failed, message: "Confirmez que vous n'êtes pas un robot.", details: { reason: required } } }
+            captcha_unavailable:
+              value: { error: { code: captcha_failed, message: "La vérification anti-robot est momentanément indisponible. Réessayez dans quelques minutes.", details: { reason: unavailable } } }
+
     TooManyRequests:
       description: Trop de tentatives
       headers:
@@ -1674,6 +3490,38 @@ components:
         de session et l'en-tête `X-XSRF-TOKEN` (valeur du cookie XSRF-TOKEN) sur chaque requête.
 
   schemas:
+    Deposit:
+      type: object
+      description: Dépôt vu par le joueur (V2-B02). Le motif d'une revue reste interne.
+      properties:
+        reference: { type: string, example: pay_01jbz8k3m2v7q9x4w5r6t0y1ab }
+        provider: { type: string, example: plopplop }
+        method: { type: [string, "null"], example: moncash, description: Moyen choisi par le joueur }
+        provider_label: { type: string, example: MonCash, description: Libellé du moyen choisi (sinon du prestataire) }
+        status: { type: string, enum: [pending, succeeded, failed, expired, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        redirect_url: { type: [string, "null"], description: Page du prestataire où confirmer ; seulement tant que le dépôt est en attente }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+    Withdrawal:
+      type: object
+      description: |
+        Retrait vu par le joueur (V2-B03). Versement automatique : requested (montant réservé, en file) → processing
+        (envoyé au prestataire) → paid ou failed ; cancelled (annulé par le joueur) rend le montant, comme failed ;
+        review : anomalie du prestataire en cours de vérification. first_approved et rejected restent dans la liste pour
+        une validation manuelle future, mais ne sont pas produits. Les motifs d'échec et de revue restent internes.
+      properties:
+        reference: { type: string, example: pay_01jc7a2b3c4d5e6f7g8h9j0k1m }
+        provider: { type: string, example: plopplop }
+        method: { type: string, example: moncash }
+        method_label: { type: string, example: MonCash }
+        recipient: { type: string, example: "****3456", description: "Numéro du destinataire, masqué sauf les 4 derniers chiffres" }
+        status: { type: string, enum: [requested, first_approved, processing, paid, failed, rejected, cancelled, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        cancellable: { type: boolean, description: "Vrai au statut requested (avant l'envoi au prestataire)" }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time, description: "Versé, échoué, refusé ou annulé" }
     LedgerEntry:
       type: object
       properties:
@@ -1705,6 +3553,26 @@ components:
             day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
             week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
             month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        deposit_limits:
+          type: object
+          description: Limites de dépôt (V2-B06) ; used = dépôts de la période glissante
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        loss_limits:
+          type: object
+          description: Limites de pertes (V2-E06) ; used = perte nette de la période glissante
+          properties:
+            day: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            week: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+            month: { $ref: "#/components/schemas/ResponsibleGamingLimit" }
+        session:
+          type: object
+          description: Rappel de durée de session (V2-E06)
+          properties:
+            reminder_minutes: { type: [integer, "null"], example: 30, description: "null : désactivé" }
+            started_at: { type: [string, "null"], format: date-time, description: "Heure de la connexion ; null dans la vue de la Conformité" }
         pause:
           type: object
           properties:
@@ -1716,11 +3584,25 @@ components:
             pause_durations: { type: array, items: { type: string }, example: ["24h", "7d", "30d"] }
             exclusion_durations: { type: array, items: { type: string }, example: ["6m", "1y", "5y"] }
             limit_increase_delay_days: { type: integer, example: 7 }
+            session_reminder_minutes: { type: array, items: { type: integer }, example: [15, 30, 60] }
+    SpendingTotals:
+      type: object
+      description: Totaux d'une période (V2-E06), montants positifs sauf net
+      properties:
+        deposits: { $ref: "#/components/schemas/Money" }
+        withdrawals: { $ref: "#/components/schemas/Money" }
+        stakes: { $ref: "#/components/schemas/Money" }
+        payouts: { $ref: "#/components/schemas/Money" }
+        refunds: { $ref: "#/components/schemas/Money" }
+        net: { $ref: "#/components/schemas/Money" }
     AdminResponsibleGaming:
       type: object
       properties:
         user: { type: object, properties: { id: { type: string }, status: { type: string, enum: [active, suspended, excluded, closed] } } }
         limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/limits" }
+        deposit_limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/deposit_limits" }
+        loss_limits: { $ref: "#/components/schemas/ResponsibleGaming/properties/loss_limits" }
+        session: { $ref: "#/components/schemas/ResponsibleGaming/properties/session" }
         pause: { $ref: "#/components/schemas/ResponsibleGaming/properties/pause" }
         restrictions:
           type: array
@@ -1749,6 +3631,144 @@ components:
       type: array
       description: Une valeur par jour, du plus ancien au plus récent.
       items: { type: object, properties: { date: { type: string, format: date }, value: { type: integer } } }
+    KycStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [none, pending, approved, rejected] }
+        verified_at: { type: [string, "null"], format: date-time }
+        deposit_threshold: { $ref: "#/components/schemas/Money" }
+        latest_submission:
+          type: [object, "null"]
+          properties:
+            id: { type: string }
+            document_type: { type: string, enum: [cin, passport, driving_licence, nif] }
+            status: { type: string, enum: [pending, approved, rejected] }
+            submitted_at: { type: string, format: date-time }
+            decided_at: { type: [string, "null"], format: date-time }
+            rejection_reason: { type: [string, "null"], description: Motif du refus ; null sinon }
+    LoyaltyTier:
+      type: object
+      properties:
+        key: { type: string, enum: [bronze, silver, gold, diamond] }
+        label: { type: string, example: Argent }
+        min_points: { type: integer, description: Points gagnés sur 12 mois pour atteindre le palier }
+        rate: { $ref: "#/components/schemas/Money", description: Bonus obtenu pour 100 points à ce palier }
+    BonusTerms:
+      type: object
+      description: Conditions de mise de tout bonus (D-19 §4), affichées au joueur avant qu'il ne l'obtienne.
+      properties:
+        wagering_multiplier: { type: integer, example: 3, description: Montant à miser = multiplicateur × bonus }
+        min_odds: { type: string, example: "1.50" }
+        days: { type: integer, example: 30, description: Délai pour remplir les conditions }
+    BonusWagering:
+      type: object
+      description: Conditions de mise d'un bonus en cours (D-19 §4), à afficher au joueur.
+      properties:
+        amount: { $ref: "#/components/schemas/Money", description: Bonus encore soumis aux conditions }
+        required: { $ref: "#/components/schemas/Money", description: Montant total à miser (3 × le bonus) }
+        wagered: { $ref: "#/components/schemas/Money", description: "Déjà misé et réglé, à la cote minimale ou plus" }
+        min_odds: { type: string, example: "1.50", description: Cote minimale (cote totale pour un combiné) }
+        expires_at: { type: string, format: date-time }
+    LoyaltyState:
+      type: object
+      properties:
+        points: { type: integer, description: Points disponibles }
+        points_12_months: { type: integer, description: Points gagnés sur 12 mois glissants (palier) }
+        tier: { $ref: "#/components/schemas/LoyaltyTier" }
+        next_tier: { oneOf: [{ $ref: "#/components/schemas/LoyaltyTier" }, { type: "null" }], description: null au palier le plus haut }
+        tiers: { type: array, items: { $ref: "#/components/schemas/LoyaltyTier" } }
+        earn_rule:
+          type: object
+          properties:
+            stake_step: { $ref: "#/components/schemas/Money", description: "Mise donnant 1 point (100,00 HTG)" }
+            points_per_step: { type: integer, example: 1 }
+        exchange:
+          type: object
+          properties:
+            min_points: { type: integer, example: 500 }
+            step: { type: integer, example: 100 }
+        points_expiring:
+          type: [object, "null"]
+          description: Prochains points à expirer
+          properties:
+            points: { type: integer }
+            expires_at: { type: string, format: date-time }
+        bonus_balance: { $ref: "#/components/schemas/Money" }
+        wagering: { type: array, items: { $ref: "#/components/schemas/BonusWagering" } }
+        bonus_terms: { $ref: "#/components/schemas/BonusTerms" }
+    LoyaltyEntry:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [earned, redeemed, expired, adjusted] }
+        points: { type: integer, description: "Positif pour un gain, négatif sinon" }
+        label: { type: string, example: "Pari réglé — ticket R16-8F2K" }
+        bonus: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Bonus obtenu (type redeemed) }
+        created_at: { type: string, format: date-time }
+    ReferralState:
+      type: object
+      properties:
+        code: { type: string, example: RY7K2M9P }
+        link: { type: string, format: uri, example: "https://reyel16paryaj.com/register?parrain=RY7K2M9P" }
+        reward: { $ref: "#/components/schemas/Money", description: Bonus versé au parrain par filleul qualifié }
+        eligible: { type: boolean, description: "false : identité du parrain non vérifiée ou compte restreint (récompenses en attente)" }
+        rules:
+          type: object
+          properties:
+            qualify_days: { type: integer, example: 30 }
+            min_deposit: { $ref: "#/components/schemas/Money" }
+            min_stake: { $ref: "#/components/schemas/Money" }
+            monthly_limit: { type: integer, example: 20 }
+        rewarded_this_month: { type: integer }
+        total_rewards: { $ref: "#/components/schemas/Money" }
+        bonus_terms: { $ref: "#/components/schemas/BonusTerms" }
+        referrals:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string, example: "Jean D.", description: Prénom et initiale du nom }
+              joined_at: { type: string, format: date-time }
+              status: { type: string, enum: [pending, qualified, rewarded, expired, blocked] }
+              steps:
+                type: object
+                properties:
+                  kyc: { type: boolean }
+                  deposit: { type: boolean }
+                  stake: { type: boolean }
+              qualify_before: { type: string, format: date-time }
+    AdminKycSubmission:
+      type: object
+      properties:
+        id: { type: string }
+        user:
+          type: object
+          description: Identité déclarée à l'inscription, à comparer avec la pièce.
+          properties:
+            id: { type: string }
+            name: { type: string }
+            first_name: { type: [string, "null"] }
+            last_name: { type: [string, "null"] }
+            birth_date: { type: [string, "null"], format: date }
+            country: { type: [string, "null"] }
+            kyc_status: { type: string, enum: [none, pending, approved, rejected] }
+        document_type: { type: string, enum: [cin, passport, driving_licence, nif] }
+        status: { type: string, enum: [pending, approved, rejected] }
+        files:
+          type: array
+          description: Détail uniquement. Contenu par GET /admin/kyc/{id}/files/{file}.
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              kind: { type: string, enum: [front, back, selfie] }
+              mime_type: { type: string }
+              size_bytes: { type: integer }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decided_at: { type: [string, "null"], format: date-time }
+        decision_reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
     AdminUser:
       type: object
       properties:
@@ -1761,6 +3781,8 @@ components:
         is_admin: { type: boolean }
         created_at: { type: string, format: date-time }
         last_login_at: { type: [string, "null"], format: date-time }
+        max_stake_minor: { type: [integer, "null"], description: "Mise maximale par ticket posée par un administrateur (V2-D05) ; null = limite générale" }
+        kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "Vérification d'identité (V2-C03)" }
         roles: { type: array, items: { type: string }, description: "Avec users.view_personal_data uniquement" }
         mfa_enabled: { type: boolean, description: "Avec users.view_personal_data uniquement" }
         profile: { type: object, description: "Avec users.view_personal_data uniquement" }
@@ -1809,8 +3831,46 @@ components:
         bettable: { type: boolean }
         selections:
           type: array
-          items: { type: object, properties: { id: { type: string }, key: { type: string }, label: { type: string }, name: { type: string }, odds: { type: string, example: "2.10" } } }
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              key: { type: string }
+              label: { type: string }
+              name: { type: string }
+              odds: { type: string, example: "2.10", description: "Cote proposée aux joueurs (calculée, ou fixée à la main)" }
+              computed_odds: { type: [string, "null"], example: "2.09", description: "V2-D03 : cote calculée par la synchronisation (marge de l'opérateur avec l'argent réel, D-18), avant toute cote fixée à la main" }
+              provider_odds: { type: [string, "null"], example: "2.15", description: "Cote du bookmaker de référence ; null pour un marché maison (V2-D10)" }
+              best_odds: { type: [string, "null"], example: "2.20", description: "Meilleure cote parmi les bookmakers suivis : repère pour une cote fixée à la main (au-dessus, risque d'arbitrage) ; null pour un marché maison" }
+              adjusted: { type: boolean, description: Cote fixée à la main en vigueur }
+              override: { oneOf: [{ $ref: "#/components/schemas/OddsOverride" }, { type: "null" }], description: "Fiche du marché : cote fixée à la main en attente ou en vigueur" }
         updated_at: { type: [string, "null"], format: date-time }
+    OddsOverride:
+      type: object
+      description: |
+        V2-D03 (D-18) : cote fixée à la main. Statuts : pending (écart de plus de 20 % avec la cote calculée, attend un
+        second administrateur) → active (cote proposée aux joueurs, nouvelle version de cote) → ended (fin demandée, retour
+        à la cote calculée) ou expired (date limite ou début du match atteints) ; rejected (refusée par le second
+        administrateur). Les tickets déjà placés gardent leur version de cote.
+      properties:
+        id: { type: string }
+        market_id: { type: string }
+        selection: { type: object, properties: { id: { type: string }, key: { type: string }, name: { type: string } } }
+        event: { type: object, properties: { id: { type: string }, home_team: { type: string }, away_team: { type: string }, starts_at: { type: string, format: date-time } } }
+        status: { type: string, enum: [pending, active, rejected, ended, expired] }
+        odds: { type: string, example: "1.80", description: Cote fixée }
+        computed_odds: { type: string, example: "2.09", description: Cote calculée au moment de la demande }
+        deviation_percent: { type: string, example: "-13.88", description: "Écart avec la cote calculée, en pourcentage (double validation au-delà de ±20)" }
+        requires_approval: { type: boolean }
+        reason: { type: string }
+        expires_at: { type: string, format: date-time, description: "Date limite, au plus le début du match" }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        requested_at: { type: string, format: date-time }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        ended_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } }, description: "null pour une expiration" }
+        ended_at: { type: [string, "null"], format: date-time }
     AuditLog:
       type: object
       properties:
@@ -1833,6 +3893,7 @@ components:
         phone: { type: string, example: "34123456", description: "Identifiant de connexion, 8 chiffres." }
         email: { type: [string, "null"], format: email }
         status: { type: string, enum: [active, suspended, excluded, closed] }
+        kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "Vérification d'identité (V2-C03) ; détail par GET /me/kyc" }
         roles:
           type: array
           items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
@@ -1897,6 +3958,101 @@ components:
         from: { type: [integer, "null"] }
         to: { type: [integer, "null"] }
         path: { type: string }
+    LotteryDraw:
+      type: object
+      properties:
+        key: { type: string, example: ny_midday }
+        name: { type: string, example: New York Midi }
+        draw_time: { type: string, example: "14:30", description: Heure locale du tirage (HH:MM) dans `timezone` }
+        timezone: { type: string, example: America/New_York }
+        days: { type: [array, "null"], items: { type: integer, minimum: 1, maximum: 7 }, description: "Jours ISO (1 = lundi) ; null = tous les jours" }
+        next_draw_at: { type: [string, "null"], format: date-time, description: Prochain tirage (UTC) }
+        latest_result: { oneOf: [{ $ref: "#/components/schemas/LotteryResult" }, { type: "null" }] }
+    LotteryResult:
+      type: object
+      properties:
+        draw: { type: object, properties: { key: { type: string, example: ny_midday }, name: { type: string, example: New York Midi } } }
+        date: { type: string, format: date, description: Date locale du tirage }
+        drawn_at: { type: string, format: date-time, description: Heure du tirage (UTC) }
+        lots:
+          type: array
+          description: 1er, 2e et 3e lot, deux chiffres chacun (chaînes, zéro initial conservé)
+          minItems: 3
+          maxItems: 3
+          items: { type: string, pattern: "^[0-9]{2}$" }
+          example: ["07", "45", "12"]
+        pick3: { type: [string, "null"], pattern: "^[0-9]{3}$", example: "407" }
+        pick4: { type: [string, "null"], pattern: "^[0-9]{4}$", example: "4512" }
+        published_at: { type: [string, "null"], format: date-time, description: Publication chez le fournisseur }
+    LotteryGame:
+      type: object
+      description: Jeu en vente et son barème (V2-D09, décision D-12).
+      properties:
+        key: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+        digits: { type: integer, description: Chiffres de chaque numéro }
+        count: { type: integer, description: "Numéros par ligne (maryaj : 2)" }
+        options: { type: array, items: { type: integer }, description: "Options proposées (loto4 : 1, 2, 3 ; loto5 : 1, 2) ; vide sinon" }
+        min_stake: { $ref: "#/components/schemas/Money" }
+        max_stake: { $ref: "#/components/schemas/Money" }
+        payouts:
+          type: array
+          description: "Multiplicateurs (chaînes, jamais de float). bolet : un par lot (lot 1, 2, 3) ; autres jeux : un seul (lot null)."
+          items:
+            type: object
+            properties:
+              lot: { type: [integer, "null"], minimum: 1, maximum: 3 }
+              multiplier: { type: string, example: "50" }
+    LotteryPlay:
+      type: object
+      properties:
+        game: { type: string, enum: [bolet, maryaj, loto3, loto4, loto5] }
+        option: { type: [integer, "null"] }
+        numbers: { type: array, items: { type: string }, example: ["25"] }
+        stake: { $ref: "#/components/schemas/Money" }
+        max_payout: { $ref: "#/components/schemas/Money", description: Gain maximal de la ligne au barème figé à la vente }
+        status: { type: string, enum: [pending, won, lost, void] }
+        winning_lot: { type: [integer, "null"], description: "Bolet : lot gagnant (1, 2 ou 3) ; null sinon" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Gain de la ligne ; null tant que la fiche n'est pas réglée }
+    LotteryTicket:
+      type: object
+      description: Reçu immuable — lignes, mises et barème figés à la vente ; seuls le statut et les gains évoluent au règlement.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: B16-7KQ2M9XAPB, description: Référence à communiquer au support }
+        draw:
+          type: object
+          properties:
+            key: { type: string, example: NYM }
+            name: { type: string, example: New York Midi }
+            date: { type: string, format: date, description: Date locale du tirage }
+            draw_at: { type: string, format: date-time, description: Heure du tirage (UTC) }
+        status: { type: string, enum: [pending, won, lost, void], description: "won : au moins une ligne gagnante ; void : tirage annulé, mise remboursée" }
+        stake: { $ref: "#/components/schemas/Money" }
+        max_payout: { $ref: "#/components/schemas/Money" }
+        payout: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }], description: Total versé ; null tant que la fiche n'est pas réglée }
+        plays: { type: array, items: { $ref: "#/components/schemas/LotteryPlay" } }
+        result: { oneOf: [{ $ref: "#/components/schemas/LotteryResult" }, { type: "null" }], description: Résultat du tirage une fois publié }
+        placed_at: { type: string, format: date-time }
+        settled_at: { type: [string, "null"], format: date-time }
+    AdminLotteryTicket:
+      allOf:
+        - $ref: "#/components/schemas/LotteryTicket"
+        - type: object
+          properties:
+            user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+    LotteryBlockedNumber:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: string, example: "25" }
+        draw: { type: [object, "null"], properties: { key: { type: string }, name: { type: string } }, description: null = tous les tirages }
+        date: { type: [string, "null"], format: date, description: null = tous les jours }
+        reason: { type: string }
+        blocked_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        blocked_at: { type: string, format: date-time }
+        lifted_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        lifted_at: { type: [string, "null"], format: date-time }
+        lift_reason: { type: [string, "null"] }
     CatalogueEvent:
       type: object
       properties:
@@ -1913,15 +4069,16 @@ components:
           properties:
             home: { type: string, example: "1" }
             away: { type: string, example: "0" }
+        has_house_markets: { type: boolean, description: "true : le match a des paris maison REYEL 16 (r16_*) sur sa page ; repère « Spécial R16 » de la liste" }
         markets:
           type: array
           items:
             type: object
             properties:
               id: { type: string }
-              key: { type: string, enum: [h2h, double_chance, totals, btts] }
+              key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even, h2h_h1, double_chance_h1, draw_no_bet_h1, totals_h1, btts_h1, correct_score_h1, halftime_fulltime, alternate_totals_corners, alternate_spreads_corners, alternate_team_totals_corners, alternate_totals_cards, alternate_spreads_cards, r16_exact_goals, r16_goal_range, r16_win_to_nil, r16_winning_margin, r16_result_total] }
               name: { type: string, example: Résultat du match (1X2) }
-              line: { type: [string, "null"], example: "2.5", description: Ligne du plus/moins ; null pour les autres marchés }
+              line: { type: [string, "null"], example: "2.5", description: "Ligne du plus/moins ou du handicap (celle de l'équipe à domicile, ex. \"-0.5\") ; null pour les autres marchés, dont ceux à plusieurs lignes (ligne dans la clé de la sélection)" }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
               bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou match en direct (paris en direct désactivés, betting.allow_live), affichée mais non pariable" }
@@ -1931,10 +4088,11 @@ components:
                   type: object
                   properties:
                     id: { type: string }
-                    key: { type: string, enum: [home, draw, away, home_draw, home_away, draw_away, over, under, yes, no] }
-                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; +2.5 / -2.5 ; Oui / Non" }
+                    key: { type: string, example: home_draw, description: "home, draw, away ; home_draw, home_away, draw_away ; over, under ; yes, no ; odd, even ; score exact \"2-1\" ; à plusieurs lignes : \"over_2.5\", \"home_-1.5\", \"away_under_0.5\"" }
+                    label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; > 2.5 / < 2.5 ; Oui / Non ; 1 (-0.5) / 2 (+0.5) ; 1 > 1.5 ; Impair / Pair ; 2-1" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
+                    adjusted: { type: boolean, description: "V2-D03 (D-18) : true quand la cote est fixée à la main par l'administration, au lieu de la cote calculée" }
     BetTicket:
       type: object
       description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
@@ -1961,17 +4119,32 @@ components:
                   id: { type: string }
                   name: { type: string, example: Everton – Chelsea }
                   starts_at: { type: string, format: date-time }
+                  sport: { type: [string, "null"], example: soccer, description: Relu dans le catalogue (affichage) }
+                  competition:
+                    type: [object, "null"]
+                    properties:
+                      name: { type: string, example: Premier League }
+                      country: { type: [string, "null"], example: Angleterre }
+                  status: { type: [string, "null"], enum: [scheduled, live, finished, postponed, cancelled, null] }
+                  score:
+                    type: [object, "null"]
+                    description: Score en cours (live) ou final (finished) ; null tant qu'il n'est pas connu
+                    properties:
+                      home: { type: string, example: "1" }
+                      away: { type: string, example: "2" }
               market:
                 type: object
                 properties:
-                  key: { type: string, enum: [h2h, double_chance, totals, btts] }
+                  id: { type: string, description: Marché du catalogue }
+                  key: { type: string, enum: [h2h, double_chance, draw_no_bet, totals, alternate_totals, btts, correct_score, spreads, alternate_spreads, team_totals, alternate_team_totals, odd_even, h2h_h1, double_chance_h1, draw_no_bet_h1, totals_h1, btts_h1, correct_score_h1, halftime_fulltime, alternate_totals_corners, alternate_spreads_corners, alternate_team_totals_corners, alternate_totals_cards, alternate_spreads_cards, r16_exact_goals, r16_goal_range, r16_win_to_nil, r16_winning_margin, r16_result_total] }
                   name: { type: string, example: Nombre de buts }
                   line: { type: [string, "null"], example: "2.5" }
               selection:
                 type: object
                 properties:
+                  id: { type: string, description: "Sélection du catalogue (rejouer le ticket avec les cotes du moment)" }
                   key: { type: string, example: over }
-                  label: { type: string, example: "+2.5" }
+                  label: { type: string, example: "> 2.5" }
                   name: { type: string, example: Over }
               odds: { type: string, example: "1.90", description: Cote acceptée (pas la cote actuelle du catalogue) }
               status: { type: string, enum: [pending, won, lost, void] }
@@ -2002,6 +4175,74 @@ components:
         rules_snapshot: { type: object, description: Règles acceptées par le joueur (détail uniquement) }
         selections: { type: array, items: { $ref: "#/components/schemas/BetTicket/properties/selections/items" } }
         ledger_entries: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+    AdminPaymentTransaction:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        provider: { type: string, example: moncash }
+        direction: { type: string, enum: [deposit, payout] }
+        status: { type: string, enum: [pending, succeeded, failed, expired, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        reference: { type: string, example: pay_01jc5x0v6z0k6q7m4c2b9p3r8t }
+        provider_reference: { type: [string, "null"] }
+        ledger_entry_id: { type: [string, "null"], description: Écriture du crédit (dépôt réussi) }
+        review_reason: { type: [string, "null"], example: amount_mismatch }
+        reported: { type: [object, "null"], description: "Montant et devise annoncés par le prestataire, en cas d'écart", properties: { amount_minor: { type: integer }, currency: { type: string } } }
+        late: { type: boolean, description: Succès reçu après l'expiration }
+        expires_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        webhooks:
+          type: array
+          description: Détail seulement, du plus ancien au plus récent
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              event_id: { type: [string, "null"] }
+              signature_valid: { type: boolean }
+              outcome: { type: string, enum: [applied, applied_late, review, ignored, unknown_transaction, invalid_signature, invalid_payload] }
+              payload: { type: string, description: Corps brut reçu }
+              ip_address: { type: [string, "null"] }
+              created_at: { type: string, format: date-time }
+    AdminWithdrawal:
+      type: object
+      description: Retrait vu par l'administration (V2-B03). Champs du détail seulement marqués comme tels.
+      properties:
+        id: { type: string }
+        reference: { type: string, example: pay_01jc7a2b3c4d5e6f7g8h9j0k1m }
+        provider_reference: { type: [string, "null"] }
+        user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        provider: { type: string, example: plopplop }
+        method: { type: string, example: moncash }
+        recipient: { type: string, example: "34123456", description: "Masqué (****3456) sans users.view_personal_data" }
+        recipient_is_account_phone: { type: boolean, description: Le numéro du destinataire est celui du compte du joueur }
+        status: { type: string, enum: [requested, first_approved, processing, paid, failed, rejected, cancelled, review] }
+        amount: { $ref: "#/components/schemas/Money" }
+        kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "KYC du joueur au moment de la lecture (V2-C03)" }
+        open_aml_alerts: { type: integer, description: "Alertes AML ouvertes du joueur (V2-C04)" }
+        reservation_entry_id: { type: string, description: Écriture withdrawal qui a réservé le montant }
+        refund_entry_id: { type: [string, "null"], description: "Écriture reversal qui l'a rendu (annulé, refusé, échoué)" }
+        first_approved_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        first_approved_at: { type: [string, "null"], format: date-time }
+        second_approved_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        second_approved_at: { type: [string, "null"], format: date-time }
+        rejected_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        rejection_reason: { type: [string, "null"] }
+        review_reason: { type: [string, "null"], example: amount_mismatch }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        history:
+          type: array
+          description: Détail seulement — chaque étape, de la plus ancienne à la plus récente
+          items:
+            type: object
+            properties:
+              action: { type: string, enum: [requested, first_approved, second_approved, sent, paid, failed, rejected, cancelled, review] }
+              actor: { type: [object, "null"], description: "null : le prestataire ou le système", properties: { id: { type: string }, name: { type: string } } }
+              note: { type: [string, "null"] }
+              created_at: { type: string, format: date-time }
     AdminLedgerEntry:
       type: object
       properties:
@@ -2015,7 +4256,8 @@ components:
         related: { type: [object, "null"], properties: { type: { type: string, example: bet }, id: { type: string } } }
         reversal_of_id: { type: [string, "null"], description: Écriture compensée par celle-ci }
         reversed_by_id: { type: [string, "null"], description: Écriture qui compense celle-ci }
-        description: { type: [string, "null"] }
+        description: { type: [string, "null"], description: "Libellé vu par le joueur ; neutre pour une compensation" }
+        reason: { type: [string, "null"], description: "Motif interne d'une compensation, jamais renvoyé au joueur" }
         created_by: { type: [string, "null"], description: "Administrateur à l'origine de l'écriture ; null = système" }
         created_at: { type: string, format: date-time }
         correctable: { type: boolean, description: "true : peut faire l'objet d'une correction financière" }
@@ -2061,6 +4303,7 @@ components:
       properties:
         tickets_count: { type: integer }
         ledger_delta_minor: { type: integer, description: "Somme des variations de gain (négatif : argent repris)" }
+        pending_tickets_count: { type: integer, description: "Premier résultat validé (V2-D04) : tickets en attente, réglés juste après" }
         tickets:
           type: array
           items:
@@ -2078,7 +4321,8 @@ components:
         id: { type: string }
         event: { type: object, properties: { id: { type: string }, name: { type: string, example: "Arsenal – Chelsea" } } }
         status: { type: string, enum: [pending, approved, rejected] }
-        current: { type: object, description: "Version en vigueur lors de la demande", properties: { version: { type: integer }, status: { type: string }, score: { type: [string, "null"] } } }
+        kind: { type: string, enum: [initial, correction], description: "initial : premier résultat saisi à la main, le fournisseur n'en ayant publié aucun (V2-D04)" }
+        current: { type: [object, "null"], description: "Version en vigueur lors de la demande ; null pour un premier résultat", properties: { version: { type: integer }, status: { type: string }, score: { type: [string, "null"] } } }
         proposed: { type: object, properties: { status: { type: string, enum: [final, cancelled] }, score: { type: [string, "null"] } } }
         source: { type: string, description: "manual (administrateur) ou nom du fournisseur" }
         reason: { type: string }
@@ -2089,6 +4333,29 @@ components:
         applied_result_id: { type: [string, "null"] }
         impact: { oneOf: [{ $ref: "#/components/schemas/ResultCorrectionImpact" }, { type: "null" }], description: "Réévaluation appliquée (validée)" }
         preview: { $ref: "#/components/schemas/ResultCorrectionImpact" }
+        created_at: { type: string, format: date-time }
+    AmlAlert:
+      type: object
+      properties:
+        id: { type: string }
+        rule: { type: string, enum: [large_deposit, cumulative_deposits, withdrawal_without_play] }
+        status: { type: string, enum: [open, dismissed, reported] }
+        user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        ledger_entry_id: { type: string, description: Dépôt ou retrait qui a déclenché la règle }
+        amount: { $ref: "#/components/schemas/Money" }
+        details:
+          type: object
+          description: Seuil appliqué et totaux constatés, selon la règle
+          properties:
+            threshold_minor: { type: integer }
+            window_days: { type: integer }
+            window_hours: { type: integer }
+            min_stake_percent: { type: integer }
+            deposited_minor: { type: integer }
+            staked_minor: { type: integer }
+        reviewed_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        review_reason: { type: [string, "null"] }
+        reviewed_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
     FinanceCorrection:
       type: object
@@ -2147,3 +4414,104 @@ components:
       properties:
         minor: { type: integer, example: 10050 }
         currency: { type: string, example: HTG }
+    ComplaintAttachment:
+      type: object
+      description: Contenu par GET …/attachments/{id} (joueur ou admin).
+      properties:
+        id: { type: string }
+        filename: { type: string, description: "Nom d'origine, nettoyé" }
+        mime_type: { type: string, enum: [image/jpeg, image/png, image/webp, application/pdf] }
+        size_bytes: { type: integer }
+    ComplaintLink:
+      type: [object, "null"]
+      description: Objet concerné ; null si aucun. Type agent réservé à V2-G01.
+      properties:
+        type: { type: string, enum: [bet, ledger_entry] }
+        id: { type: string }
+        label: { type: string, description: "Référence lisible : référence du ticket, ou type et date de l'écriture", example: R16-7KQ2M9XAPB }
+    Complaint:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: string, example: REC-2026-000042, description: Numéro unique à communiquer au support }
+        category: { type: string, enum: [bet, transaction, account, other] }
+        subject: { type: string }
+        status: { type: string, enum: [new, in_progress, investigation, resolved, closed] }
+        link: { $ref: "#/components/schemas/ComplaintLink" }
+        resolution: { type: [string, "null"], description: "Motif du dernier passage en resolved, montré au joueur" }
+        can_reopen: { type: boolean, description: "resolved ou closed, et dans le délai de réouverture" }
+        last_activity_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    ComplaintMessage:
+      type: object
+      properties:
+        id: { type: string }
+        author:
+          type: object
+          properties:
+            type: { type: string, enum: [player, staff] }
+            name: { type: string, description: "Côté joueur : « Service client » pour l'équipe" }
+        body: { type: string }
+        attachments: { type: array, items: { $ref: "#/components/schemas/ComplaintAttachment" } }
+        created_at: { type: string, format: date-time }
+    ComplaintEvent:
+      type: object
+      description: Entrée d'historique, en ajout seul.
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [created, status_changed, reopened, assigned, replied, note_added] }
+        from_status: { type: [string, "null"] }
+        to_status: { type: [string, "null"] }
+        reason: { type: [string, "null"], description: "Côté joueur : seulement pour resolved et reopened" }
+        actor:
+          type: object
+          properties:
+            type: { type: string, enum: [player, staff, system] }
+            name: { type: string, description: "Côté joueur : « Service client » pour l'équipe" }
+        created_at: { type: string, format: date-time }
+    ComplaintDetail:
+      description: Vue du joueur — ni notes internes, ni événements assigned ou note_added, ni identité des administrateurs.
+      allOf:
+        - $ref: "#/components/schemas/Complaint"
+        - type: object
+          properties:
+            description: { type: string }
+            attachments: { type: array, items: { $ref: "#/components/schemas/ComplaintAttachment" }, description: Pièces de l'ouverture }
+            messages: { type: array, items: { $ref: "#/components/schemas/ComplaintMessage" }, description: Plus anciens d'abord }
+            history: { type: array, items: { $ref: "#/components/schemas/ComplaintEvent" }, description: Plus anciens d'abord }
+    AdminComplaint:
+      allOf:
+        - $ref: "#/components/schemas/Complaint"
+        - type: object
+          properties:
+            user: { type: object, properties: { id: { type: string }, name: { type: string } } }
+            assignee: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+            awaiting_staff: { type: boolean, description: Dernier message du joueur sans réponse de l'équipe }
+            waiting_since: { type: [string, "null"], format: date-time, description: Depuis quand le joueur attend une réponse }
+    AdminComplaintDetail:
+      description: Vue complète — notes internes (visibility internal) et identité des administrateurs.
+      allOf:
+        - $ref: "#/components/schemas/AdminComplaint"
+        - type: object
+          properties:
+            description: { type: string }
+            attachments: { type: array, items: { $ref: "#/components/schemas/ComplaintAttachment" } }
+            messages:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/ComplaintMessage"
+                  - type: object
+                    properties:
+                      visibility: { type: string, enum: [player, internal] }
+                      author: { type: object, properties: { id: { type: [string, "null"] } } }
+            history:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/ComplaintEvent"
+                  - type: object
+                    properties:
+                      actor: { type: object, properties: { id: { type: [string, "null"] } } }

@@ -4,10 +4,16 @@ import { useMe } from '../../features/auth/api/auth';
 import { useWallet } from '../../features/wallet/api/wallet';
 import { MoneyText } from '../../shared/components/MoneyText';
 import { BetSlipProvider, useBetSlip } from '../../features/betting/slip/BetSlipContext';
-import { SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
+import { BetSlipPanel, SLIP_COLLAPSE_QUERY } from '../../features/betting/slip/BetSlipPanel';
+import { CompetitionsMenu } from '../../features/catalogue/components/CompetitionsMenu';
+import { useLotteryAvailable } from '../../features/lottery/api/lottery';
+import { virtualGamesEnabled } from '../../features/virtual/api/virtualGames';
 import { Icon } from '../../shared/components/Icon';
 import { useMediaQuery } from '../../shared/hooks/useMediaQuery';
+import { CookieBanner } from '../../features/legal/components/CookieBanner';
+import { SessionReminder } from '../../features/responsible/components/SessionReminder';
 import { BrandLogo } from './BrandLogo';
+import { GamesTab, MenuTab } from './GamesMenu';
 import { SiteFooter } from './SiteFooter';
 
 export function PublicLayout() {
@@ -66,13 +72,22 @@ function PublicShell() {
   const { pathname } = useLocation();
   const mobile = useMediaQuery(SLIP_COLLAPSE_QUERY);
   const [params] = useSearchParams();
+  const lotteryAvailable = useLotteryAvailable();
   const liveActive = params.get('tab') === 'live' && (pathname === '/' || pathname === '/sports');
   const sportsActive = !liveActive && (pathname === '/' || pathname.startsWith('/sports') || pathname.startsWith('/events'));
+  const sportsTabActive = !liveActive && pathname.startsWith('/sports');
 
-  // Le panneau du coupon (mobile) se referme quand on change de page.
+  // Le panneau du coupon se referme quand on change de page, et avec Échap.
   useEffect(() => { slip.setPanelOpen(false); }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!slip.panelOpen) return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') slip.setPanelOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [slip.panelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = slip.selections.length;
+  const countLabel = `${count} sélection${count > 1 ? 's' : ''}`;
 
   return (
     <div className="shell">
@@ -88,9 +103,17 @@ function PublicShell() {
             <Link to="/?tab=live" className={liveActive ? 'active' : undefined} aria-current={liveActive ? 'page' : undefined}>
               <span className="nav-live-dot" aria-hidden="true" />Live
             </Link>
+            {lotteryAvailable && <NavLink to="/borlette"><Icon name="lottery" size={20} />Borlette</NavLink>}
+            {virtualGamesEnabled() && (
+              // Libellé court : la barre est déjà pleine sur ordinateur une fois connecté (Mes paris, Administration).
+              <NavLink to="/jeux-virtuels" aria-label="Jeux virtuels" title="Jeux virtuels"><Icon name="gamepad" size={20} />Virtuels</NavLink>
+            )}
             {user && <NavLink to="/bets"><Icon name="tickets" size={20} />Mes paris</NavLink>}
             {user?.is_admin && <NavLink to="/admin"><Icon name="shield" size={20} />Administration</NavLink>}
           </nav>
+
+          {/* Sur mobile, les championnats sont dans l'onglet « Menu » de la barre du bas. */}
+          {!mobile && <CompetitionsMenu />}
 
           <HeaderSearch />
 
@@ -117,24 +140,37 @@ function PublicShell() {
         <Outlet />
       </main>
       <SiteFooter />
+      <CookieBanner />
+      <SessionReminder />
 
-      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur. */}
+      {/* Panier : bouton flottant qui ouvre le panneau (à droite sur ordinateur, montant du bas sur mobile, où le
+          bouton est rond et posé au-dessus de la barre d'onglets). */}
+      <BetSlipPanel />
+      <button
+        type="button"
+        className={`slip-fab${count > 0 ? ' has-items' : ''}`}
+        aria-expanded={slip.panelOpen}
+        aria-controls="betslip"
+        onClick={() => slip.setPanelOpen(!slip.panelOpen)}
+      >
+        <Icon name="cart" size={24} />
+        <span className="slip-fab-label">Panier</span>
+        <span key={count} className="slip-fab-count" aria-label={countLabel}>{count}</span>
+      </button>
+
+      {/* Barre d'onglets mobile (sous 960 px), absente du DOM sur ordinateur : Menu (championnats), Live, Sports,
+          Jeux et Mes paris. Le panier flotte au-dessus ; le compte et la connexion sont dans l'en-tête. */}
       {mobile && (
       <nav className="tab-bar" aria-label="Navigation mobile">
-        <NavLink to="/" end><span className="tab-icon"><Icon name="home" /></span>Accueil</NavLink>
-        <NavLink to="/sports"><span className="tab-icon"><Icon name="ball" /></span>Sports</NavLink>
-        <button
-          type="button"
-          aria-expanded={slip.panelOpen}
-          aria-controls="betslip"
-          onClick={() => slip.setPanelOpen(!slip.panelOpen)}
-        >
-          <span className="tab-icon"><Icon name="cart" /></span>
-          Panier
-          {count > 0 && <span className="tab-badge" aria-label={`${count} sélection${count > 1 ? 's' : ''}`}>{count}</span>}
-        </button>
+        <MenuTab />
+        <Link to="/sports?tab=live" className={liveActive ? 'active' : undefined} aria-current={liveActive ? 'page' : undefined}>
+          <span className="tab-icon"><Icon name="live" /></span>Live
+        </Link>
+        <Link to="/sports" className={sportsTabActive ? 'active' : undefined} aria-current={sportsTabActive ? 'page' : undefined}>
+          <span className="tab-icon"><Icon name="ball" /></span>Sports
+        </Link>
+        <GamesTab />
         <NavLink to="/bets"><span className="tab-icon"><Icon name="tickets" /></span>Mes paris</NavLink>
-        <NavLink to={user ? '/account' : '/login'}><span className="tab-icon"><Icon name="user" /></span>{user ? 'Compte' : 'Connexion'}</NavLink>
       </nav>
       )}
     </div>

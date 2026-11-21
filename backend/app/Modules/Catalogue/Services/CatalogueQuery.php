@@ -4,6 +4,7 @@ namespace App\Modules\Catalogue\Services;
 
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Services\HouseMarkets;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -41,13 +42,16 @@ class CatalogueQuery
      */
     public function withDisplayRelations(Builder $query, ?string $marketKey = null): Builder
     {
-        return $query->with([
+        // Repère « Spécial R16 » de la liste : le match a au moins un marché maison affichable (V2-D10).
+        return $query->withExists(['markets as has_house_markets' => fn ($q) => $q->displayable()->whereIn('key', HouseMarkets::KEYS)])->with([
             'competition.sport',
             'homeTeam',
             'awayTeam',
             'markets' => fn ($q) => $q->displayable()
                 ->when($marketKey, fn ($m) => $m->where('key', $marketKey))
-                ->orderByRaw("CASE \"key\" WHEN 'h2h' THEN 1 WHEN 'double_chance' THEN 2 WHEN 'totals' THEN 3 WHEN 'btts' THEN 4 ELSE 5 END")
+                ->orderByRaw("CASE \"key\" WHEN 'h2h' THEN 1 WHEN 'double_chance' THEN 2 WHEN 'totals' THEN 3 WHEN 'btts' THEN 4"
+                    ." WHEN 'draw_no_bet' THEN 5 WHEN 'spreads' THEN 6 WHEN 'correct_score' THEN 7 WHEN 'alternate_totals' THEN 8"
+                    ." WHEN 'team_totals' THEN 9 WHEN 'alternate_spreads' THEN 10 ELSE 11 END")
                 ->orderBy('id')
                 ->with(['selections' => fn ($s) => $s->orderByRaw(
                     "CASE \"key\" WHEN 'home' THEN 1 WHEN 'draw' THEN 2 WHEN 'away' THEN 3 WHEN 'home_draw' THEN 4 WHEN 'home_away' THEN 5"

@@ -2,9 +2,6 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../../shared/components/Button';
 import { Icon, type IconName } from '../../../shared/components/Icon';
-import { MoneyText } from '../../../shared/components/MoneyText';
-import { useBets } from '../../betting/api/bets';
-import { useWallet } from '../../wallet/api/wallet';
 import { useLogout, useMe, type User } from '../api/auth';
 
 const STATUS_LABELS: Record<User['status'], string> = {
@@ -47,8 +44,6 @@ function InfoRow({ icon, label, children }: { icon: IconName; label: string; chi
 /** Profil du joueur connecté (page protégée par RequireAuth). */
 export function AccountPage() {
   const { data: user } = useMe();
-  const wallet = useWallet();
-  const bets = useBets();
   const logout = useLogout();
   const navigate = useNavigate();
 
@@ -59,49 +54,25 @@ export function AccountPage() {
     ? new Date(`${user.profile.birth_date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
   const memberSince = new Date(user.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  const ticketCount = bets.data?.meta.total;
   const missing = <span className="profile-missing">Non renseigné</span>;
 
   return (
     <section className="profile">
       <h1 className="sr-only">Mon compte</h1>
 
+      {/* Carte compacte : avatar, nom, statut et ancienneté. Le solde est déjà dans l'en-tête (mobile) et en haut du
+          menu des rubriques (ordinateur) ; Solde, Mes paris, Appareils et Jeu responsable sont dans ce menu :
+          pas de doublons ici. */}
       <header className="profile-hero">
-        <div className="profile-identity">
-          <span className="profile-avatar" aria-hidden="true">{initials(fullName)}</span>
-          <div className="profile-identity-text">
-            <p className="profile-kicker">Mon compte</p>
-            <p className="profile-name">{fullName}</p>
-            <p className="profile-meta">
-              <span className={`profile-status status-${user.status}`}><span className="profile-status-dot" />{STATUS_LABELS[user.status]}</span>
-              <span>Membre depuis {memberSince}</span>
-            </p>
-          </div>
+        <span className="profile-avatar" aria-hidden="true">{initials(fullName)}</span>
+        <div className="profile-identity-text">
+          <p className="profile-name">{fullName}</p>
+          <p className="profile-meta">
+            <span className={`profile-status status-${user.status}`}><span className="profile-status-dot" />{STATUS_LABELS[user.status]}</span>
+            <span>Membre depuis {memberSince}</span>
+          </p>
         </div>
-
-        <Link to="/wallet" className="profile-balance">
-          <span className="profile-balance-label"><Icon name="wallet" size={16} />Solde disponible</span>
-          <strong className="profile-balance-amount">
-            {wallet.data ? <MoneyText value={wallet.data.balance} /> : wallet.isPending ? '…' : '—'}
-          </strong>
-          <span className="profile-balance-cta">Voir le solde<Icon name="arrowRight" size={15} /></span>
-        </Link>
       </header>
-
-      <nav className="profile-shortcuts" aria-label="Raccourcis">
-        <Link to="/bets" className="profile-shortcut">
-          <span className="profile-shortcut-icon"><Icon name="coupon" /></span>
-          <span><strong>Mes paris</strong><span>{ticketCount === undefined ? 'Vos tickets' : ticketCount === 0 ? 'Aucun ticket' : `${ticketCount} ticket${ticketCount > 1 ? 's' : ''}`}</span></span>
-        </Link>
-        <Link to="/wallet" className="profile-shortcut">
-          <span className="profile-shortcut-icon"><Icon name="wallet" /></span>
-          <span><strong>Solde</strong><span>Dépôt, retrait et opérations</span></span>
-        </Link>
-        <Link to="/sports" className="profile-shortcut">
-          <span className="profile-shortcut-icon"><Icon name="ball" /></span>
-          <span><strong>Parier</strong><span>Matchs et cotes</span></span>
-        </Link>
-      </nav>
 
       <div className="profile-grid">
         <section className="profile-card" aria-labelledby="profile-info">
@@ -128,14 +99,6 @@ export function AccountPage() {
                 </InfoRow>
               )}
             </dl>
-          </section>
-
-          <section className="profile-card profile-responsible" aria-labelledby="profile-responsible">
-            <span className="profile-responsible-badge" aria-hidden="true">18+</span>
-            <div>
-              <h2 id="profile-responsible">Jeu responsable</h2>
-              <p>Le jeu doit rester un divertissement. Fixez-vous des limites et faites une pause si besoin.</p>
-            </div>
           </section>
 
           <Button

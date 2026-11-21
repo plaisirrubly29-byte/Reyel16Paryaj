@@ -4,6 +4,8 @@ namespace Tests\Feature\Modules\SportsData;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Data\EventData;
+use App\Modules\SportsData\Data\MarketData;
+use App\Modules\SportsData\Data\SelectionData;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Exceptions\SportsDataException;
@@ -331,6 +333,100 @@ class CatalogueSyncTest extends TestCase
         $this->assertSame(3, Event::count());
     }
 
+    public function test_a_pattern_syncs_only_the_matching_active_competitions(): void
+    {
+        // « tennis_* » chez The Odds API : une clé par tournoi, qui change au fil de la saison.
+        config(['sports_data.sports' => ['basketball_*'], 'sports_data.budget_enabled' => false]);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions : basketball_nba')
+            ->doesntExpectOutputToContain('soccer_epl')
+            ->assertSuccessful();
+
+        $this->assertSame(['basketball_nba'], Competition::pluck('external_key')->all());
+    }
+
+    public function test_patterns_and_exact_keys_can_be_mixed(): void
+    {
+        // Le motif « soccer_* » ne prend pas le vainqueur final ; la clé exacte reste demandée telle quelle.
+        config(['sports_data.sports' => ['soccer_*', 'basketball_nba'], 'sports_data.budget_enabled' => false]);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions : basketball_nba, soccer_epl')
+            ->doesntExpectOutputToContain('soccer_fifa_world_cup_winner')
+            ->assertSuccessful();
+
+        $this->assertSame(3, Event::count());
+    }
+
+    public function test_without_the_competition_list_the_known_competitions_are_still_synced(): void
+    {
+        // Première synchro normale : les compétitions entrent au catalogue.
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->artisan('sports-data:sync')->assertSuccessful();
+
+        // Panne passagère de /sports (502 chez The Odds API) : les cotes des compétitions connues sont quand même
+        // rafraîchies, au lieu de vieillir jusqu'à la synchro suivante.
+        $this->fake = new class extends FakeSportsDataProvider
+        {
+            public function sports(): array
+            {
+                throw new SportsDataException(SportsDataException::UNAVAILABLE, 'The Odds API 502 sur /sports');
+            }
+        };
+        $this->app->instance(SportsDataProvider::class, $this->fake);
+        $this->fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.95', 'Chelsea' => '3.60', 'Draw' => '3.30'])
+            ->setOddsUpdatedAt(CarbonImmutable::now());
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions déjà au catalogue synchronisées')
+            ->expectsOutputToContain('compétitions : basketball_nba, soccer_epl')
+            ->assertSuccessful();
+
+        $this->assertSame(2, $this->h2h('fake-1')->odds_version);
+    }
+
+    public function test_without_the_competition_list_nor_known_competitions_the_sync_fails(): void
+    {
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->fake->failWith(SportsDataException::UNAVAILABLE);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Liste des compétitions indisponible')
+            ->assertFailed();
+    }
+
+    public function test_a_competition_removed_from_the_list_leaves_the_catalogue_and_comes_back_when_listed_again(): void
+    {
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->artisan('sports-data:sync')->assertSuccessful();
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(3, 'data');
+
+        // Le basketball n'est plus voulu : retiré du catalogue dès la synchro suivante, sans appel pour lui.
+        config(['sports_data.sports' => ['soccer_epl']]);
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Compétitions retirées au catalogue (SPORTS_DATA_SPORTS) : basketball_nba')
+            ->assertSuccessful();
+
+        $this->assertFalse(Competition::where('external_key', 'basketball_nba')->value('is_active'));
+        $this->assertTrue(Competition::where('external_key', 'soccer_epl')->value('is_active'));
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(2, 'data');
+        $this->assertSame([], collect($this->getJson('/api/v1/sports')->json('data'))->where('slug', 'basketball')->all());
+
+        // Une synchro manuelle d'une compétition précise ne change pas la sélection.
+        $this->artisan('sports-data:sync', ['--competition' => ['basketball_nba']])->assertSuccessful();
+        $this->assertFalse(Competition::where('external_key', 'basketball_nba')->value('is_active'));
+
+        // De nouveau dans la liste (ici par motif) : de nouveau au catalogue.
+        config(['sports_data.sports' => ['soccer_epl', 'basketball_*']]);
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Compétitions activées au catalogue (SPORTS_DATA_SPORTS) : basketball_nba')
+            ->assertSuccessful();
+
+        $this->assertTrue(Competition::where('external_key', 'basketball_nba')->value('is_active'));
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(3, 'data');
+    }
+
     public function test_competition_name_and_country_come_from_the_provider_title_without_a_configured_label(): void
     {
         config(['sports_data.competition_labels' => []]);
@@ -352,6 +448,111 @@ class CatalogueSyncTest extends TestCase
         $label = fn (string $key) => Competition::where('external_key', $key)->firstOrFail()->only(['name', 'country']);
         $this->assertSame(['name' => 'Premier League', 'country' => 'Angleterre'], $label('soccer_epl'));
         $this->assertSame(['name' => 'NBA', 'country' => null], $label('basketball_nba'));
+    }
+
+    /** Fournisseur fictif avec un second bookmaker sur le 1X2 (cotes un peu différentes), pour la cote juste (V2-D03). */
+    private function withSecondBookmaker(): void
+    {
+        $this->app->instance(SportsDataProvider::class, new class extends FakeSportsDataProvider
+        {
+            public function events(string $sportKey): array
+            {
+                return array_map(function (EventData $e) {
+                    $extra = [];
+                    foreach ($e->markets as $m) {
+                        if ($m->key === 'h2h') {
+                            $extra[] = new MarketData('h2h', 'otherbook', $m->updatedAt, array_map(
+                                fn (SelectionData $s) => new SelectionData($s->name, bcmul($s->odds, '1.02', 3), $s->point, $s->description),
+                                $m->selections,
+                            ));
+                        }
+                    }
+
+                    return new EventData($e->externalId, $e->sportKey, $e->competition, $e->homeTeam, $e->awayTeam, $e->startsAt, [...$e->markets, ...$extra]);
+                }, parent::events($sportKey));
+            }
+        });
+    }
+
+    public function test_real_money_applies_the_operator_margin_on_the_fair_odds_of_several_bookmakers(): void
+    {
+        config(['wallet.simulated' => false]);
+        $this->withSecondBookmaker();
+
+        $this->sync();
+
+        $odds = $this->h2h('fake-1')->selections()->pluck('odds', 'key')->map(fn ($o) => (float) $o);
+        // Jamais au-dessus des cotes des bookmakers (2.10 / 3.25 / 3.40 et +2 %), marge de 6 % sur le 1X2 du football.
+        $this->assertLessThanOrEqual(2.1 * 1.02, $odds['home']);
+        $this->assertEqualsWithDelta(1.06, $odds->map(fn ($o) => 1 / $o)->sum(), 0.01);
+        $this->assertSame('fakebook', $this->h2h('fake-1')->source_bookmaker);
+    }
+
+    public function test_fictitious_money_keeps_the_reference_bookmaker_odds(): void
+    {
+        config(['wallet.simulated' => true]);
+        $this->withSecondBookmaker();
+
+        $this->sync();
+
+        $this->assertSame(
+            ['away' => '3.400', 'draw' => '3.250', 'home' => '2.100'],
+            $this->h2h('fake-1')->selections()->orderBy('key')->pluck('odds', 'key')->all(),
+        );
+    }
+
+    /** Fournisseur fictif avec, sur chaque match, des marchés de mi-temps, corners et cartons (V2-D09). */
+    private function withStatisticsMarkets(): void
+    {
+        $this->app->instance(SportsDataProvider::class, new class extends FakeSportsDataProvider
+        {
+            public function events(string $sportKey): array
+            {
+                return array_map(function (EventData $e) {
+                    $s = fn (string $name, string $odds, ?string $point = null, ?string $description = null) => new SelectionData($name, $odds, $point, $description);
+                    $extra = [
+                        new MarketData('h2h_h1', 'fakebook', now()->toImmutable(), [$s($e->homeTeam, '3.100'), $s('Draw', '2.100'), $s($e->awayTeam, '3.600')]),
+                        new MarketData('halftime_fulltime', 'fakebook', now()->toImmutable(), [
+                            $s("{$e->homeTeam}/{$e->homeTeam}", '2.800'), $s("Draw/{$e->awayTeam}", '6.500'), $s('Draw/Draw', '4.750'),
+                        ]),
+                        new MarketData('alternate_totals_corners', 'fakebook', now()->toImmutable(), [
+                            $s('Over', '1.960', '10.5'), $s('Under', '1.850', '10.5'), $s('Over', '1.570', '9.5'), $s('Under', '2.300', '9.5'),
+                        ]),
+                        new MarketData('alternate_totals_cards', 'fakebook', now()->toImmutable(), [$s('Over', '2.030', '3.5'), $s('Under', '1.700', '3.5')]),
+                    ];
+
+                    return new EventData($e->externalId, $e->sportKey, $e->competition, $e->homeTeam, $e->awayTeam, $e->startsAt, [...$e->markets, ...$extra]);
+                }, parent::events($sportKey));
+            }
+        });
+    }
+
+    public function test_first_half_corners_and_cards_markets_are_synced_when_statistics_can_settle_them(): void
+    {
+        config(['sports_data.statistics.provider' => 'apifootball']);
+        $this->withStatisticsMarkets();
+
+        $this->sync();
+
+        $event = Event::where('external_id', 'fake-1')->sole();
+        $market = fn (string $key) => $event->markets()->where('key', $key)->sole()->selections()->orderBy('key')->pluck('name', 'key')->all();
+        $this->assertSame(['away', 'draw', 'home'], array_keys($market('h2h_h1')));
+        $this->assertSame(['draw/away', 'draw/draw', 'home/home'], array_keys($market('halftime_fulltime')));
+        $this->assertSame('Nul / Nul', $market('halftime_fulltime')['draw/draw']);
+        $this->assertSame(['over_10.5', 'over_9.5', 'under_10.5', 'under_9.5'], array_keys($market('alternate_totals_corners')));
+        $this->assertSame(['over_3.5' => 'Plus de 3.5', 'under_3.5' => 'Moins de 3.5'], $market('alternate_totals_cards'));
+    }
+
+    public function test_statistics_markets_are_not_offered_without_a_statistics_provider(): void
+    {
+        config(['sports_data.statistics.provider' => '']);
+        $this->withStatisticsMarkets();
+
+        $this->sync();
+
+        $keys = Event::where('external_id', 'fake-1')->sole()->markets()->pluck('key')->all();
+        $this->assertContains('h2h', $keys);
+        $this->assertEmpty(array_intersect($keys, ['h2h_h1', 'halftime_fulltime', 'alternate_totals_corners', 'alternate_totals_cards']));
     }
 
     public function test_sync_is_scheduled_with_the_configured_frequency(): void

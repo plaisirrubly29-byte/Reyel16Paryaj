@@ -4,13 +4,17 @@ namespace App\Modules\SportsData\Console;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Exceptions\SportsDataException;
+use App\Modules\SportsData\Models\Competition;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\SportsData\Services\CreditBudget;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
- * Synchronise matchs et cotes des compétitions configurées (SPORTS_DATA_SPORTS, ou "*" pour toutes les actives).
+ * Synchronise matchs et cotes des compétitions configurées (SPORTS_DATA_SPORTS) : clés exactes ("soccer_epl"),
+ * motifs ("tennis_*" : tous les tournois de tennis en cours) ou "*" pour toutes les compétitions actives.
+ * Sans --competition, les compétitions déjà au catalogue que la liste ne désigne plus en sont retirées.
  * Planifiée selon SPORTS_DATA_SYNC_CRON ; peut être lancée à la main.
  * Coût : 1 appel par compétition (marchés × régions crédits chez The Odds API).
  *
@@ -28,20 +32,42 @@ class SyncCatalogueCommand extends Command
 
     public function handle(CatalogueSyncService $sync, SportsDataProvider $provider, CreditBudget $budget): int
     {
-        $competitions = array_values($this->option('competition') ?: config('sports_data.sports'));
+        $configured = array_values(array_filter((array) ($this->option('competition') ?: config('sports_data.sports'))));
+        $competitions = $configured;
         $failed = false;
 
-        // "*" : toutes les compétitions actives du fournisseur (liste gratuite /sports), hors paris « vainqueur final ».
-        if (in_array('*', $competitions, true)) {
-            try {
-                $competitions = collect($provider->sports())
-                    ->filter(fn ($s) => $s->active && ! $s->hasOutrights)
-                    ->pluck('key')->sort()->values()->all();
-            } catch (SportsDataException $e) {
-                $this->error("Liste des compétitions indisponible : {$e->getMessage()}");
+        // Synchro planifiée (sans --competition) : SPORTS_DATA_SPORTS décide aussi de ce que le catalogue affiche.
+        if (! $this->option('competition')) {
+            $this->applySelection($provider, $configured);
+        }
 
-                return self::FAILURE;
+        // Motifs ("*", "tennis_*") : compétitions actives du fournisseur (liste gratuite /sports) qui y correspondent,
+        // hors paris « vainqueur final ». Les clés exactes restent demandées même hors saison (le budget les écarte).
+        $patterns = array_values(array_filter($configured, fn (string $key) => str_contains($key, '*')));
+        if ($patterns !== []) {
+            try {
+                $matching = collect($provider->sports())
+                    ->filter(fn ($s) => $s->active && ! $s->hasOutrights && Str::is($patterns, $s->key))
+                    ->pluck('key');
+            } catch (SportsDataException $e) {
+                // Panne passagère du fournisseur (502…) : les compétitions déjà au catalogue sont synchronisées quand
+                // même, pour que les cotes ne vieillissent pas jusqu'à la synchro suivante. Les nouvelles compétitions
+                // attendront la prochaine liste.
+                $matching = Competition::where('provider', $provider->name())->where('is_active', true)
+                    ->orderBy('external_key')->pluck('external_key')
+                    ->filter(fn (string $key) => Str::is($patterns, $key));
+
+                if ($matching->isEmpty()) {
+                    $this->error("Liste des compétitions indisponible : {$e->getMessage()}");
+
+                    return self::FAILURE;
+                }
+
+                $this->warn("Liste des compétitions indisponible ({$e->getMessage()}) : compétitions déjà au catalogue synchronisées.");
+                Log::warning('sports_data.sports_list_unavailable', ['reason' => $e->reason, 'fallback' => $matching->count()]);
             }
+
+            $competitions = $matching->merge(array_diff($configured, $patterns))->unique()->sort()->values()->all();
         }
 
         $this->info("Fournisseur : {$provider->name()} — compétitions : ".implode(', ', $competitions));
@@ -89,5 +115,36 @@ class SyncCatalogueCommand extends Command
         }
 
         return $failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Compétitions déjà au catalogue : actives si SPORTS_DATA_SPORTS les désigne (clé exacte ou motif), désactivées
+     * sinon. Une compétition désactivée disparaît du catalogue, du direct et des marchés supplémentaires ; ses
+     * résultats restent importés tant qu'un pari les attend (ResultImportService).
+     *
+     * @param  list<string>  $configured
+     */
+    private function applySelection(SportsDataProvider $provider, array $configured): void
+    {
+        $changed = ['activées' => [], 'retirées' => []];
+
+        Competition::where('provider', $provider->name())->orderBy('external_key')->get()
+            ->each(function (Competition $competition) use ($configured, &$changed) {
+                $wanted = Str::is($configured, $competition->external_key);
+                if ($competition->is_active !== $wanted) {
+                    $competition->update(['is_active' => $wanted]);
+                    $changed[$wanted ? 'activées' : 'retirées'][] = $competition->external_key;
+                }
+            });
+
+        foreach ($changed as $label => $keys) {
+            if ($keys !== []) {
+                $this->line("Compétitions {$label} au catalogue (SPORTS_DATA_SPORTS) : ".implode(', ', $keys));
+            }
+        }
+
+        if ($changed['activées'] !== [] || $changed['retirées'] !== []) {
+            Log::info('sports_data.selection_changed', $changed);
+        }
     }
 }

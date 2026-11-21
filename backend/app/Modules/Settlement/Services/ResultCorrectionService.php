@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 /**
- * Correction d'un résultat déjà réglé, à double contrôle (P5-06).
+ * Correction d'un résultat déjà réglé, à double contrôle (P5-06) — et, avec le même circuit, premier résultat saisi
+ * à la main quand le fournisseur n'en publie pas (V2-D04 : demande sans version de départ, based_on_result_id null ;
+ * sa validation enregistre le résultat, qui lance le règlement des tickets comme un résultat du fournisseur).
  *
  * 1. Demande (administrateur results.enter, ou fournisseur qui corrige un score après règlement) : rien ne change.
  * 2. Validation par un AUTRE administrateur (results.approve) : nouvelle version du résultat, réévaluation des
@@ -39,14 +41,26 @@ class ResultCorrectionService
     ) {}
 
     /**
-     * Demande de correction d'un administrateur.
+     * Demande d'un administrateur : correction du résultat en vigueur, ou premier résultat si le match n'en a pas.
      *
-     * @throws ApiException no_result_to_correct | result_unchanged | correction_window_closed | correction_already_pending | invalid_result
+     * @param  bool  $regulationTime  le score saisi est celui du temps réglementaire (D-03), exigé pour ces sports
+     *
+     * @throws ApiException result_too_early | regulation_time_required | result_unchanged | correction_window_closed | correction_already_pending | invalid_result
      */
-    public function request(User $requester, Event $event, ResultStatus $status, ?string $homeScore, ?string $awayScore, string $reason): ResultCorrection
+    public function request(User $requester, Event $event, ResultStatus $status, ?string $homeScore, ?string $awayScore, string $reason, bool $regulationTime = false): ResultCorrection
     {
-        return DB::transaction(function () use ($requester, $event, $status, $homeScore, $awayScore, $reason) {
+        return DB::transaction(function () use ($requester, $event, $status, $homeScore, $awayScore, $reason, $regulationTime) {
             [$current, $home, $away] = $this->proposal($event, $status, $homeScore, $awayScore);
+
+            if ($current === null && now()->lt($availableAt = $this->manualResultAvailableAt($event))) {
+                throw new ApiException('result_too_early', __('Trop tôt pour saisir le résultat de ce match à la main.'), 409, ['available_at' => $availableAt->toIso8601String()]);
+            }
+
+            // D-03 : football réglé sur le temps réglementaire. Le saisisseur le confirme : un score après prolongation
+            // ou tirs au but changerait l'issue des paris 1X2 (un nul à 90 min deviendrait une victoire).
+            if ($status === ResultStatus::Final && ! $regulationTime && $this->settlesOnRegulationTime($event)) {
+                throw new ApiException('regulation_time_required', __('Saisissez le score à la fin du temps réglementaire (90 minutes et arrêts de jeu), sans prolongation ni tirs au but, et confirmez-le.'), 422);
+            }
 
             if (($deadline = $this->correctionDeadline($event)) !== null && now()->gt($deadline)) {
                 throw new ApiException('correction_window_closed', __('Le délai de correction de ce résultat est dépassé.'), 409, ['deadline' => $deadline->toIso8601String()]);
@@ -152,6 +166,11 @@ class ResultCorrectionService
             ) ?? throw new ApiException('result_changed', __('Cette correction ne change plus le résultat.'), 409);
 
             $impact = $this->summary($this->settlement->reevaluate($event, $applied, apply: true, actor: $approver, reason: $correction->reason));
+            if ($current === null) {
+                // Premier résultat : aucun ticket à réévaluer ; ceux en attente sont réglés juste après (SettleEventJob).
+                $impact['pending_tickets_count'] = BetSelection::where('event_id', $event->id)->where('status', BetSelectionStatus::Pending)
+                    ->distinct()->count('bet_ticket_id');
+            }
 
             $correction->forceFill([
                 'status' => ResultCorrectionStatus::Approved,
@@ -163,7 +182,7 @@ class ResultCorrectionService
             ])->save();
 
             $this->audit->record(AuditAction::ResultCorrectionApproved, $correction,
-                before: ['result' => $this->outcome($current)],
+                before: ['result' => $current === null ? null : $this->outcome($current)],
                 after: ['result' => $this->outcome($applied)],
                 reason: $reason,
                 actor: $approver,
@@ -202,13 +221,12 @@ class ResultCorrectionService
         });
     }
 
-    /** @return array{0: Result, 1: ?string, 2: ?string} */
+    /** @return array{0: ?Result, 1: ?string, 2: ?string} résultat en vigueur (null : aucun encore), scores normalisés */
     private function proposal(Event $event, ResultStatus $status, ?string $homeScore, ?string $awayScore): array
     {
         Event::whereKey($event->id)->lockForUpdate()->first();
 
-        $current = Result::currentFor($event)
-            ?? throw new ApiException('no_result_to_correct', __('Ce match n\'a pas encore de résultat à corriger.'), 409);
+        $current = Result::currentFor($event);
 
         try {
             [$home, $away] = $this->recorder->normalized($status, $homeScore, $awayScore);
@@ -216,18 +234,29 @@ class ResultCorrectionService
             throw new ApiException('invalid_result', $e->getMessage(), 422);
         }
 
-        if ($current->sameOutcomeAs($status, $home, $away)) {
+        if ($current?->sameOutcomeAs($status, $home, $away)) {
             throw new ApiException('result_unchanged', __('Le résultat proposé est déjà celui en vigueur.'), 409);
         }
 
         return [$current, $home, $away];
     }
 
-    private function create(Event $event, Result $current, ResultStatus $status, ?string $home, ?string $away, string $reason, string $source, ?User $requester, ?string $externalId = null, ?CarbonImmutable $providerUpdatedAt = null): ResultCorrection
+    /** Premier résultat manuel possible à partir de ce moment (V2-D04). */
+    private function manualResultAvailableAt(Event $event): CarbonImmutable
+    {
+        return $event->starts_at->toImmutable()->addHours((int) config('betting.manual_result_min_hours_after_start'));
+    }
+
+    private function settlesOnRegulationTime(Event $event): bool
+    {
+        return in_array($event->competition->sport->slug, (array) config('betting.regulation_time_sports'), true);
+    }
+
+    private function create(Event $event, ?Result $current, ResultStatus $status, ?string $home, ?string $away, string $reason, string $source, ?User $requester, ?string $externalId = null, ?CarbonImmutable $providerUpdatedAt = null): ResultCorrection
     {
         $correction = ResultCorrection::create([
             'event_id' => $event->id,
-            'based_on_result_id' => $current->id,
+            'based_on_result_id' => $current?->id,
             'status' => ResultCorrectionStatus::Pending,
             'result_status' => $status,
             'home_score' => $home,
@@ -240,7 +269,7 @@ class ResultCorrectionService
         ]);
 
         $this->audit->record(AuditAction::ResultCorrectionRequested, $correction,
-            before: ['result' => $this->outcome($current)],
+            before: ['result' => $current === null ? null : $this->outcome($current)],
             after: ['result' => ['status' => $status->value, 'score' => $home === null ? null : "{$home}-{$away}"]],
             reason: $reason,
             actor: $requester,

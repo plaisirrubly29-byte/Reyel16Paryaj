@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Envelope, type Paginated } from '../../shared/api/client';
+import type { AdminEvent } from './events';
 import type { TicketStatus } from './tickets';
 
 export type ResultStatus = 'final' | 'cancelled';
@@ -18,6 +19,8 @@ export type CorrectionImpact = {
   tickets_count: number;
   /** Somme des variations de gain : négatif = argent repris aux joueurs. */
   ledger_delta_minor: number;
+  /** Premier résultat validé (V2-D04) : tickets en attente, réglés juste après. */
+  pending_tickets_count?: number;
   tickets: {
     ticket_id: string;
     reference: string;
@@ -33,7 +36,10 @@ export type ResultCorrection = {
   id: string;
   event: { id: string; name: string };
   status: CorrectionStatus;
-  current: Outcome & { version: number };
+  /** initial : premier résultat saisi à la main, le fournisseur n'en ayant publié aucun (V2-D04). */
+  kind: 'initial' | 'correction';
+  /** null pour un premier résultat. */
+  current: (Outcome & { version: number }) | null;
   proposed: Outcome;
   /** « manual » : administrateur ; sinon nom du fournisseur. */
   source: string;
@@ -64,7 +70,29 @@ export type ResultHistory = { event_id: string; results: ResultVersion[]; correc
 
 export const outcomeLabel = (o: Outcome) => (o.status === 'cancelled' ? 'Match annulé' : (o.score ?? '—'));
 
+/** Résultat en vigueur lors de la demande ; aucun pour un premier résultat saisi à la main (V2-D04). */
+export const currentLabel = (c: ResultCorrection) => (c.current ? outcomeLabel(c.current) : 'Aucun résultat');
+
 export const sourceLabel = (source: string) => (source === 'manual' ? 'Administration' : `Fournisseur (${source})`);
+
+/** Premier résultat saisi à la main (V2-D04), et non correction d'un résultat déjà en vigueur. */
+export const isFirstResult = (c: Pick<ResultCorrection, 'kind'>) => c.kind === 'initial';
+
+/**
+ * Délai après le coup d'envoi avant qu'un premier résultat puisse être saisi à la main. Indicatif : sert à
+ * signaler les matchs à traiter ; le serveur décide (409 result_too_early, details.available_at).
+ */
+export const MANUAL_RESULT_DELAY_HOURS = 3;
+
+/**
+ * Match commencé depuis assez longtemps, sans résultat du fournisseur : à saisir à la main (V2-D04).
+ * Un match annulé ou reporté n'attend pas de score : il suit ses propres règles (D-05).
+ */
+export function awaitsManualResult(event: Pick<AdminEvent, 'starts_at' | 'status' | 'result_received_at'>, now = Date.now()): boolean {
+  return event.result_received_at === null
+    && event.status !== 'cancelled' && event.status !== 'postponed'
+    && now >= new Date(event.starts_at).getTime() + MANUAL_RESULT_DELAY_HOURS * 3_600_000;
+}
 
 export function useResultCorrections(filters: { status?: CorrectionStatus; page: number }) {
   return useQuery({
@@ -90,7 +118,15 @@ export function useResultHistory(eventId: string, enabled = true) {
   });
 }
 
-export type CorrectionRequest = { status: ResultStatus; home_score: string | null; away_score: string | null; reason: string; idempotencyKey: string };
+export type CorrectionRequest = {
+  status: ResultStatus;
+  home_score: string | null;
+  away_score: string | null;
+  /** D-03 : score du temps réglementaire confirmé (exigé pour le football). */
+  regulation_time: boolean;
+  reason: string;
+  idempotencyKey: string;
+};
 
 /** Demander une correction (permission results.enter) : rien ne change avant la validation d'un autre administrateur. */
 export function useRequestCorrection(eventId: string) {

@@ -34,6 +34,7 @@ test('parcours complet du joueur, du compte au règlement', async ({ page }) => 
     await page.getByLabel('Date de naissance').fill('1995-05-21');
     await page.getByLabel('Mot de passe', { exact: true }).fill(password);
     await page.getByLabel('Confirmer le mot de passe').fill(password);
+    await page.getByRole('checkbox', { name: /J'accepte les conditions/ }).check();
     await page.getByRole('button', { name: 'Créer mon compte' }).click();
 
     await expect(page).toHaveURL(/\/account$/);
@@ -47,6 +48,7 @@ test('parcours complet du joueur, du compte au règlement', async ({ page }) => 
 
   await test.step('coupon : sélection, mise et ticket simulé', async () => {
     await page.getByRole('button', { name: `1 ${match.home} à 2.00` }).first().click();
+    await page.getByRole('button', { name: /^Panier/ }).click(); // panneau flottant sur ordinateur
     const slip = page.getByRole('complementary', { name: 'Coupon' });
     await slip.getByLabel('Montant de la mise').fill('100');
     await slip.getByRole('button', { name: 'Placer mon pari' }).click();
@@ -56,7 +58,7 @@ test('parcours complet du joueur, du compte au règlement', async ({ page }) => 
     await expect(await balance(page)).toHaveText(money('4 900'));
 
     await page.goto('/bets');
-    await expect(page.locator('.ticket-card').filter({ hasText: match.home }).locator('.ticket-status')).toHaveText('En attente');
+    await expect(page.locator('.ticket-card').filter({ hasText: match.home }).locator('.ticket-status')).toHaveText('En cours');
   });
 
   await test.step('résultat test (2-1) et règlement simulé', () => {

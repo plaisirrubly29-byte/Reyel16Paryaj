@@ -54,3 +54,8 @@ Vérification faite : 125 requêtes avec la même IP → 5 refus (429) ; avec 12
 
 La pile de test doit reprendre les réglages du modèle de `.env` du Staging (`DB_PERSISTENT=true`,
 `CATALOGUE_CACHE_SECONDS=10`, `PHP_FPM_MAX_CHILDREN`) : sans eux, les mesures retombent aux valeurs de départ du rapport.
+
+**Limite de paris par joueur (V2-C06) :** `POST /bets` est limité à 10 paris par minute et par joueur. `bets.js` envoie
+en moyenne `RATE × 60 / PLAYERS` paris par minute et par joueur (9 avec les valeurs par défaut), avec des pointes
+au-dessus : les refus 429 compteraient comme erreurs. Dans le `.env` de la pile de test seulement, mettre
+`BETTING_MAX_BETS_PER_MINUTE=60`, ou garder `RATE × 60 / PLAYERS` sous 5.

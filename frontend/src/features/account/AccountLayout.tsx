@@ -3,12 +3,15 @@ import { Icon } from '../../shared/components/Icon';
 import { MoneyText } from '../../shared/components/MoneyText';
 import { useMe } from '../auth/api/auth';
 import { useWallet } from '../wallet/api/wallet';
+import { isNotOpen, useLoyalty, useReferral } from '../rewards/api/rewards';
 import { ACCOUNT_SECTIONS } from './sections';
 
 /** Espace joueur : menu des rubriques (colonne sur ordinateur, bande défilante sur mobile) + page. */
 export function AccountLayout() {
   const { data: user } = useMe();
   const wallet = useWallet();
+  // Fidélité et parrainage : « Bientôt » seulement quand le serveur a répondu que le programme n'est pas ouvert.
+  const closed = { loyalty: isNotOpen(useLoyalty().error), referral: isNotOpen(useReferral().error) };
 
   return (
     <div className="account-shell">
@@ -28,7 +31,7 @@ export function AccountLayout() {
             <NavLink key={s.to} to={s.to}>
               <Icon name={s.icon} size={18} />
               <span>{s.label}</span>
-              {s.soon && <span className="soon-tag">Bientôt</span>}
+              {(s.soon || (s.program && closed[s.program])) && <span className="soon-tag">Bientôt</span>}
             </NavLink>
           ))}
         </nav>

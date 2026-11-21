@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Alert } from '../../../shared/components/Alert';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Icon } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
 import { sportIcon } from '../../../shared/components/sportIcon';
-import { BetSlipPanel } from '../../betting/slip/BetSlipPanel';
 import { useEventMarkets, type CatalogueEvent } from '../api/catalogue';
 import { formatKickoff, isLiveStatus, liveLabel } from '../format';
 import { MarketOdds } from '../components/OddsButtons';
-import { marketCategory, marketMatchesSearch, type MarketCategory } from '../markets';
+import { MARKET_CATEGORIES, marketCategory, marketMatchesSearch, type MarketCategory } from '../markets';
 import { SportsSidebar } from '../components/SportsSidebar';
 
 /** Page d'un match : en-tête (compétition, équipes, coup d'envoi) et tous ses marchés, avec le coupon à droite. */
@@ -26,14 +25,16 @@ export function MatchPage() {
         <Link to="/sports" className="back-link"><Icon name="chevron" size={16} />Tous les matchs</Link>
         <MatchContent query={query} />
       </div>
-
-      <BetSlipPanel />
     </div>
   );
 }
 
 function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) {
-  const [category, setCategory] = useState<MarketCategory | 'Tous'>('Tous');
+  // ?paris=special-r16 (repère de la liste) : ouvre directement l'onglet des paris maison.
+  const [searchParams] = useSearchParams();
+  const [category, setCategory] = useState<MarketCategory | 'Tous'>(
+    searchParams.get('paris') === 'special-r16' ? 'Spécial R16' : 'Tous',
+  );
   const [search, setSearch] = useState('');
 
   if (query.isPending) return <div className="table-state"><Spinner label="Chargement du match…" /></div>;
@@ -54,8 +55,7 @@ function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) 
 
   const event = query.data;
   const presentCategories = new Set(event.markets.map(marketCategory));
-  const categories = (['Résultat', 'Buts', 'Score exact', 'Joueurs', 'Autres'] as const)
-    .filter((item) => presentCategories.has(item));
+  const categories = MARKET_CATEGORIES.filter((item) => presentCategories.has(item));
   const visibleMarkets = event.markets.filter((market) =>
     (category === 'Tous' || marketCategory(market) === category)
     && marketMatchesSearch(market, search));

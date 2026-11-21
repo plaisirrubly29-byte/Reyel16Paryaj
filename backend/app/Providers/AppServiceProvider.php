@@ -5,13 +5,26 @@ namespace App\Providers;
 use App\Models\User;
 use App\Modules\Admin\Services\PlatformSettings;
 use App\Modules\Betting\Services\TicketStakeHistory;
+use App\Modules\Compliance\Contracts\DepositHistory;
+use App\Modules\Compliance\Contracts\LossHistory;
+use App\Modules\Compliance\Contracts\SpendingHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
+use App\Modules\IdentityAccess\Contracts\HumanVerifier;
+use App\Modules\IdentityAccess\Services\TurnstileVerifier;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
+use App\Modules\Lottery\Contracts\LotteryProvider;
+use App\Modules\Lottery\Providers\FakeLotteryProvider;
+use App\Modules\Lottery\Providers\UnitySoftConnectLotteryProvider;
 use App\Modules\Monitoring\Services\QueueHeartbeat;
+use App\Modules\Settlement\Contracts\MatchStatisticsProvider;
+use App\Modules\Settlement\Providers\ApiFootballProvider;
+use App\Modules\Settlement\Providers\FakeMatchStatisticsProvider;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
 use App\Modules\SportsData\Services\CreditBudget;
+use App\Modules\Wallet\Services\LedgerDepositHistory;
+use App\Modules\Wallet\Services\LedgerPlayHistory;
 use App\Support\ProductionSafety;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -43,6 +56,19 @@ class AppServiceProvider extends ServiceProvider
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
         });
 
+        // Statistiques des matchs terminés (V2-D09) : STATISTICS_PROVIDER=apifootball ; sinon fournisseur en mémoire
+        // (tests ; l'import est coupé quand STATISTICS_PROVIDER est vide).
+        $this->app->singleton(MatchStatisticsProvider::class, fn ($app) => config('sports_data.statistics.provider') === 'apifootball'
+            ? new ApiFootballProvider($app->make(HttpFactory::class), config('sports_data.statistics'))
+            : new FakeMatchStatisticsProvider);
+
+        // Fournisseur des tirages de borlette choisi par LOTTERY_PROVIDER (config/lottery.php).
+        $this->app->singleton(LotteryProvider::class, fn ($app) => match (config('lottery.provider')) {
+            'fake' => new FakeLotteryProvider,
+            'unitysoftconnect' => new UnitySoftConnectLotteryProvider($app->make(HttpFactory::class), config('lottery.api')),
+            default => throw new InvalidArgumentException('LOTTERY_PROVIDER inconnu : '.config('lottery.provider')),
+        });
+
         // Paramètres versionnés (P6-08) : une instance par processus, qui retient les valeurs par défaut de config/.
         $this->app->singleton(PlatformSettings::class);
 
@@ -50,7 +76,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(QueueHeartbeat::class);
 
         // Mises d'un joueur pour les limites de jeu responsable : fournies par Betting à Compliance (P7-02).
+        // Vérification « humain » (D-17) : Cloudflare Turnstile.
+        $this->app->bind(HumanVerifier::class, TurnstileVerifier::class);
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
+        // Dépôts d'un joueur pour ses limites de dépôt : fournis par Wallet à Compliance (V2-B06).
+        $this->app->bind(DepositHistory::class, LedgerDepositHistory::class);
+        // Pertes nettes et historique des dépenses, lus dans le ledger par Wallet (V2-E06).
+        $this->app->bind(LossHistory::class, LedgerPlayHistory::class);
+        $this->app->bind(SpendingHistory::class, LedgerPlayHistory::class);
 
         // Budget de crédits du fournisseur (sports-data:sync, sports-data:credits).
         $this->app->bind(CreditBudget::class, fn ($app) => new CreditBudget(
@@ -109,6 +142,22 @@ class AppServiceProvider extends ServiceProvider
 
     private function configureRateLimiting(): void
     {
+        // Toute l'API (throttleApi, bootstrap/app.php) : par compte connecté (revue P8-02, F12), jamais par IP
+        // (cybercafés) ; visiteur non connecté : par IP, large (D-17, PS-5), en plus des limites de ses routes.
+        // Les webhooks de paiement en sont retirés (withoutMiddleware), avec leur propre limite.
+        RateLimiter::for('api', function (Request $request) {
+            $id = $request->user()?->getAuthIdentifier();
+
+            if ($id !== null) {
+                return Limit::perMinute(config('identity.api_rate_per_minute'))->by('api-account:'.$id);
+            }
+
+            // Visiteur non connecté (D-17, PS-5) : par IP, sur toute l'API ; 0 = sans limite (urgence).
+            $guest = (int) config('identity.api_guest_rate_per_minute');
+
+            return $guest > 0 ? Limit::perMinute($guest)->by('api-guest:'.$request->ip()) : Limit::none();
+        });
+
         RateLimiter::for('login', function (Request $request) {
             // Le limiteur passe avant LoginRequest : il normalise lui-même le numéro (ou l'email), sinon "3412-3456"
             // et "+509 34123456" auraient chacun leur compteur (revue P8-02, M1).
@@ -134,6 +183,14 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('register', fn (Request $request) => Limit::perMinute(5)->by('register:'.$request->ip()));
 
+        // POST /bets : par joueur connecté (V2-C06).
+        RateLimiter::for('bets', fn (Request $request) => Limit::perMinute(config('betting.max_bets_per_minute'))
+            ->by('bets:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
+        // Envoi d'un dossier KYC (V2-C03), par joueur : jusqu’à 3 fichiers de 5 Mo à chiffrer, pas de rafale.
+        RateLimiter::for('kyc', fn (Request $request) => Limit::perHour(10)
+            ->by('kyc:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
         // MFA, par compte : sans plafond long, 5 essais/min laissent 7 200 essais par jour (revue P8-02, M2).
         RateLimiter::for('mfa', function (Request $request) {
             $id = $request->user()?->getAuthIdentifier() ?? $request->ip();
@@ -152,6 +209,13 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         // Catalogue public : 120 requêtes/min par IP (lecture seule, sans authentification).
+        // Webhooks des prestataires de paiement (V2-B01), par IP : large, un prestataire envoie par rafales.
+        RateLimiter::for('payments-webhook', fn (Request $request) => Limit::perMinute(300)->by('payments-webhook:'.$request->ip()));
+        // Dépôts ouverts par un joueur (V2-B02) : 10 par minute, chaque ouverture appelle le prestataire.
+        RateLimiter::for('payments-deposit', fn (Request $request) => Limit::perMinute(10)->by('payments-deposit:'.$request->user()?->id));
+        // Demandes de retrait d'un joueur (V2-B03) : 5 par minute.
+        RateLimiter::for('payments-withdrawal', fn (Request $request) => Limit::perMinute(5)->by('payments-withdrawal:'.$request->user()?->id));
+
         RateLimiter::for('catalogue', fn (Request $request) => Limit::perMinute(120)->by('catalogue:'.$request->ip()));
     }
 }

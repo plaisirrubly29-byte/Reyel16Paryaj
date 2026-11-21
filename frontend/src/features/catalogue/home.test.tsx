@@ -76,6 +76,22 @@ function catalogue(user: unknown = guest) {
   });
 }
 
+describe('repère des paris maison', () => {
+  it('signale « Spécial R16 » sur les matchs qui en ont et mène à leur onglet', async () => {
+    mockApi({
+      'GET /me': guest,
+      'GET /health': { status: 200, body: { status: 'ok', version: 'v1', time: '' } },
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([{ ...EVENTS[0], has_house_markets: true }, EVENTS[1]]) },
+    });
+    renderApp('/');
+
+    const badges = await screen.findAllByRole('link', { name: 'Spécial R16' });
+    expect(badges).toHaveLength(1);
+    expect(badges[0]).toHaveAttribute('href', '/events/1?paris=special-r16');
+  });
+});
+
 describe("page d'accueil : matchs", () => {
   it('affiche les matchs groupés par compétition avec les cotes 1 X 2', async () => {
     catalogue();
@@ -109,6 +125,80 @@ describe("page d'accueil : matchs", () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Premier League' })).toBeNull());
     expect(screen.getByRole('region', { name: 'NBA' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/events?sport=basketball'))).toBe(true);
+  });
+
+  it('annonce un sport sans match au lieu d\'afficher du football', async () => {
+    catalogue();
+    renderApp('/sports?sport=baseball');
+
+    expect(await screen.findByText('Aucun match de baseball ouvert aux paris pour le moment.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Premier League' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Tous les matchs' })).getByRole('link', { name: 'Voir tous les matchs' }))
+      .toHaveAttribute('href', '/sports');
+  });
+
+  it('garde les top matchs du sport choisi sur l\'accueil', async () => {
+    catalogue();
+    renderApp('/?sport=basketball');
+
+    const top = await screen.findByRole('list', { name: 'Matchs à la une' });
+    expect(within(top).getByText('Boston Celtics')).toBeInTheDocument();
+    expect(within(top).queryByText('Everton')).toBeNull();
+  });
+
+  it('annonce seulement les sports qui ont des matchs (bandeau et pied de page)', async () => {
+    catalogue();
+    renderApp('/');
+
+    const hero = await screen.findByRole('navigation', { name: 'Sports disponibles' });
+    expect(within(hero).getAllByRole('link').map((a) => a.getAttribute('href')))
+      .toEqual(['/sports?sport=soccer', '/sports?sport=basketball']);
+    expect(within(hero).getByRole('link', { name: /^Basketball \d+ matchs$/ })).toBeInTheDocument();
+    const footer = screen.getByRole('navigation', { name: 'Paris sportifs' });
+    expect(within(footer).getByRole('link', { name: 'Basketball' })).toHaveAttribute('href', '/sports?sport=basketball');
+    expect(within(footer).queryByRole('link', { name: 'Baseball' })).toBeNull();
+  });
+
+  it('onglet Live sans match en direct : montre les prochains matchs', async () => {
+    catalogue();
+    renderApp('/?tab=live');
+
+    expect(await screen.findByText(/Aucun match en direct en ce moment/)).toBeInTheDocument();
+    const upcoming = screen.getByRole('region', { name: 'Prochains matchs' });
+    expect(within(upcoming).getByText('Everton')).toBeInTheDocument();
+    // Pas de « Top matchs » au-dessus : l'onglet Live ne montre que du direct ou ce qui commence bientôt.
+    expect(screen.queryByRole('list', { name: 'Matchs à la une' })).toBeNull();
+  });
+
+  it('onglet Live : seulement les matchs en direct quand il y en a', async () => {
+    const live = { ...event('1', 'Everton', 'Chelsea', ['2.95', '3.60', '2.05']), status: 'live', starts_at: inHours(-1) };
+    mockApi({
+      'GET /me': guest,
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([live, ...EVENTS.slice(1)]) },
+    });
+    renderApp('/?tab=live');
+
+    const epl = await screen.findByRole('region', { name: 'Premier League' });
+    expect(within(epl).getByText('Everton')).toBeInTheDocument();
+    expect(within(epl).queryByText('Fulham')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Prochains matchs' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Ça commence bientôt' })).toBeNull();
+  });
+
+  it('onglet Live : sous le direct, les matchs qui commencent dans l\'heure', async () => {
+    const live = { ...event('1', 'Everton', 'Chelsea', ['2.95', '3.60', '2.05']), status: 'live', starts_at: inHours(-1) };
+    const soon = { ...EVENTS[1], starts_at: inHours(0.5) };
+    mockApi({
+      'GET /me': guest,
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': { status: 200, body: page([live, soon, ...EVENTS.slice(2)]) },
+    });
+    renderApp('/sports?tab=live');
+
+    const region = await screen.findByRole('region', { name: 'Ça commence bientôt' });
+    expect(within(region).getByText(soon.home_team)).toBeInTheDocument();
+    expect(within(region).queryByText('Everton')).toBeNull();
   });
 
   it('ajoute une cote au coupon, la remplace pour le même marché et la retire', async () => {
@@ -319,11 +409,11 @@ describe('liste des matchs : robustesse et navigation', () => {
         body: page(EVENTS, { current_page: Number(url.searchParams.get('page') ?? 1), total: 90, last_page: 3 }),
       }),
     });
-    const router = renderApp('/sports');
+    const router = renderApp('/sports?sport=soccer');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Suivant' }));
 
-    await waitFor(() => expect(router.state.location.search).toBe('?page=2'));
+    await waitFor(() => expect(router.state.location.search).toBe('?sport=soccer&page=2'));
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes('page=2'))).toBe(true);
   });
 });
@@ -351,7 +441,8 @@ describe('liste des matchs : type de pari', () => {
       'GET /sports': { status: 200, body: { data: SPORTS } },
       'GET /events': (_, url) => ({
         status: 200,
-        body: page(url.searchParams.get('market') === 'double_chance' ? EVENTS.map(withDoubleChance) : EVENTS),
+        body: page((url.searchParams.get('market') === 'double_chance' ? EVENTS.map(withDoubleChance) : EVENTS)
+          .filter((e) => !url.searchParams.get('sport') || e.sport.slug === url.searchParams.get('sport'))),
       }),
     });
     const router = renderApp('/sports');
@@ -380,6 +471,26 @@ describe('page Sports', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sports & matchs' })).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'NBA' })).toBeInTheDocument();
+  });
+
+  it('range les matchs par sport, chacun sous son titre, avec un lien vers tous ses matchs', async () => {
+    mockApi({
+      'GET /me': guest,
+      'GET /sports': { status: 200, body: { data: SPORTS } },
+      'GET /events': (_, url) => ({
+        status: 200,
+        body: page(EVENTS.filter((e) => !url.searchParams.get('sport') || e.sport.slug === url.searchParams.get('sport'))),
+      }),
+    });
+    renderApp('/sports');
+
+    const football = await screen.findByRole('region', { name: /^Football/ });
+    const basket = screen.getByRole('region', { name: /^Basketball/ });
+    expect(football.compareDocumentPosition(basket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await within(football).findByText('Everton')).toBeInTheDocument();
+    expect(within(football).queryByText('Boston Celtics')).toBeNull();
+    expect(await within(basket).findByText('Boston Celtics')).toBeInTheDocument();
+    expect(within(basket).getByRole('link', { name: 'Tous les matchs : Basketball' })).toHaveAttribute('href', '/sports?sport=basketball');
   });
 });
 

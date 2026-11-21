@@ -26,6 +26,7 @@ return [
     ],
 
     // Sports synchronisés (clés du fournisseur), ex. "soccer_epl,basketball_nba". Liste V1 : décision D-03 (P0-03).
+    // Motifs acceptés ("*", "tennis_*") ; les compétitions que la liste ne désigne plus sont retirées du catalogue.
     'sports' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_SPORTS', 'soccer_epl'))))),
 
     // Noms affichés des compétitions (le fournisseur n'a que des codes : "EPL", "NBA"…).
@@ -47,6 +48,53 @@ return [
         'soccer_usa_mls' => ['name' => 'MLS', 'country' => 'États-Unis'],
         'soccer_saudi_arabia_pro_league' => ['name' => 'Saudi Pro League', 'country' => 'Arabie saoudite'],
         'soccer_mexico_ligamx' => ['name' => 'Liga MX', 'country' => 'Mexique'],
+        // Football des autres pays (SPORTS_DATA_SPORTS=soccer_*) : le fournisseur n'y met pas toujours le pays.
+        'soccer_argentina_primera_division' => ['name' => 'Primera División', 'country' => 'Argentine'],
+        'soccer_australia_aleague' => ['name' => 'A-League', 'country' => 'Australie'],
+        'soccer_austria_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Autriche'],
+        'soccer_belgium_first_div' => ['name' => 'Pro League', 'country' => 'Belgique'],
+        'soccer_brazil_serie_b' => ['name' => 'Série B', 'country' => 'Brésil'],
+        'soccer_chile_campeonato' => ['name' => 'Primera División', 'country' => 'Chili'],
+        'soccer_china_superleague' => ['name' => 'Super League', 'country' => 'Chine'],
+        'soccer_denmark_superliga' => ['name' => 'Superliga', 'country' => 'Danemark'],
+        'soccer_england_efl_cup' => ['name' => 'Coupe de la Ligue', 'country' => 'Angleterre'],
+        'soccer_england_league1' => ['name' => 'League One', 'country' => 'Angleterre'],
+        'soccer_england_league2' => ['name' => 'League Two', 'country' => 'Angleterre'],
+        'soccer_fa_cup' => ['name' => 'FA Cup', 'country' => 'Angleterre'],
+        'soccer_finland_veikkausliiga' => ['name' => 'Veikkausliiga', 'country' => 'Finlande'],
+        'soccer_france_coupe_de_france' => ['name' => 'Coupe de France', 'country' => 'France'],
+        'soccer_germany_bundesliga2' => ['name' => '2. Bundesliga', 'country' => 'Allemagne'],
+        'soccer_germany_bundesliga_women' => ['name' => 'Bundesliga féminine', 'country' => 'Allemagne'],
+        'soccer_germany_dfb_pokal' => ['name' => 'Coupe d\'Allemagne', 'country' => 'Allemagne'],
+        'soccer_germany_liga3' => ['name' => '3. Liga', 'country' => 'Allemagne'],
+        'soccer_greece_super_league' => ['name' => 'Super League', 'country' => 'Grèce'],
+        'soccer_italy_serie_b' => ['name' => 'Serie B', 'country' => 'Italie'],
+        'soccer_japan_j_league' => ['name' => 'J1 League', 'country' => 'Japon'],
+        'soccer_korea_kleague1' => ['name' => 'K League 1', 'country' => 'Corée du Sud'],
+        'soccer_league_of_ireland' => ['name' => 'Premier Division', 'country' => 'Irlande'],
+        'soccer_netherlands_eredivisie' => ['name' => 'Eredivisie', 'country' => 'Pays-Bas'],
+        'soccer_norway_eliteserien' => ['name' => 'Eliteserien', 'country' => 'Norvège'],
+        'soccer_poland_ekstraklasa' => ['name' => 'Ekstraklasa', 'country' => 'Pologne'],
+        'soccer_portugal_primeira_liga' => ['name' => 'Liga Portugal', 'country' => 'Portugal'],
+        'soccer_russia_premier_league' => ['name' => 'Premier Liga', 'country' => 'Russie'],
+        'soccer_spain_copa_del_rey' => ['name' => 'Copa del Rey', 'country' => 'Espagne'],
+        'soccer_spain_segunda_division' => ['name' => 'LaLiga 2', 'country' => 'Espagne'],
+        'soccer_spl' => ['name' => 'Premiership', 'country' => 'Écosse'],
+        'soccer_sweden_allsvenskan' => ['name' => 'Allsvenskan', 'country' => 'Suède'],
+        'soccer_sweden_superettan' => ['name' => 'Superettan', 'country' => 'Suède'],
+        'soccer_switzerland_superleague' => ['name' => 'Super League', 'country' => 'Suisse'],
+        'soccer_turkey_super_league' => ['name' => 'Süper Lig', 'country' => 'Turquie'],
+        // Compétitions saisonnières (actives seulement pendant le tournoi ou les qualifications).
+        'soccer_fifa_world_cup' => ['name' => 'Coupe du monde', 'country' => 'Monde'],
+        'soccer_fifa_world_cup_qualifiers_europe' => ['name' => 'Qualifications Coupe du monde', 'country' => 'Europe'],
+        'soccer_fifa_world_cup_qualifiers_south_america' => ['name' => 'Qualifications Coupe du monde', 'country' => 'Amérique du Sud'],
+        'soccer_fifa_club_world_cup' => ['name' => 'Coupe du monde des clubs', 'country' => 'Monde'],
+        'soccer_uefa_european_championship' => ['name' => 'Euro', 'country' => 'Europe'],
+        'soccer_uefa_euro_qualification' => ['name' => 'Qualifications Euro', 'country' => 'Europe'],
+        'soccer_africa_cup_of_nations' => ['name' => 'Coupe d\'Afrique des nations', 'country' => 'Afrique'],
+        'soccer_conmebol_copa_america' => ['name' => 'Copa América', 'country' => 'Amérique du Sud'],
+        'soccer_concacaf_gold_cup' => ['name' => 'Gold Cup', 'country' => 'Amérique du Nord'],
+        'soccer_concacaf_leagues_cup' => ['name' => 'Leagues Cup', 'country' => 'Amérique du Nord'],
         'basketball_nba' => ['name' => 'NBA', 'country' => 'États-Unis'],
         'basketball_euroleague' => ['name' => 'Euroligue', 'country' => 'Europe'],
         'baseball_mlb' => ['name' => 'MLB', 'country' => 'États-Unis'],
@@ -80,6 +128,35 @@ return [
     'horizon_days' => (int) env('SPORTS_DATA_HORIZON_DAYS', 7),
     'max_events_per_competition' => (int) env('SPORTS_DATA_MAX_EVENTS', 10),
 
+    // Marchés chargés match par match (sports-data:extra-markets) pour le football : réglés sur le score final, sauf
+    // 1re mi-temps (_h1), mi-temps / fin de match, corners et cartons, réglés avec les statistiques du match (V2-D09).
+    // Coût chez The Odds API : 1 crédit par marché reçu (× régions) et PAR MATCH. Planifié seulement si
+    // SPORTS_DATA_EXTRA=true : matchs qui commencent dans extra_markets_hours, plafond de crédits par jour.
+    'extra_markets' => env('SPORTS_DATA_EXTRA_MARKETS',
+        'double_chance,draw_no_bet,btts,correct_score,spreads,alternate_spreads,alternate_totals,team_totals,alternate_team_totals,odd_even,'
+        .'h2h_h1,double_chance_h1,draw_no_bet_h1,totals_h1,btts_h1,correct_score_h1,halftime_fulltime,'
+        .'alternate_totals_corners,alternate_spreads_corners,alternate_team_totals_corners,alternate_totals_cards,alternate_spreads_cards'),
+    // Statistiques des matchs terminés (V2-D09) pour régler 1re mi-temps, corners et cartons : API-Football.
+    // STATISTICS_PROVIDER=apifootball (clé STATISTICS_API_KEY), « fake » en test, vide = désactivé (ces paris
+    // attendent puis sont annulés passé void_after_hours après le coup d'envoi).
+    'statistics' => [
+        'provider' => env('STATISTICS_PROVIDER', ''),
+        'url' => env('STATISTICS_API_URL', 'https://v3.football.api-sports.io'),
+        'key' => env('STATISTICS_API_KEY'),
+        'timeout' => (int) env('STATISTICS_TIMEOUT', 15),
+        'cron' => env('STATISTICS_CRON', '*/20 * * * *'),
+        // Délai avant d'annuler (remboursement, cote 1) un pari dont les statistiques ne sont jamais arrivées.
+        'void_after_hours' => (int) env('STATISTICS_VOID_AFTER_HOURS', 48),
+        // Écart toléré entre l'heure du coup d'envoi chez les deux fournisseurs, pour reconnaître le match.
+        'kickoff_tolerance_minutes' => (int) env('STATISTICS_KICKOFF_TOLERANCE', 20),
+    ],
+    'extra_markets_enabled' => (bool) env('SPORTS_DATA_EXTRA', false),
+    'extra_markets_cron' => env('SPORTS_DATA_EXTRA_CRON', '30 */3 * * *'),
+    'extra_markets_hours' => (int) env('SPORTS_DATA_EXTRA_HOURS', 72),
+    // Compétitions concernées, ex. "soccer_epl,soccer_spain_la_liga" ; vide = toutes les compétitions de football actives.
+    'extra_markets_competitions' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_EXTRA_COMPETITIONS', ''))))),
+    'extra_markets_daily_credits' => (int) env('SPORTS_DATA_EXTRA_DAILY_CREDITS', 1000),
+
     // Règle de fraîcheur (P3-04) : au-delà, la cote n'est plus proposée. Doit dépasser l'intervalle de synchro.
     'max_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_ODDS_AGE', 300),
 
@@ -102,5 +179,33 @@ return [
     // Cache des réponses du catalogue public (P8-03), en secondes ; 0 = désactivé (développement, tests). Le pari
     // revérifie toujours la cote côté serveur : une cote affichée depuis le cache peut avoir ce retard, jamais le ticket.
     'catalogue_cache_seconds' => (int) env('CATALOGUE_CACHE_SECONDS', 0),
+
+    // Marge de l'opérateur (V2-D03, décision D-18 validée le 2026-11-16) : cote juste (moyenne des bookmakers) + marge,
+    // appliquée seulement avec l'argent réel (WALLET_SIMULATED=false). Taux en fraction (0.06 = 6 %).
+    'margin' => [
+        'enabled' => (bool) env('SPORTS_DATA_MARGIN', true),
+        // Bookmakers nécessaires pour calculer la cote juste ; en dessous, cotes du bookmaker de référence (CO-5).
+        'min_bookmakers' => (int) env('SPORTS_DATA_MARGIN_MIN_BOOKMAKERS', 2),
+        'football_h2h' => (float) env('SPORTS_DATA_MARGIN_FOOTBALL_H2H', 0.06),
+        // 1X2 des autres sports, plus/moins, double chance, les deux marquent, remboursé si nul.
+        'main' => (float) env('SPORTS_DATA_MARGIN_MAIN', 0.05),
+        // Handicaps, score exact, buts par équipe, pair/impair…
+        'secondary' => (float) env('SPORTS_DATA_MARGIN_SECONDARY', 0.08),
+        // Ajouté pendant le match (synchro en direct).
+        'live_extra' => (float) env('SPORTS_DATA_MARGIN_LIVE_EXTRA', 0.02),
+    ],
+
+    // Marchés maison du football (V2-D10), seulement ceux que The Odds API ne fournit pas : nombre exact de buts,
+    // tranches de buts, victoire sans encaisser, écart de victoire, résultat et plus/moins de 2,5 buts. Cotés par
+    // REYEL 16 (modèle de Poisson tiré du 1X2 et du plus/moins des bookmakers), réglés sur le score final.
+    // Marge plus forte et mise maximale plus basse : aucun bookmaker ne sert de repère à notre calcul.
+    'house_markets' => [
+        'enabled' => (bool) env('SPORTS_DATA_HOUSE_MARKETS', true),
+        'min_bookmakers' => (int) env('SPORTS_DATA_HOUSE_MARKETS_MIN_BOOKMAKERS', 2),
+        'margin' => (float) env('SPORTS_DATA_HOUSE_MARKETS_MARGIN', 0.12),
+        'max_odds' => (float) env('SPORTS_DATA_HOUSE_MARKETS_MAX_ODDS', 100),
+        // Mise maximale d'un ticket qui contient un marché maison, en unité mineure (1000_00 = 1 000 HTG).
+        'max_stake_minor' => (int) env('SPORTS_DATA_HOUSE_MARKETS_MAX_STAKE_MINOR', 1000_00),
+    ],
 
 ];

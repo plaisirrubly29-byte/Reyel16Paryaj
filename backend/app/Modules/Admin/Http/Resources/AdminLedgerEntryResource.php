@@ -30,6 +30,8 @@ class AdminLedgerEntryResource extends JsonResource
             'reversal_of_id' => $this->reversal_of_id === null ? null : (string) $this->reversal_of_id,
             'reversed_by_id' => $this->reversedBy === null ? null : (string) $this->reversedBy->id,
             'description' => $this->description,
+            // Motif interne d'une compensation : jamais renvoyé au joueur (revue P8-02, F7).
+            'reason' => $this->metadata['reason'] ?? null,
             'created_by' => $this->created_by === null ? null : (string) $this->created_by,
             'created_at' => $this->created_at->toIso8601String(),
             // Peut faire l'objet d'une correction financière (sinon : compensation, écriture d'un ticket ou déjà compensée).

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
 import { useEvents } from '../api/catalogue';
@@ -11,12 +11,22 @@ import { TeamCrest } from './TeamCrest';
  * Affiches mises en avant sur l'accueil : cartes sombres en défilement horizontal (flèches sur ordinateur,
  * glisser sur mobile). Chaque carte : compétition, coup d'envoi ou compte à rebours, face-à-face avec écussons,
  * cotes 1 / X / 2 cliquables et lien vers tous les paris du match.
+ * Suit le sport et la compétition choisis (?sport=, ?competition=) ; masquées dans l'onglet Live.
  */
 export function TopMatches({ count = 8 }: { count?: number }) {
-  const events = useEvents({ perPage: count });
+  const [params] = useSearchParams();
+  const live = params.get('tab') === 'live';
+  const events = useEvents({
+    sport: params.get('sport') ?? undefined,
+    competition: params.get('competition') ?? undefined,
+    perPage: count,
+  });
   const listRef = useRef<HTMLUListElement>(null);
   const list = events.data?.data ?? [];
 
+  if (live) return null;
+  // Pendant le chargement : place réservée à la hauteur du bloc, pour que la liste en dessous ne saute pas (V2-E05).
+  if (events.isPending) return <div className="top-section top-section-placeholder" aria-hidden="true" />;
   if (list.length === 0) return null;
 
   function scroll(direction: 1 | -1) {

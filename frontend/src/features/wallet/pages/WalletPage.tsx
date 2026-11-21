@@ -1,39 +1,38 @@
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Alert } from '../../../shared/components/Alert';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
-import { Icon, type IconName } from '../../../shared/components/Icon';
+import { Icon } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
 import { Spinner } from '../../../shared/components/Spinner';
 import { useMe } from '../../auth/api/auth';
 import { ENTRY_LABELS, useWallet, useWalletTransactions } from '../api/wallet';
+import { DepositCard } from '../components/DepositCard';
+import { WithdrawalCard } from '../components/WithdrawalCard';
+
+type Operation = 'depot' | 'retrait';
 
 /**
- * Dépôt ou retrait. Aucun prestataire de paiement n'est intégré (P7-01) : le joueur paie ou est payé
- * auprès de REYEL 16 PARYAJ avec son numéro de compte, puis l'opération est enregistrée par l'administration.
+ * Solde du joueur connecté, puis deux boutons « Dépôt » et « Retrait » : le panneau choisi propose MonCash ou NatCash,
+ * puis le formulaire. Aucun calcul de solde côté client : tout vient de l'API.
  */
-function MoneyMovement({ id, icon, title, intro, steps, accountId }: { id: string; icon: IconName; title: string; intro: string; steps: string; accountId?: string }) {
-  return (
-    <section className="money-card" aria-labelledby={id}>
-      <header className="money-card-head">
-        <span className="money-card-icon" aria-hidden="true"><Icon name={icon} size={22} /></span>
-        <div>
-          <h2 id={id}>{title}</h2>
-          <p className="muted small">{intro}</p>
-        </div>
-      </header>
-      <div className="money-card-body">
-        <p>{steps}</p>
-        {accountId && <p className="small">Votre numéro de compte : <strong className="mono">{accountId}</strong></p>}
-      </div>
-    </section>
-  );
-}
-
-/** Solde du joueur connecté. Aucun calcul de solde côté client : tout vient de l'API. */
 export function WalletPage() {
   const wallet = useWallet();
   const recent = useWalletTransactions({ page: 1 });
   const { data: me } = useMe();
+  const frozen = wallet.data?.status === 'frozen';
+  const currency = wallet.data?.currency ?? 'HTG';
+  const [params, setParams] = useSearchParams();
+  // Panneau ouvert, gardé dans l'URL (?operation=depot|retrait) ; le retour du prestataire (?depot=, ?refference_id=)
+  // rouvre le dépôt pour suivre le paiement.
+  const returning = params.has('depot') || params.has('refference_id');
+  const operation: Operation | null = params.get('operation') === 'retrait' ? 'retrait'
+    : params.get('operation') === 'depot' || returning ? 'depot' : null;
+
+  /** Ouvre le panneau choisi (nouvelle étape dans l'historique) ou le referme s'il l'était déjà. */
+  function open(next: Operation) {
+    if (operation === next) setParams({}, { replace: true });
+    else setParams({ operation: next });
+  }
 
   return (
     <section className="stack">
@@ -47,16 +46,39 @@ export function WalletPage() {
           <strong className="balance"><MoneyText value={wallet.data.balance} /></strong>
         </div>
       )}
-      {wallet.data?.status === 'frozen' && (
+      {frozen && (
         <Alert tone="warning" title="Solde gelé">Aucune mise n'est possible pour le moment. Contactez le support.</Alert>
       )}
 
-      <div className="money-grid">
-        <MoneyMovement id="deposit" icon="deposit" title="Dépôt" intro="Alimenter votre solde." accountId={me?.id}
-          steps="Effectuez votre dépôt auprès de REYEL 16 PARYAJ en indiquant votre numéro de compte. Votre solde est crédité dès réception du paiement." />
-        <MoneyMovement id="withdraw" icon="withdraw" title="Retrait" intro="Retirer vos gains." accountId={me?.id}
-          steps="Demandez votre retrait auprès de REYEL 16 PARYAJ avec votre numéro de compte. Le montant est débité de votre solde puis vous est remis." />
+      {/* Deux boutons sous le solde : chacun ouvre son panneau (choix MonCash / NatCash, puis formulaire). */}
+      <div className="money-actions">
+        <button
+          type="button"
+          className={`money-action money-action-deposit${operation === 'depot' ? ' active' : ''}`}
+          aria-expanded={operation === 'depot'}
+          aria-controls="money-panel"
+          onClick={() => open('depot')}
+        >
+          <Icon name="deposit" size={22} />Dépôt
+        </button>
+        <button
+          type="button"
+          className={`money-action money-action-withdraw${operation === 'retrait' ? ' active' : ''}`}
+          aria-expanded={operation === 'retrait'}
+          aria-controls="money-panel"
+          onClick={() => open('retrait')}
+        >
+          <Icon name="withdraw" size={22} />Retrait
+        </button>
       </div>
+
+      {operation && (
+        <div id="money-panel" className="money-panel">
+          {operation === 'depot'
+            ? <DepositCard accountId={me?.id} currency={currency} frozen={frozen} />
+            : <WithdrawalCard accountId={me?.id} phone={me?.phone} currency={currency} balance={wallet.data?.balance} frozen={frozen} />}
+        </div>
+      )}
 
       <section className="stack-sm" aria-labelledby="recent-ops">
         <div className="toolbar">

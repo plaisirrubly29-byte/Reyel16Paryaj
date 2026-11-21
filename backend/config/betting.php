@@ -20,6 +20,11 @@ return [
     // Gain potentiel plafonné (le gain affiché et versé ne dépasse jamais ce montant) : 1 000 000,00.
     'max_payout_minor' => (int) env('BETTING_MAX_PAYOUT_MINOR', 1_000_000_00),
 
+    // V2-D05 : perte maximale de la maison (pire cas des tickets en cours) sur un match, tous marchés confondus,
+    // et sur un seul marché. Un pari qui ferait dépasser l'un des deux est refusé (risk_limit_exceeded).
+    'max_event_liability_minor' => (int) env('BETTING_MAX_EVENT_LIABILITY_MINOR', 500_000_00),
+    'max_market_liability_minor' => (int) env('BETTING_MAX_MARKET_LIABILITY_MINOR', 250_000_00),
+
     // D-04 : combinés autorisés, 20 sélections au plus, une seule sélection par match (issues liées).
     'allow_multiple' => (bool) env('BETTING_ALLOW_MULTIPLE', true),
     'max_selections' => (int) env('BETTING_MAX_SELECTIONS', 20),
@@ -29,9 +34,21 @@ return [
     // qu'après une décision écrite, avec des cotes rafraîchies en quelques secondes et un délai d'acceptation.
     'allow_live' => (bool) env('BETTING_ALLOW_LIVE', false),
 
+    // Paris placés au plus par minute et par joueur (V2-C06) : 1 toutes les 6 s suffit à un humain, une rafale de
+    // robot ou de double envoi est refusée (429). Pas une règle d'acceptation : hors rules_snapshot.
+    'max_bets_per_minute' => (int) env('BETTING_MAX_BETS_PER_MINUTE', 10),
+
     // D-05 : "reject" — toute cote différente de celle vue par le joueur est refusée (409 odds_changed,
     // avec la nouvelle cote) ; le joueur confirme en renvoyant le pari avec la cote à jour.
     'odds_change_policy' => 'reject',
+
+    // V2-D04 : premier résultat saisi à la main quand le fournisseur n'en publie pas — pas avant ce délai après le
+    // coup d'envoi (un match de football avec arrêts de jeu et mi-temps dure environ 2 h).
+    'manual_result_min_hours_after_start' => (int) env('BETTING_MANUAL_RESULT_MIN_HOURS_AFTER_START', 3),
+
+    // D-03 : sports réglés sur le score du temps réglementaire (90 min + arrêts de jeu), sans prolongation ni tirs au
+    // but. Une saisie manuelle doit le confirmer (regulation_time). Slugs de la table sports.
+    'regulation_time_sports' => ['soccer'],
 
     // D-05 : match reporté — la sélection est annulée (cote 1) si le match ne commence pas dans ce délai
     // après l'heure prévue au moment du pari (bet_selections.event_starts_at).

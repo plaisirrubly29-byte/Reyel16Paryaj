@@ -4,6 +4,7 @@ namespace App\Modules\IdentityAccess\Http\Requests;
 
 use App\Modules\IdentityAccess\Support\PhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class RegisterRequest extends FormRequest
@@ -18,6 +19,13 @@ class RegisterRequest extends FormRequest
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
             'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.now()->subYears(config('identity.minimum_age'))->toDateString()],
             'country' => ['nullable', 'string', 'size:2', 'alpha'],
+            // V2-E01 : case « J'accepte les conditions » cochée, pour la version des textes en vigueur.
+            'terms_accepted' => ['required', 'accepted'],
+            'terms_version' => ['required', 'string', 'in:'.config('identity.terms_version')],
+            // Bêta fermée (V2-F07) : un code d'invitation de la liste est exigé tant qu'elle n'est pas vide.
+            'invite_code' => config('identity.invite_codes') === []
+                ? ['nullable', 'string', 'max:64']
+                : ['required', 'string', Rule::in(config('identity.invite_codes'))],
         ];
     }
 
@@ -27,6 +35,11 @@ class RegisterRequest extends FormRequest
         return [
             'birth_date.before_or_equal' => __('Vous devez avoir au moins :age ans pour ouvrir un compte.', ['age' => config('identity.minimum_age')]),
             'phone.regex' => __('Le numéro de téléphone doit comporter 8 chiffres (numéro haïtien local, sans l\'indicatif 509).'),
+            'terms_accepted.required' => __('Vous devez accepter les conditions d\'utilisation et le règlement des paris.'),
+            'terms_accepted.accepted' => __('Vous devez accepter les conditions d\'utilisation et le règlement des paris.'),
+            'terms_version.in' => __('Les conditions ont été mises à jour : rechargez la page pour lire la nouvelle version.'),
+            'invite_code.required' => __('Les inscriptions se font sur invitation pendant la bêta : saisissez votre code d\'invitation.'),
+            'invite_code.in' => __('Ce code d\'invitation n\'est pas valide.'),
         ];
     }
 
@@ -38,6 +51,10 @@ class RegisterRequest extends FormRequest
 
         if (is_string($this->input('phone'))) {
             $this->merge(['phone' => PhoneNumber::normalize($this->input('phone'))]);
+        }
+
+        if (is_string($this->input('invite_code'))) {
+            $this->merge(['invite_code' => strtoupper(trim($this->input('invite_code')))]);
         }
     }
 }

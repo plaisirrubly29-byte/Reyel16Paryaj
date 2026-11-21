@@ -1,7 +1,12 @@
+// Formateurs créés une seule fois (V2-E05) : en créer un à chaque match coûtait ~25 % du calcul de l'accueil.
+// Mêmes options que toLocaleTimeString / toLocaleDateString, donc même affichage.
+const TIME = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const WEEKDAY_DATE = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
 /** « Aujourd'hui 15:30 », « Demain 17:00 » ou « sam. 18/10 · 15:00 » (heure locale du navigateur). */
 export function formatKickoff(iso: string, now: Date = new Date()): { day: string; time: string } {
   const date = new Date(iso);
-  const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const time = TIME.format(date);
 
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
@@ -10,7 +15,7 @@ export function formatKickoff(iso: string, now: Date = new Date()): { day: strin
     ? "Aujourd'hui"
     : days === 1
       ? 'Demain'
-      : date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+      : WEEKDAY_DATE.format(date);
 
   return { day, time };
 }
@@ -21,6 +26,19 @@ export function startsIn(iso: string, now: Date = new Date()): string | null {
   if (minutes <= 0 || minutes >= 24 * 60) return null;
   if (minutes < 60) return `Dans ${minutes} min`;
   return `Dans ${Math.floor(minutes / 60)} h${minutes % 60 >= 5 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
+}
+
+const SPORT_NAMES: Record<string, string> = {
+  soccer: 'Football',
+  basketball: 'Basketball',
+  baseball: 'Baseball',
+  tennis: 'Tennis',
+  icehockey: 'Hockey sur glace',
+};
+
+/** Nom d'un sport demandé dans l'URL (?sport=), même quand GET /sports ne le renvoie pas faute de match. */
+export function sportName(slug: string): string | null {
+  return SPORT_NAMES[slug] ?? null;
 }
 
 export function isLiveStatus(status: string): boolean {

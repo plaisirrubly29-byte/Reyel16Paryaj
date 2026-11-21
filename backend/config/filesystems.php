@@ -38,6 +38,15 @@ return [
             'report' => false,
         ],
 
+        // Documents KYC (V2-C03) : chiffrés par l'application avant écriture, jamais servis en direct ('serve' absent).
+        // En Staging et en Production, ce dossier est un volume Docker (kyc_documents) : à sauvegarder avec la base.
+        'kyc' => [
+            'driver' => 'local',
+            'root' => storage_path('app/kyc'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

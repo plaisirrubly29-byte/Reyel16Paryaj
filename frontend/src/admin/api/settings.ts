@@ -35,11 +35,19 @@ export type SettingVersion = {
   created_at: string;
 };
 
-export function usePlatformSettings() {
+/** `enabled` : à false sans la permission settings.view (l'API répondrait 403). */
+export function usePlatformSettings(enabled = true) {
   return useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: async ({ signal }) => (await api<Envelope<PlatformSettings>>('/admin/settings', { signal })).data,
+    enabled,
   });
+}
+
+/** Montant d'un paramètre de type money (unité mineure et devise) ; undefined s'il est absent ou pas encore chargé. */
+export function moneySetting(settings: PlatformSettings | undefined, key: string): { minor: number; currency: string } | undefined {
+  const item = settings?.items.find((i) => i.key === key);
+  return item && item.type === 'money' && typeof item.value === 'number' ? { minor: item.value, currency: item.currency ?? 'HTG' } : undefined;
 }
 
 export function useSettingVersions(page: number) {

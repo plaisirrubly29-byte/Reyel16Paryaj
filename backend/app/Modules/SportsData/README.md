@@ -25,6 +25,7 @@
 - `markets`
 - `selections`
 - `odds_snapshots`
+- `odds_overrides` (cotes fixées à la main, V2-D03)
 - `sports_data_api_calls` (journal des appels au fournisseur)
 
 ## Routes prévues
@@ -71,6 +72,22 @@ compte automatiquement).
 - Catalogue : la liste `/api/v1/events` ne montre que le 1X2 ; le détail `/api/v1/events/{id}/markets` renvoie
   le 1X2 puis le plus/moins (« Nombre de buts » au football, « Total de points » ailleurs ; libellés `+2.5` / `-2.5`).
 
+## Cotes fixées à la main (V2-D03, décision D-18)
+
+- **Repères gardés à chaque synchronisation** (`selections`) : `computed_odds` (cote calculée : marge de l'opérateur avec
+  l'argent réel, `OddsMargin`), `provider_odds` (bookmaker de référence) et `best_odds` (meilleure cote suivie, repère
+  contre l'arbitrage) ; null pour un marché maison. Les mêmes informations dans `odds_snapshots` à chaque version.
+- `Services/OddsOverrideService`, routes `/api/v1/admin/markets/{id}/odds-overrides` et `/api/v1/admin/odds-overrides`
+  (module Admin) : Opérations et Super Admin (`odds.override`), motif obligatoire, audit (`odds.override_*`).
+- Écart de 20 % au plus avec la cote calculée (`config/odds.php`) : en vigueur tout de suite ; au-delà, un second
+  administrateur valide (jamais le demandeur, rôle de plus de 24 h).
+- En vigueur : `selections.adjusted = true`, nouvelle version de cote (les tickets placés gardent la leur), mention
+  `adjusted` au catalogue ; la synchronisation met à jour la cote calculée mais **n'écrase pas** la cote fixée. Les
+  marchés maison (V2-D10), calculés depuis le 1X2 publié, suivent une cote du 1X2 fixée à la main.
+- Fin : à la demande (`end`), ou à la date limite et au plus tard au début du match (`odds:expire-overrides`, chaque
+  minute) ; la cote calculée revient, nouvelle version. Une seule demande en attente ou en vigueur par sélection. Une
+  sélection retirée par le fournisseur emporte sa demande (l'historique reste dans l'audit).
+
 ## Crédits et budget
 
 - **Journal** (`sports_data_api_calls`, modèle `ProviderApiCall`) : chaque réponse de The Odds API, payante ou
@@ -82,6 +99,11 @@ compte automatiquement).
   (`SPORTS_DATA_QUOTA_RESET_DAY`, ramené au dernier jour des mois courts).
 - **Budget par synchro** = ⌊(restants − `SPORTS_DATA_MIN_REMAINING`) / synchros restantes⌋, les synchros restantes
   étant comptées à partir de `SPORTS_DATA_SYNC_CRON` jusqu'à la remise à zéro. Une compétition coûte marchés × régions.
+- **Sélection** (`SPORTS_DATA_SPORTS`) : clés exactes, motifs (`tennis_*` : chaque tournoi de tennis a sa clé,
+  `soccer_*`…) ou `*`. Un motif ne retient que les compétitions actives de la liste gratuite `/sports`, hors
+  « vainqueur final ». À chaque synchro planifiée (sans `--competition`), les compétitions déjà enregistrées que la
+  liste ne désigne plus sont désactivées (`is_active`) : elles quittent le catalogue, le direct et les marchés
+  supplémentaires ; leurs résultats restent importés tant qu'un pari les attend. Remises dans la liste, elles reviennent.
 - **`sports-data:sync`** (si `SPORTS_DATA_BUDGET=true`) :
   1. saute les compétitions hors saison ou inconnues d'après la liste gratuite `/sports` (cache 6 h ; si la liste
      est indisponible, rien n'est sauté pour ce motif) ;

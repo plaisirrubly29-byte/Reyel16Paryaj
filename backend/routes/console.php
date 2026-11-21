@@ -34,9 +34,48 @@ Schedule::command('sports-data:live')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Marchés supplémentaires des matchs de football proches (double chance, handicap, buts par équipe…), match par match,
+// plafonnés en crédits par jour (SPORTS_DATA_EXTRA_DAILY_CREDITS). Désactivé par défaut (SPORTS_DATA_EXTRA).
+Schedule::command('sports-data:extra-markets')
+    ->cron((string) config('sports_data.extra_markets_cron'))
+    ->when(fn () => (bool) config('sports_data.extra_markets_enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Dépôts jamais confirmés par le prestataire dans le délai : « expired » (V2-B01).
+Schedule::command('payments:expire')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Statut relu chez le prestataire pour les dépôts en attente : le webhook Plop Plop n'est envoyé qu'une fois (V2-B02).
+Schedule::command('payments:reconcile')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Versement des retraits en attente et vérification de ceux en cours (V2-B03) ; sans effet s'ils sont désactivés.
+Schedule::command('payments:payouts')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Cotes fixées à la main arrivées à leur date limite ou au début du match : retour à la cote calculée (V2-D03, D-18).
+Schedule::command('odds:expire-overrides')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Import des résultats des matchs terminés (P5-04), seulement pour les compétitions qui en attendent.
 Schedule::command('settlement:import-results')
     ->cron((string) config('sports_data.results_cron'))
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Statistiques des matchs terminés (V2-D09 : mi-temps, corners, cartons), seulement pour ceux qui ont des paris en attente.
+Schedule::command('settlement:import-statistics')
+    ->cron((string) config('sports_data.statistics.cron'))
+    ->when(fn () => (string) config('sports_data.statistics.provider') !== '')
     ->withoutOverlapping()
     ->onOneServer();
 
@@ -50,5 +89,12 @@ Schedule::command('settlement:run')
 // Monitoring de production (P9-02) : alertes poussées à l'astreinte (Telegram, e-mail) et signal de vie externe.
 Schedule::command('monitoring:check')
     ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Tirages de borlette et résultats publiés (module Lottery), seulement quand LOTTERY_ENABLED=true.
+Schedule::command('lottery:sync')
+    ->cron((string) config('lottery.sync_cron'))
+    ->when(fn () => (bool) config('lottery.enabled'))
     ->withoutOverlapping()
     ->onOneServer();

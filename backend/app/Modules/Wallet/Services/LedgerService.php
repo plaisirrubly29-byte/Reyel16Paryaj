@@ -3,6 +3,8 @@
 namespace App\Modules\Wallet\Services;
 
 use App\Models\User;
+use App\Modules\Compliance\Enums\AmlMovement;
+use App\Modules\Compliance\Jobs\CheckAmlRules;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Models\Wallet;
@@ -54,6 +56,28 @@ class LedgerService
     }
 
     /**
+     * Dépôt confirmé par le webhook vérifié d'un prestataire de paiement (V2-B01). La référence unique
+     * (payment:<référence>) garantit un seul crédit par transaction, même si le webhook est rejoué.
+     */
+    public function providerDeposit(Wallet $wallet, Money $amount, string $reference, string $paymentId, string $providerLabel): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Deposit, $amount, $reference, 'payment', $paymentId,
+            description: __('Dépôt :provider', ['provider' => $providerLabel]));
+    }
+
+    /**
+     * Retrait demandé par le joueur et versé par un prestataire (V2-B03) : le montant est débité (réservé) dès la
+     * demande. Référence unique payout:<référence>.
+     *
+     * @throws ApiException insufficient_funds, wallet_frozen
+     */
+    public function providerWithdrawal(Wallet $wallet, Money $amount, string $reference, string $paymentId, string $methodLabel): LedgerEntry
+    {
+        return $this->post($wallet, LedgerEntryType::Withdrawal, $amount, $reference, 'payment', $paymentId,
+            description: __('Retrait :method', ['method' => $methodLabel]));
+    }
+
+    /**
      * Retrait remis hors plateforme, enregistré par le Super Admin. Refusé si le solde est insuffisant ou gelé.
      *
      * @throws ApiException insufficient_funds, wallet_frozen
@@ -86,16 +110,12 @@ class LedgerService
     /**
      * Écriture compensatoire : annule l'effet de $entry par une écriture de sens opposé.
      * Une écriture ne peut être compensée qu'une fois ; une compensation ne se compense pas.
+     * Le joueur voit un libellé neutre ; le motif interne ($reason) reste dans metadata, pour l'équipe (revue P8-02, F7).
      */
     public function reverse(LedgerEntry $entry, string $reference, string $reason, ?User $actor = null): LedgerEntry
     {
         if ($entry->type === LedgerEntryType::Reversal) {
             throw new LogicException('Une écriture compensatoire ne peut pas être compensée.');
-        }
-
-        $existing = LedgerEntry::where('reversal_of_id', $entry->id)->first();
-        if ($existing !== null) {
-            return $this->assertReplay($existing, LedgerEntryType::Reversal, -$entry->amount_minor, $reference);
         }
 
         return $this->post(
@@ -105,9 +125,10 @@ class LedgerService
             $reference,
             $entry->related_type,
             $entry->related_id,
-            description: $reason,
+            description: __("Correction de l'opération n° :id", ['id' => $entry->id]),
             actor: $actor,
             reversalOf: $entry,
+            metadata: ['reason' => $reason],
         );
     }
 
@@ -124,6 +145,7 @@ class LedgerService
         ?string $description = null,
         ?User $actor = null,
         ?LedgerEntry $reversalOf = null,
+        ?array $metadata = null,
     ): LedgerEntry {
         if ($amount->currency !== $wallet->currency) {
             throw new InvalidArgumentException("Devise {$amount->currency} différente de celle du portefeuille ({$wallet->currency}).");
@@ -136,12 +158,19 @@ class LedgerService
 
         $signed = $sign === null ? $amount->minor : $sign * $amount->minor;
 
-        return DB::transaction(function () use ($wallet, $type, $signed, $reference, $relatedType, $relatedId, $description, $actor, $reversalOf) {
+        return DB::transaction(function () use ($wallet, $type, $signed, $reference, $relatedType, $relatedId, $description, $actor, $reversalOf, $metadata) {
             // Verrou sur le portefeuille : les écritures d'un même portefeuille sont sérialisées.
             $locked = Wallet::whereKey($wallet->id)->lockForUpdate()->firstOrFail();
 
             // Idempotence : la même opération rejouée renvoie l'écriture d'origine.
             $existing = LedgerEntry::where('reference', $reference)->first();
+            if ($existing !== null) {
+                return $this->assertReplay($existing, $type, $signed, $reference, $locked->id);
+            }
+
+            // Déjà compensée, y compris par une requête concurrente sous une autre référence : on rejoue la compensation
+            // existante. Vérifié sous le verrou, sinon la contrainte unique donnait une erreur 500 (revue P8-02, F8).
+            $existing = $reversalOf === null ? null : LedgerEntry::where('reversal_of_id', $reversalOf->id)->first();
             if ($existing !== null) {
                 return $this->assertReplay($existing, $type, $signed, $reference, $locked->id);
             }
@@ -159,7 +188,7 @@ class LedgerService
                 ]);
             }
 
-            return LedgerEntry::create([
+            $entry = LedgerEntry::create([
                 'wallet_id' => $locked->id,
                 'type' => $type,
                 'amount_minor' => $signed,
@@ -170,8 +199,21 @@ class LedgerService
                 'related_type' => $relatedType,
                 'related_id' => $relatedId,
                 'description' => $description,
+                'metadata' => $metadata,
                 'created_by' => $actor?->id,
             ]);
+
+            // Contrôle AML de chaque dépôt et retrait (V2-C04), après la validation : jamais pour une écriture annulée.
+            $movement = match ($type) {
+                LedgerEntryType::Deposit => AmlMovement::Deposit,
+                LedgerEntryType::Withdrawal => AmlMovement::Withdrawal,
+                default => null,
+            };
+            if ($movement !== null) {
+                CheckAmlRules::dispatch($locked->user_id, $entry->id, $movement, abs($signed), $locked->currency, $entry->created_at)->afterCommit();
+            }
+
+            return $entry;
         });
     }
 

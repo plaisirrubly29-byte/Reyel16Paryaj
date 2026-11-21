@@ -4,15 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#1340d8" />
+    <meta name="theme-color" content="#0b1847" />
+    <!-- Application installable (V2-E05) : manifeste, icônes, mode plein écran sur iPhone. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Reyel16" />
     <meta name="description" content="REYEL 16 PARYAJ — paris sportifs sur le football, le basketball et le baseball." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet" />
+    <!-- Pas de Google Fonts (V2-E05) : Roboto est la police d'Android ; ailleurs, la police du système. Aucun blocage du
+         premier affichage ni requête vers un autre site. -->
+    <!-- Logo préchargé (V2-E05) : il est dans l'en-tête de chaque page et c'est l'image principale de l'accueil. -->
+    <link rel="preload" as="image" href="/brand/reyel16-logo-sm.jpg" fetchpriority="high" />
     <title>REYEL 16 PARYAJ — Paris sportifs</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Coquille de démarrage (V2-E05) : l'en-tête s'affiche dès l'arrivée du CSS ; React la remplace au même endroit. -->
+    <div id="root"><header class="site-header" aria-hidden="true"><div class="site-header-inner"><span class="brand"><span class="brand-logo boot-logo"></span></span></div></header></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

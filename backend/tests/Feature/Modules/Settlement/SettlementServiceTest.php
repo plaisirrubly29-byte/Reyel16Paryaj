@@ -270,6 +270,57 @@ class SettlementServiceTest extends TestCase
         $this->assertSame(BetTicketStatus::Lost, $other->fresh()->status);
     }
 
+    public function test_draw_no_bet_is_void_on_a_draw(): void
+    {
+        $market = $this->market(key: 'draw_no_bet', odds: ['home' => '1.55', 'away' => '2.45']);
+        $ticket = $this->bet([[$market, 'home']]);
+
+        $this->finish($market, '1', '1');
+
+        $this->assertSame(BetTicketStatus::Void, $ticket->fresh()->status);
+        $this->assertSame(1000_00, $this->balance());
+    }
+
+    public function test_handicap_is_settled_on_the_goal_difference_with_the_home_line_frozen_on_the_ticket(): void
+    {
+        $half = $this->market(key: 'spreads', line: '-0.5', odds: ['home' => '1.95', 'away' => '1.90']);
+        $away = $this->bet([[$half, 'away']]); // Chelsea +0.5
+        $half->update(['line' => '-1.5']);
+
+        $this->finish($half, '1', '1');
+
+        $this->assertSame(BetTicketStatus::Won, $away->fresh()->status);
+        $this->assertSame(['away' => 'won', 'home' => 'lost'], $half->selections()->orderBy('key')->pluck('result', 'key')->all());
+    }
+
+    public function test_handicap_on_a_whole_line_reached_exactly_is_void(): void
+    {
+        $market = $this->market(key: 'spreads', line: '-1', odds: ['home' => '2.40', 'away' => '1.60']);
+        $ticket = $this->bet([[$market, 'home']]);
+
+        $this->finish($market, '2', '1');
+
+        $this->assertSame(BetTicketStatus::Void, $ticket->fresh()->status);
+    }
+
+    public function test_markets_with_several_lines_read_the_line_in_the_selection_key(): void
+    {
+        $totals = $this->market(key: 'alternate_totals', odds: ['over_1.5' => '1.25', 'under_1.5' => '3.80', 'over_3' => '2.60', 'under_3' => '1.48']);
+        $spreads = $this->market(key: 'alternate_spreads', odds: ['home_-1.5' => '2.90', 'away_+1.5' => '1.40', 'home_+1' => '1.30', 'away_-1' => '3.30']);
+        $team = $this->market(key: 'team_totals', odds: ['home_over_1.5' => '1.60', 'home_under_1.5' => '2.25', 'away_over_0.5' => '1.85', 'away_under_0.5' => '1.95']);
+        $parity = $this->market(key: 'odd_even', odds: ['odd' => '1.95', 'even' => '1.85']);
+        $ticket = $this->bet([[$team, 'away_over_0.5']]);
+
+        $this->finish($totals, '2', '1');
+
+        $this->assertSame(BetTicketStatus::Won, $ticket->fresh()->status);
+        $results = fn (Market $m) => $m->selections()->orderBy('key')->pluck('result', 'key')->all();
+        $this->assertSame(['over_1.5' => 'won', 'over_3' => 'void', 'under_1.5' => 'lost', 'under_3' => 'void'], $results($totals));
+        $this->assertSame(['away_+1.5' => 'won', 'away_-1' => 'lost', 'home_+1' => 'won', 'home_-1.5' => 'lost'], $results($spreads));
+        $this->assertSame(['away_over_0.5' => 'won', 'away_under_0.5' => 'lost', 'home_over_1.5' => 'won', 'home_under_1.5' => 'lost'], $results($team));
+        $this->assertSame(['even' => 'lost', 'odd' => 'won'], $results($parity));
+    }
+
     public function test_an_unknown_market_is_left_pending_and_reported(): void
     {
         $market = $this->market(key: 'exotic', odds: ['a' => '1.50', 'b' => '2.50']);

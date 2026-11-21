@@ -3,8 +3,11 @@
 namespace Tests\Feature\Modules\IdentityAccess;
 
 use App\Models\User;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Models\AuditLog;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
+use App\Modules\IdentityAccess\Models\TermsAcceptance;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +34,8 @@ class AuthApiTest extends TestCase
             'password_confirmation' => 'motdepasse123',
             'birth_date' => now()->subYears(25)->toDateString(),
             'country' => 'ht',
+            'terms_accepted' => true,
+            'terms_version' => '2026-11-02',
         ], $overrides);
     }
 
@@ -51,6 +56,31 @@ class AuthApiTest extends TestCase
         $this->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.phone', '34123456');
     }
 
+    public function test_closed_beta_requires_a_valid_invite_code_case_insensitive(): void
+    {
+        config(['identity.invite_codes' => ['BETA2026', 'AMIS']]);
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData())
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'validation_failed')
+            ->assertJsonPath('error.details.invite_code.0', 'Les inscriptions se font sur invitation pendant la bêta : saisissez votre code d\'invitation.');
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData(['invite_code' => 'FAUX']))
+            ->assertStatus(422)
+            ->assertJsonPath('error.details.invite_code.0', 'Ce code d\'invitation n\'est pas valide.');
+        $this->assertDatabaseCount('users', 0);
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData(['invite_code' => ' beta2026 ']))->assertCreated();
+        $this->assertDatabaseHas('users', ['phone' => '34123456']);
+    }
+
+    public function test_open_registration_ignores_the_invite_code_when_no_list_is_set(): void
+    {
+        config(['identity.invite_codes' => []]);
+
+        $this->postJson('/api/v1/auth/register', $this->registrationData(['invite_code' => 'NIMPORTE']))->assertCreated();
+    }
+
     public function test_register_without_email_succeeds_and_stores_a_null_email(): void
     {
         $this->postJson('/api/v1/auth/register', $this->registrationData())
@@ -66,6 +96,42 @@ class AuthApiTest extends TestCase
         $this->postJson('/api/v1/auth/register', $this->registrationData(['phone' => '+509 34-12 34-56']))
             ->assertCreated()
             ->assertJsonPath('data.phone', '34123456');
+    }
+
+    public function test_register_records_the_acceptance_of_the_terms_with_their_version(): void
+    {
+        $this->travelTo('2026-11-03 10:00:00');
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
+            ->withHeader('User-Agent', 'Mozilla/5.0 (Android 14) Chrome/130')
+            ->postJson('/api/v1/auth/register', $this->registrationData())
+            ->assertCreated();
+
+        $acceptance = TermsAcceptance::sole();
+        $this->assertSame(User::where('phone', '34123456')->value('id'), $acceptance->user_id);
+        $this->assertSame('2026-11-02', $acceptance->version);
+        $this->assertSame('2026-11-03 10:00:00', $acceptance->accepted_at->toDateTimeString());
+        $this->assertSame('203.0.113.7', $acceptance->ip_address);
+        $this->assertSame('Mozilla/5.0 (Android 14) Chrome/130', $acceptance->user_agent);
+    }
+
+    public function test_register_requires_the_terms_to_be_accepted_in_their_current_version(): void
+    {
+        foreach ([['terms_accepted' => false], ['terms_accepted' => null]] as $overrides) {
+            $this->postJson('/api/v1/auth/register', $this->registrationData($overrides))
+                ->assertStatus(422)
+                ->assertJsonPath('error.code', 'validation_failed')
+                ->assertJsonStructure(['error' => ['details' => ['terms_accepted']]]);
+        }
+
+        // Textes mis à jour côté serveur pendant que le joueur remplissait le formulaire : il doit recharger la page.
+        config(['identity.terms_version' => '2026-12-01']);
+        $this->postJson('/api/v1/auth/register', $this->registrationData())
+            ->assertStatus(422)
+            ->assertJsonStructure(['error' => ['details' => ['terms_version']]]);
+
+        $this->assertSame(0, User::count());
+        $this->assertSame(0, TermsAcceptance::count());
     }
 
     public function test_register_validates_input(): void
@@ -223,6 +289,45 @@ class AuthApiTest extends TestCase
             ->assertJsonPath('error.code', 'account_suspended');
 
         $this->assertGuest('web');
+    }
+
+    public function test_a_successful_login_is_audited(): void
+    {
+        $user = User::factory()->create(['phone' => '34123456', 'password' => 'motdepasse123']);
+
+        $this->postJson('/api/v1/auth/login', ['phone' => '34123456', 'password' => 'motdepasse123'])->assertOk();
+
+        $log = AuditLog::where('action', AuditAction::LoginSucceeded)->sole();
+        $this->assertSame((string) $user->id, $log->subject_id);
+        $this->assertSame($user->id, $log->actor_id);
+        $this->assertNotNull($log->ip_address);
+    }
+
+    /** Revue P8-02, F12 : chaque échec est tracé, sans mot de passe ni identifiant en clair, sans rien changer à la réponse. */
+    public function test_failed_logins_are_audited_without_the_password_or_the_identifier_in_clear(): void
+    {
+        $player = User::factory()->create(['phone' => '34123456', 'email' => 'chef@example.com', 'password' => 'motdepasse123']);
+        User::factory()->withStatus(AccountStatus::Suspended)->create(['phone' => '37654321', 'password' => 'motdepasse123']);
+
+        $this->postJson('/api/v1/auth/login', ['phone' => '34999999', 'password' => 'secret-tente-1'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/login', ['email' => 'chef@example.com', 'password' => 'secret-tente-2'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/login', ['phone' => '37654321', 'password' => 'motdepasse123'])->assertStatus(423);
+
+        $logs = AuditLog::where('action', AuditAction::LoginFailed)->orderBy('id')->get();
+        $this->assertCount(3, $logs);
+
+        [$unknown, $wrongPassword, $suspended] = $logs;
+        $this->assertNull($unknown->subject_id);
+        $this->assertSame(['reason' => 'unknown_account', 'field' => 'phone', 'login' => '****9999'], $unknown->metadata);
+        $this->assertSame((string) $player->id, $wrongPassword->subject_id);
+        $this->assertSame(['reason' => 'wrong_password', 'field' => 'email', 'login' => 'c***@example.com'], $wrongPassword->metadata);
+        $this->assertSame('account_suspended', $suspended->metadata['reason']);
+        $this->assertNull($unknown->actor_id);
+
+        $journal = $logs->toJson();
+        foreach (['secret-tente-1', 'secret-tente-2', 'motdepasse123', '34999999', 'chef@example.com'] as $secret) {
+            $this->assertStringNotContainsString($secret, $journal);
+        }
     }
 
     public function test_login_is_rate_limited(): void

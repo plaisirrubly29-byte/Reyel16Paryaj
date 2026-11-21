@@ -131,6 +131,38 @@ class RbacTest extends TestCase
         $this->assertTrue($admin->fresh()->hasRole(RoleSlug::SuperAdmin));
     }
 
+    /**
+     * D-07 (M3) et audit du 18/11/2026 (constat n° 9) : il reste toujours au moins un Super Admin actif. Celui qui agit
+     * ne peut ni retirer ses propres rôles ni suspendre son propre compte, et seul un Super Admin peut suspendre un
+     * administrateur.
+     */
+    public function test_the_last_super_admin_can_never_be_removed_or_suspended(): void
+    {
+        $a = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
+        $b = User::factory()->withRole(RoleSlug::SuperAdmin)->create();
+        $support = User::factory()->withRole(RoleSlug::Support)->create();
+        $suspend = fn (User $target) => $this->patchJson("/api/v1/admin/users/{$target->id}", ['status' => 'suspended', 'reason' => 'Test du dernier Super Admin'], [
+            'Idempotency-Key' => (string) Str::uuid(),
+        ]);
+
+        // A retire le rôle de B : A devient le dernier Super Admin.
+        $this->actingAsVerifiedAdmin($a)->putRoles($b, [])->assertOk();
+        $this->assertSame([$a->id], User::whereHas('roles', fn ($q) => $q->where('slug', 'super_admin'))->pluck('id')->all());
+
+        // Le dernier Super Admin ne peut ni retirer ses propres rôles…
+        $this->actingAsVerifiedAdmin($a)->putRoles($a, [])
+            ->assertForbidden()->assertJsonPath('error.code', 'cannot_modify_own_roles');
+        // … ni suspendre son propre compte…
+        $suspend($a)->assertForbidden()->assertJsonPath('error.code', 'cannot_change_own_status');
+        // … et un rôle qui n'est pas Super Admin ne peut pas suspendre un administrateur.
+        $this->actingAsVerifiedAdmin($support);
+        $suspend($a)->assertForbidden()->assertJsonPath('error.code', 'forbidden');
+
+        $a->refresh();
+        $this->assertTrue($a->hasRole(RoleSlug::SuperAdmin));
+        $this->assertSame(AccountStatus::Active, $a->status);
+    }
+
     public function test_admin_without_roles_manage_cannot_elevate_anyone_including_self(): void
     {
         $support = User::factory()->withRole(RoleSlug::Support)->create();

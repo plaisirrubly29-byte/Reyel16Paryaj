@@ -19,6 +19,10 @@ export type AdminUser = {
   is_admin: boolean;
   created_at: string;
   last_login_at: string | null;
+  /** Mise maximale par ticket posée par un administrateur (V2-D05), en unité mineure ; null = limite générale. */
+  max_stake_minor: number | null;
+  /** Vérification d'identité (V2-C03). */
+  kyc_status: 'none' | 'pending' | 'approved' | 'rejected';
   roles?: string[];
   mfa_enabled?: boolean;
   profile?: {
@@ -78,6 +82,31 @@ export function useChangeUserStatus(id: string) {
     onSuccess: (user) => {
       queryClient.setQueryData(['admin', 'users', id], user);
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'], exact: false });
+    },
+  });
+}
+
+/** null : retirer la limite propre au joueur (la limite générale s'applique de nouveau). */
+export type StakeLimitChange = { maxStakeMinor: number | null; reason: string; idempotencyKey: string };
+
+/**
+ * Mise maximale par ticket propre à un joueur (V2-D05, permission users.suspend, motif obligatoire, audité).
+ * Elle ne fait que baisser la limite générale ; les bornes sont vérifiées par le serveur.
+ */
+export function useSetStakeLimit(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ maxStakeMinor, reason, idempotencyKey }: StakeLimitChange) =>
+      (await api<Envelope<AdminUser>>(`/admin/users/${encodeURIComponent(id)}/stake-limit`, {
+        method: 'PUT',
+        body: { max_stake_minor: maxStakeMinor, reason },
+        idempotencyKey,
+      })).data,
+    onSuccess: (user) => {
+      // La fiche affichée vient d'être remplacée par la réponse : seules les listes sont à relire.
+      queryClient.setQueryData(['admin', 'users', id], user);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'], predicate: (q) => q.queryKey[2] !== id });
     },
   });
 }

@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { useSports } from '../../features/catalogue/api/catalogue';
+import { LEGAL_PAGES } from '../../features/legal/legal';
 import { api } from '../../shared/api/client';
 import { BrandLogo } from './BrandLogo';
 
@@ -7,6 +9,8 @@ type Health = { status: string; version: string };
 
 /** Pied de page public (bleu marine) : présentation, liens, jeu responsable et état de l'API (discret, n'empêche jamais l'affichage). */
 export function SiteFooter() {
+  // Un lien par sport qui a des matchs : jamais de rubrique vide.
+  const sports = useSports().data ?? [];
   const health = useQuery({
     queryKey: ['health'],
     queryFn: ({ signal }) => api<Health>('/health', { signal }),
@@ -21,15 +25,14 @@ export function SiteFooter() {
       <div className="footer-inner">
         <div className="footer-brand">
           <p className="brand"><BrandLogo /><span className="sr-only">REYEL 16 PARYAJ</span></p>
-          <p className="small">Paris sportifs sur le football, le basketball et le baseball.</p>
+          <p className="small">Paris sportifs en ligne, cotes mises à jour toute la journée.</p>
         </div>
 
         <nav className="footer-col" aria-label="Paris sportifs">
           <p className="footer-title">Paris sportifs</p>
           <Link to="/">Accueil</Link>
           <Link to="/sports">Sports &amp; matchs</Link>
-          <Link to="/sports?sport=soccer">Football</Link>
-          <Link to="/sports?sport=basketball">Basketball</Link>
+          {sports.map((s) => <Link key={s.slug} to={`/sports?sport=${encodeURIComponent(s.slug)}`}>{s.name}</Link>)}
           <Link to="/?tab=live">Live</Link>
         </nav>
 
@@ -46,6 +49,11 @@ export function SiteFooter() {
           <p className="small">Interdit aux moins de 18 ans. Le jeu doit rester un divertissement : fixez-vous des limites et faites une pause si besoin.</p>
           <span className="age-badge" aria-label="Réservé aux plus de 18 ans">18+</span>
         </div>
+
+        <nav className="footer-col" aria-label="Informations">
+          <p className="footer-title">Informations</p>
+          {LEGAL_PAGES.map((p) => <Link key={p.to} to={p.to}>{p.title}</Link>)}
+        </nav>
       </div>
 
       <div className="footer-bottom">

@@ -32,6 +32,8 @@ class EnsureMfaVerified
             throw new ApiException('mfa_required', __('Saisissez votre code de double authentification.'), 403);
         }
 
+        $this->mfa->touch($request->session());
+
         return $next($request);
     }
 }

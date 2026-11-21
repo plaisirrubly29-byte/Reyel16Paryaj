@@ -2,6 +2,7 @@
 
 namespace App\Modules\Compliance\Models;
 
+use App\Modules\Compliance\Enums\LimitKind;
 use App\Modules\Compliance\Enums\LimitPeriod;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -32,6 +33,11 @@ class BettingLimit extends Model
             'pending_amount_minor' => 'integer',
             'pending_effective_at' => 'datetime',
         ];
+    }
+
+    public function kind(): LimitKind
+    {
+        return LimitKind::Stake;
     }
 
     public function hasPendingChange(): bool

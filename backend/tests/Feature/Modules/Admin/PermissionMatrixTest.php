@@ -8,6 +8,7 @@ use App\Modules\Admin\Models\FinanceCorrection;
 use App\Modules\IdentityAccess\Enums\RoleSlug;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Models\OddsOverride;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\Wallet\Models\LedgerEntry;
@@ -54,21 +55,23 @@ class PermissionMatrixTest extends TestCase
     /** Permissions attendues par rôle, transcrites de docs/permissions-matrix.md (✅, 👁 et 2️⃣ ; *.approve = second validateur). */
     private const EXPECTED_PERMISSIONS = [
         self::SUPER_ADMIN => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'settlement.run',
+            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'settlement.run',
             'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
             'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
-            'audit.view', 'audit.export', 'roles.manage',
+            'aml.view', 'audit.view', 'audit.export', 'roles.manage', 'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
-        self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'results.enter', 'results.approve', 'tickets.view'],
+        self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'tickets.view'],
         self::FINANCE => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data',
-            'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'audit.view', 'audit.export',
+            'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'aml.view', 'audit.view', 'audit.export',
         ],
-        // Support : utilisateurs en données minimales (pas users.view_personal_data).
-        self::SUPPORT => ['dashboard.view', 'events.view', 'users.view', 'users.suspend', 'tickets.view'],
+        // Support : utilisateurs en données minimales (pas users.view_personal_data) ; examine et valide les dossiers KYC
+        // (V2-C03), sans pouvoir les refuser.
+        self::SUPPORT => ['dashboard.view', 'events.view', 'users.view', 'users.suspend', 'tickets.view', 'kyc.view', 'kyc.approve'],
         self::COMPLIANCE => [
             'dashboard.view', 'events.view', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view',
-            'ledger.view', 'settings.view', 'responsible_gaming.view', 'responsible_gaming.manage', 'audit.view', 'audit.export',
+            'ledger.view', 'settings.view', 'responsible_gaming.view', 'responsible_gaming.manage', 'aml.view', 'aml.review',
+            'audit.view', 'audit.export', 'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
     ];
 
@@ -81,19 +84,25 @@ class PermissionMatrixTest extends TestCase
         "Vue d'ensemble" => ['GET api/v1/admin/dashboard', 'GET api/v1/admin/alerts', 'GET api/v1/admin/search'],
         'Événements & marchés — consulter' => [
             'GET api/v1/admin/events', 'GET api/v1/admin/events/{event}', 'GET api/v1/admin/markets/{market}', 'GET api/v1/admin/events/{event}/results',
+            'GET api/v1/admin/odds-overrides', 'GET api/v1/admin/odds-overrides/{override}',
         ],
         'Marché — suspendre / masquer' => ['PATCH api/v1/admin/markets/{market}'],
+        'Cotes — fixer à la main / valider' => [
+            'POST api/v1/admin/markets/{market}/odds-overrides', 'POST api/v1/admin/odds-overrides/{override}/approve',
+            'POST api/v1/admin/odds-overrides/{override}/reject', 'POST api/v1/admin/odds-overrides/{override}/end',
+        ],
         'Résultats — saisir / valider' => [
             'POST api/v1/admin/events/{event}/result-corrections', 'GET api/v1/admin/result-corrections', 'GET api/v1/admin/result-corrections/{correction}',
             'POST api/v1/admin/result-corrections/{correction}/approve', 'POST api/v1/admin/result-corrections/{correction}/reject',
         ],
         'Règlement — lancer / relancer' => [], // aucune route : règlement automatique (job, commande settlement:run)
         'Utilisateurs — rechercher / consulter' => ['GET api/v1/admin/users', 'GET api/v1/admin/users/{user}'],
-        'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}'],
+        'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}', 'PUT api/v1/admin/users/{user}/stake-limit'],
         'Tickets — consulter' => ['GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure'],
         'Ledger / rapprochement — consulter' => [
             'GET api/v1/admin/ledger', 'GET api/v1/admin/finance/reconciliation', 'GET api/v1/admin/finance/corrections',
             'GET api/v1/admin/finance/corrections/{correction}', 'GET api/v1/admin/users/{user}/wallet',
+            'GET api/v1/admin/payments', 'GET api/v1/admin/payments/{payment}',
         ],
         'Correction financière' => [
             'POST api/v1/admin/finance/corrections', 'POST api/v1/admin/finance/corrections/{correction}/approve',
@@ -102,6 +111,14 @@ class PermissionMatrixTest extends TestCase
         'Solde joueur — dépôt / retrait' => ['POST api/v1/admin/users/{user}/wallet/adjustments'],
         'Paramètres' => ['GET api/v1/admin/settings', 'GET api/v1/admin/settings/versions', 'GET api/v1/admin/system', 'PUT api/v1/admin/settings'],
         'Limites jeu responsable' => ['GET api/v1/admin/users/{user}/responsible-gaming', 'POST api/v1/admin/users/{user}/responsible-gaming/reopen'],
+        'Alertes AML — consulter / traiter' => [
+            'GET api/v1/admin/aml/alerts', 'GET api/v1/admin/aml/alerts/{alert}', 'POST api/v1/admin/aml/alerts/{alert}/review',
+        ],
+        'KYC — consulter / valider' => [
+            'GET api/v1/admin/kyc', 'GET api/v1/admin/kyc/{submission}', 'GET api/v1/admin/kyc/{submission}/files/{file}',
+            'POST api/v1/admin/kyc/{submission}/approve',
+        ],
+        'KYC — refuser' => ['POST api/v1/admin/kyc/{submission}/reject'],
         'Audit & exports' => ['GET api/v1/admin/audit-logs', 'POST api/v1/admin/audit-logs/export'],
         'Gérer les rôles des autres' => ['PUT api/v1/admin/users/{user}/roles', 'DELETE api/v1/admin/users/{user}/mfa'],
     ];
@@ -194,6 +211,21 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', "events/{$this->event->id}", self::ALL);
         $this->assertAccess('GET', "markets/{$market->id}", self::ALL);
         $this->assertAccess('GET', "events/{$this->event->id}/results", self::ALL);
+        $this->assertAccess('GET', 'odds-overrides', self::ALL);
+        $this->assertAccess('GET', 'odds-overrides/'.self::MISSING, self::ALL);
+    }
+
+    /** Double validation au-delà de ±20 % (demandeur ≠ validateur) : OddsOverrideApiTest. */
+    public function test_row_odds_overrides_are_reserved_to_super_admin_and_operations(): void
+    {
+        $market = $this->event->markets()->firstOrFail();
+        $allowed = [self::SUPER_ADMIN, self::OPERATIONS];
+
+        $this->assertAccess('POST', "markets/{$market->id}/odds-overrides", $allowed);
+        $this->assertAccess('POST', 'odds-overrides/'.self::MISSING.'/approve', $allowed);
+        $this->assertAccess('POST', 'odds-overrides/'.self::MISSING.'/reject', $allowed);
+        $this->assertAccess('POST', 'odds-overrides/'.self::MISSING.'/end', $allowed);
+        $this->assertSame(0, OddsOverride::count(), 'Aucune requête sans corps ne doit fixer de cote.');
     }
 
     public function test_row_market_suspension_is_reserved_to_super_admin_and_operations(): void
@@ -259,6 +291,9 @@ class PermissionMatrixTest extends TestCase
     {
         $this->assertAccess('PATCH', "users/{$this->player->id}", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE]);
         $this->assertSame('active', $this->player->fresh()->status->value);
+        // Mise maximale propre au joueur (V2-D05) : même ligne, restriction plus légère qu'une suspension.
+        $this->assertAccess('PUT', "users/{$this->player->id}/stake-limit", [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE]);
+        $this->assertNull($this->player->fresh()->max_stake_minor);
     }
 
     public function test_row_tickets_are_readable_by_every_role(): void
@@ -277,6 +312,8 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', 'finance/corrections', $allowed);
         $this->assertAccess('GET', 'finance/corrections/'.self::MISSING, $allowed);
         $this->assertAccess('GET', "users/{$this->player->id}/wallet", $allowed);
+        $this->assertAccess('GET', 'payments', $allowed);
+        $this->assertAccess('GET', 'payments/'.self::MISSING, $allowed);
     }
 
     public function test_row_player_wallet_deposit_and_withdrawal_are_reserved_to_super_admin(): void
@@ -321,6 +358,26 @@ class PermissionMatrixTest extends TestCase
     {
         $this->assertAccess('GET', "users/{$this->player->id}/responsible-gaming", [self::SUPER_ADMIN, self::COMPLIANCE]);
         $this->assertAccess('POST', "users/{$this->player->id}/responsible-gaming/reopen", [self::COMPLIANCE]);
+    }
+
+    /** Règles, revue et audit : AmlAlertTest. */
+    public function test_row_aml_alerts_are_reviewed_by_compliance_and_read_only_for_super_admin_and_finance(): void
+    {
+        $readers = [self::SUPER_ADMIN, self::FINANCE, self::COMPLIANCE];
+
+        $this->assertAccess('GET', 'aml/alerts', $readers);
+        $this->assertAccess('GET', 'aml/alerts/'.self::MISSING, $readers);
+        $this->assertAccess('POST', 'aml/alerts/'.self::MISSING.'/review', [self::COMPLIANCE]);
+    }
+
+    public function test_row_kyc_is_reviewed_by_super_admin_support_and_compliance_and_rejected_by_compliance(): void
+    {
+        $reviewers = [self::SUPER_ADMIN, self::SUPPORT, self::COMPLIANCE];
+        $this->assertAccess('GET', 'kyc', $reviewers);
+        $this->assertAccess('GET', 'kyc/'.self::MISSING, $reviewers);
+        $this->assertAccess('GET', 'kyc/'.self::MISSING.'/files/'.self::MISSING, $reviewers);
+        $this->assertAccess('POST', 'kyc/'.self::MISSING.'/approve', $reviewers);
+        $this->assertAccess('POST', 'kyc/'.self::MISSING.'/reject', [self::SUPER_ADMIN, self::COMPLIANCE]);
     }
 
     public function test_row_audit_and_exports_are_reserved_to_super_admin_finance_and_compliance(): void

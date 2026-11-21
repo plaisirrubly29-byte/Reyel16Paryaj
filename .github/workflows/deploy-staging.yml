@@ -94,6 +94,9 @@ jobs:
           context: .
           file: docker/production/Dockerfile
           target: ${{ matrix.target }}
+          # Jeux virtuels visibles sur le Staging seulement (décision de Rubly PLAISIR, 2026-11-08).
+          build-args: |
+            VITE_VIRTUAL_GAMES=true
           load: true
           tags: ${{ needs.prepare.outputs.image }}-${{ matrix.target }}:${{ needs.prepare.outputs.tag }}
           labels: org.opencontainers.image.revision=${{ github.sha }}

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
-import { BetSlipPanel } from '../../betting/slip/BetSlipPanel';
 import { LIST_MARKETS, type ListMarketKey } from '../api/catalogue';
 import { MatchList } from './MatchList';
+import { SportSections } from './SportSections';
 import { SportTabs } from './SportTabs';
 import { SportsSidebar } from './SportsSidebar';
 
@@ -15,14 +15,16 @@ type Props = {
   /** Nombre de matchs affichés (accueil) ; la page Sports pagine. */
   perPage?: number;
   paginate?: boolean;
+  /** Filtre « Tous » (sans sport, compétition, recherche ni live) : matchs rangés par sport, sous un titre chacun. */
+  bySport?: boolean;
 };
 
 /**
- * Mise en page des paris en trois colonnes : sports et compétitions | matchs | coupon.
+ * Mise en page des paris en deux colonnes : sports et compétitions | matchs (le coupon est un panneau flottant, PublicLayout).
  * Onglet (à venir / live), sport, compétition, type de pari, recherche et page restent dans l'URL.
- * Sous 1180 px la colonne des sports disparaît ; sous 960 px le coupon s'ouvre depuis la barre d'onglets du bas.
+ * Sous 1180 px la colonne des sports disparaît (menu « Championnats » de l'en-tête).
  */
-export function BettingBoard({ children, title = 'Tous les matchs', perPage, paginate = false }: Props) {
+export function BettingBoard({ children, title = 'Tous les matchs', perPage, paginate = false, bySport = false }: Props) {
   const [params, setParams] = useSearchParams();
   const sport = params.get('sport') ?? undefined;
   const competition = params.get('competition') ?? undefined;
@@ -102,7 +104,7 @@ export function BettingBoard({ children, title = 'Tous les matchs', perPage, pag
               <Link to={sport ? `/sports?sport=${encodeURIComponent(sport)}` : '/sports'} className="link-button">Voir toutes les compétitions</Link>
             </p>
           )}
-          <MatchList
+          {bySport && !sport && !competition && !search && !live ? <SportSections market={market} /> : <MatchList
             sport={sport}
             competition={competition}
             search={search}
@@ -111,11 +113,9 @@ export function BettingBoard({ children, title = 'Tous les matchs', perPage, pag
             perPage={search || live ? 100 : perPage}
             page={search || live ? 1 : page}
             onPage={paginate && !search && !live ? (next) => { update({ page: next }); window.scrollTo({ top: 0 }); } : undefined}
-          />
+          />}
         </section>
       </div>
-
-      <BetSlipPanel />
     </div>
   );
 }

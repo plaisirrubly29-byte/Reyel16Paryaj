@@ -24,9 +24,14 @@ class SecurityHeaders
         $response->headers->add([
             'X-Content-Type-Options' => 'nosniff',
             'X-Frame-Options' => 'DENY',
-            'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none'",
             'Referrer-Policy' => 'no-referrer',
         ]);
+
+        // Une page HTML qui fixe sa propre CSP la garde (page du prestataire de paiement simulé, avec nonce) ;
+        // toute autre réponse reçoit la CSP la plus stricte.
+        if (! $response->headers->has('Content-Security-Policy')) {
+            $response->headers->set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+        }
 
         // HSTS seulement en HTTPS : derrière le reverse proxy, isSecure() suppose les proxies déclarés (B2).
         if ($request->isSecure()) {

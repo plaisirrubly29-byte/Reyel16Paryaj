@@ -12,6 +12,7 @@ use App\Modules\Compliance\Services\ResponsibleGamingService;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Models\Selection;
+use App\Modules\SportsData\Services\HouseMarkets;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\DB;
  *   type de pari et une seule sélection par match ;
  * - politique de changement de cote (config betting.odds_change_policy, décision D-05) :
  *   409 odds_changed avec les nouvelles cotes, rien n'est créé ;
+ * - plafonds d'engagement par match et par marché (V2-D05, ExposureGuard) et mise maximale propre au joueur ;
  * - ticket, sélections figées et réservation de la mise dans UNE transaction : solde insuffisant → rien n'est créé.
  *
  * Doublon : le middleware "idempotent" rejoue la réponse d'une requête déjà traitée. Il libère pourtant sa clé
@@ -40,6 +42,7 @@ class BetPlacementService
     public function __construct(
         private readonly LedgerService $ledger,
         private readonly ResponsibleGamingService $responsibleGaming,
+        private readonly ExposureGuard $exposure,
     ) {}
 
     /**
@@ -48,7 +51,7 @@ class BetPlacementService
      *
      * @throws ApiException stake_out_of_range, multiple_not_allowed, selection_unavailable,
      *                      same_event_selections, odds_changed, insufficient_funds, wallet_frozen,
-     *                      idempotency_key_reused, betting_paused, stake_limit_exceeded
+     *                      idempotency_key_reused, betting_paused, stake_limit_exceeded, risk_limit_exceeded
      */
     public function place(User $user, array $picks, int $stakeMinor, ?string $currency = null, ?string $placementKey = null): BetTicket
     {
@@ -112,7 +115,8 @@ class BetPlacementService
         }
 
         $min = (int) config('betting.min_stake_minor');
-        $max = (int) config('betting.max_stake_minor');
+        // Mise maximale posée par un administrateur pour ce joueur (V2-D05), jamais au-dessus de la limite générale.
+        $max = min((int) config('betting.max_stake_minor'), $user->max_stake_minor ?? PHP_INT_MAX);
         if ($stakeMinor < $min || $stakeMinor > $max) {
             throw new ApiException('stake_out_of_range', __('Mise hors limites.'), 422, [
                 'min' => ['minor' => $min, 'currency' => $wallet->currency],
@@ -131,6 +135,7 @@ class BetPlacementService
             $selections = $this->lockSelections($picks);
             $this->assertAvailable($picks, $selections);
             $this->assertOddsUnchanged($picks, $selections);
+            $this->assertHouseMarketStake($selections, $stakeMinor, $wallet->currency);
 
             // Cotes du serveur uniquement. Produit gardé à 6 décimales pour le gain, arrondi à 3 pour l'affichage.
             $product = $selections->reduce(fn (string $carry, Selection $s) => bcmul($carry, (string) $s->odds, 6), '1');
@@ -168,6 +173,9 @@ class BetPlacementService
                     'odds_version' => $market->odds_version,
                 ]);
             }
+
+            // Plafonds d'engagement, ticket inséré : il compte dans le calcul ; un refus annule la transaction.
+            $this->exposure->assertWithinLimits($ticket);
 
             // Échec (solde insuffisant, portefeuille gelé) : l'exception annule toute la transaction.
             $this->ledger->reserveStake($wallet, Money::ofMinor($stakeMinor, $wallet->currency), "bet:{$ticket->id}:stake", (string) $ticket->id);
@@ -246,7 +254,10 @@ class BetPlacementService
     }
 
     /**
-     * @param  list<array{selection_id: int|string, odds: string}>  $picks
+     * Refuse le pari si la cote vue a changé, ou si la version du marché vue (odds_version) n'est plus la bonne :
+     * un changement de ligne (totals/spreads 2.5 → 3.5) à cote égale change le pari sans changer la cote.
+     *
+     * @param  list<array{selection_id: int|string, odds: string, odds_version?: int|string}>  $picks
      * @param  Collection<int, Selection>  $selections
      */
     private function assertOddsUnchanged(array $picks, Collection $selections): void
@@ -256,12 +267,15 @@ class BetPlacementService
 
         foreach ($picks as $pick) {
             $selection = $found[(int) $pick['selection_id']];
-            if (bccomp($pick['odds'], (string) $selection->odds, 3) !== 0) {
+            $staleVersion = isset($pick['odds_version']) && (int) $pick['odds_version'] !== (int) $selection->market->odds_version;
+            if ($staleVersion || bccomp($pick['odds'], (string) $selection->odds, 3) !== 0) {
                 $changed[] = [
                     'selection_id' => (string) $selection->id,
                     'odds' => MarketResource::odds((string) $selection->odds), // même format que le catalogue
 
                     'odds_version' => $selection->market->odds_version,
+                    // Libellé avec la ligne en vigueur (ex. « > 3.5 ») : le coupon montre ce qui a changé.
+                    'label' => MarketResource::selectionLabel($selection->key, $selection->market->line),
                 ];
             }
         }
@@ -271,6 +285,27 @@ class BetPlacementService
                 'selections' => $changed,
             ]);
         }
+    }
+
+    /**
+     * Marchés maison (V2-D10), cotés par REYEL 16 sans bookmaker de référence : mise plafonnée plus bas
+     * (sports_data.house_markets.max_stake_minor) pour tout ticket qui en contient un.
+     *
+     * @param  Collection<int, Selection>  $selections
+     */
+    private function assertHouseMarketStake(Collection $selections, int $stakeMinor, string $currency): void
+    {
+        $max = (int) config('sports_data.house_markets.max_stake_minor');
+        if ($stakeMinor <= $max || ! $selections->contains(fn (Selection $s) => HouseMarkets::isHouse($s->market->key))) {
+            return;
+        }
+
+        throw new ApiException('stake_out_of_range', __('Mise maximale sur les paris spéciaux REYEL 16 : :max.', [
+            'max' => number_format(intdiv($max, 100), 0, ',', ' ')." {$currency}",
+        ]), 422, [
+            'min' => ['minor' => (int) config('betting.min_stake_minor'), 'currency' => $currency],
+            'max' => ['minor' => $max, 'currency' => $currency],
+        ]);
     }
 
     /** @return array<string, mixed> règles appliquées, figées sur le ticket */

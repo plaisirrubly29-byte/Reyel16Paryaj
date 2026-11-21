@@ -60,7 +60,7 @@ réelle du client à php-fpm (FastCGI) : aucun proxy de confiance à déclarer (
 |---|---|---|
 | `DB_PERSISTENT` | `true` | Une connexion PostgreSQL par processus php-fpm au lieu d'une par requête |
 | `CATALOGUE_CACHE_SECONDS` | `10` | Réponses du catalogue public servies depuis Redis pendant 10 s (le pari revérifie toujours la cote) |
-| `PHP_FPM_MAX_CHILDREN` | `4` (2 vCPU) | Processus php-fpm au plus : environ 2 par vCPU |
+| `PHP_FPM_MAX_CHILDREN` | `4` (2 vCPU) | Processus php-fpm au plus : environ 2 par vCPU (`2` sur 1 vCPU : la réserve de processus s'adapte au démarrage) |
 
 Capacité mesurée et limites : [`docs/qa/P8-03-test-de-charge.md`](../qa/P8-03-test-de-charge.md).
 
