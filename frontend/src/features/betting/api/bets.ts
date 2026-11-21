@@ -1,5 +1,6 @@
+import { useRef } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, newIdempotencyKey, type Envelope, type Money, type Paginated } from '../../../shared/api/client';
+import { api, ApiError, newIdempotencyKey, type Envelope, type Money, type Paginated } from '../../../shared/api/client';
 
 /** Ticket accepté par le serveur (docs/api/openapi.yaml, schéma BetTicket) : reçu immuable. */
 export type BetTicketStatus = 'pending' | 'won' | 'lost' | 'void';
@@ -71,22 +72,56 @@ export function useBets(page = 1, filters: BetFilters = {}) {
 }
 
 /**
+ * Résultat inconnu : la réponse n'est pas arrivée (connexion coupée, serveur en panne) ou la même demande est encore
+ * en cours. Le pari a pu être placé et la mise débitée.
+ */
+export function isUncertainBetError(error: unknown): boolean {
+  return error instanceof ApiError
+    && (error.status === 0 || error.status >= 500 || error.code === 'idempotency_request_in_progress');
+}
+
+/** Même pari voulu : même mise et mêmes sélections, aux mêmes cotes et versions de marché. */
+function intentOf(input: PlaceBetInput): string {
+  return JSON.stringify([input.stakeMinor, input.currency, input.selections.map((s) => [s.selectionId, s.odds, s.oddsVersion])]);
+}
+
+/**
  * POST /bets — le serveur revalide tout (cote, disponibilité, limites, solde) et débite la mise.
- * Une clé d'idempotence par tentative : un double envoi de la même tentative ne crée qu'un ticket.
+ *
+ * Une clé d'idempotence par pari voulu, pas par clic : si la réponse se perd après le débit, le joueur qui réessaie
+ * renvoie la même clé et le serveur rend le ticket déjà créé au lieu d'en créer un second. La clé est oubliée dès que
+ * le résultat est connu (ticket reçu ou refus du serveur) : le même pari, placé exprès une seconde fois, est un nouveau
+ * pari.
  */
 export function usePlaceBet() {
   const queryClient = useQueryClient();
+  const keys = useRef(new Map<string, string>());
 
   return useMutation({
-    mutationFn: async (input: PlaceBetInput) => (await api<Envelope<BetTicket>>('/bets', {
-      method: 'POST',
-      idempotencyKey: newIdempotencyKey(),
-      body: {
-        stake: { minor: input.stakeMinor, currency: input.currency },
-        selections: input.selections.map((s) => ({ selection_id: Number(s.selectionId), odds: s.odds, odds_version: s.oddsVersion })),
-      },
-    })).data,
-    onSuccess: () => {
+    mutationFn: async (input: PlaceBetInput) => {
+      const intent = intentOf(input);
+      const idempotencyKey = keys.current.get(intent) ?? newIdempotencyKey();
+      keys.current.set(intent, idempotencyKey);
+      return (await api<Envelope<BetTicket>>('/bets', {
+        method: 'POST',
+        idempotencyKey,
+        body: {
+          stake: { minor: input.stakeMinor, currency: input.currency },
+          selections: input.selections.map((s) => ({ selection_id: Number(s.selectionId), odds: s.odds, odds_version: s.oddsVersion })),
+        },
+      })).data;
+    },
+    onSuccess: (_ticket, input) => {
+      keys.current.delete(intentOf(input));
+      void queryClient.invalidateQueries({ queryKey: BETS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    },
+    onError: (error, input) => {
+      if (!isUncertainBetError(error)) {
+        keys.current.delete(intentOf(input));
+        return;
+      }
+      // Le pari a peut-être été placé : « Mes paris » et le solde sont relus pour le montrer.
       void queryClient.invalidateQueries({ queryKey: BETS_KEY });
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
     },

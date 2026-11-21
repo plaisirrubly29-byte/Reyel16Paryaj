@@ -9,7 +9,7 @@ import { formatKickoff } from '../../catalogue/format';
 import { ApiError } from '../../../shared/api/client';
 import { MAX_SELECTIONS, useBetSlip, type BetMode, type SlipSelection } from './BetSlipContext';
 import { BetCodeShare } from '../tickets/BetCodeShare';
-import { usePlaceBet, type BetTicket, type OddsChange } from '../api/bets';
+import { isUncertainBetError, usePlaceBet, type BetTicket, type OddsChange } from '../api/bets';
 import { parseStakeMinor, sanitizeStake } from './stake';
 import { combinedOdds, potentialReturnMinor } from './totalOdds';
 
@@ -22,6 +22,10 @@ export const SLIP_COLLAPSE_QUERY = '(max-width: 960px)';
 type Notice = { tone: 'success' | 'warning' | 'error'; text: string };
 
 const money = (minor: bigint) => formatMoney({ minor: Number(minor), currency: CURRENCY });
+
+/** Réponse perdue : le pari a peut-être été placé. Réessayer le même pari ne le compte jamais deux fois. */
+const UNCERTAIN = 'Connexion interrompue : votre pari a peut-être été placé. Vérifiez « Mes paris » avant de changer quoi que ce soit. '
+  + 'Réessayer le même pari ne le comptera jamais deux fois.';
 
 /** Message affichable pour un refus du serveur ; les cotes changées ou sélections fermées sont aussi corrigées dans le coupon. */
 function refusal(error: unknown): string {
@@ -39,7 +43,7 @@ function refusal(error: unknown): string {
       ? `${error.message} Mise maximale possible : ${formatMoney({ minor: remaining, currency: 'HTG' })}.`
       : `${error.message} Vous ne pouvez plus parier sur cette période.`;
   }
-  if (error.status === 0) return 'Serveur injoignable : le pari n\'a pas été placé.';
+  if (isUncertainBetError(error)) return UNCERTAIN;
   return error.message;
 }
 
@@ -155,7 +159,7 @@ export function BetSlipPanel() {
         },
         onError: (error) => {
           const unavailable = error instanceof ApiError && (error.code === 'odds_changed' || error.code === 'selection_unavailable');
-          setNotice({ tone: unavailable ? 'warning' : 'error', text: absorb(error) });
+          setNotice({ tone: unavailable || isUncertainBetError(error) ? 'warning' : 'error', text: absorb(error) });
         },
       },
     );
