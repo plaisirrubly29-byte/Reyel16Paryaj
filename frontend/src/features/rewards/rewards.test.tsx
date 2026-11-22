@@ -140,7 +140,7 @@ describe('parrainage (V2-E07)', () => {
     expect(code).toHaveValue('RY7K2M9P');
     await userEvent.type(screen.getByLabelText('Nom'), 'Ana Joueuse');
     await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
-    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '21051995');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));

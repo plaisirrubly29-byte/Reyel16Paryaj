@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Button } from '../../../shared/components/Button';
@@ -7,6 +7,7 @@ import { TextField } from '../../../shared/components/TextField';
 import { useRegister, type RegisterInput } from '../api/auth';
 import { LEGAL_VERSION } from '../../legal/legal';
 import { AuthShell } from '../components/AuthShell';
+import { BIRTH_DATE_FORMAT, checkBirthDate, maskBirthDate } from '../birthDate';
 import { DEFAULT_COUNTRY } from '../countries';
 import { digitsOnly } from '../phone';
 
@@ -37,6 +38,9 @@ export function RegisterPage() {
   const [inviteCode, setInviteCode] = useState(() => cleanCode(params.get('invitation') ?? ''));
   const [accepted, setAccepted] = useState(false);
   const [mustAccept, setMustAccept] = useState(false);
+  // Date tapée en JJ/MM/AAAA : vérifiée en quittant le champ et à l'envoi, l'erreur s'efface dès qu'on la corrige.
+  const [birthError, setBirthError] = useState<string>();
+  const birthRef = useRef<HTMLInputElement>(null);
   const termsId = useId();
 
   const error = register.error instanceof ApiError ? register.error : null;
@@ -46,18 +50,23 @@ export function RegisterPage() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    // Sans la case cochée, rien n'est envoyé : le serveur la refuserait aussi (terms_accepted).
-    if (!accepted) {
-      setMustAccept(true);
+    // Date impossible (31/02), dans le futur ou âge insuffisant, ou case non cochée (le serveur la refuserait aussi) :
+    // rien n'est envoyé et les deux messages s'affichent ensemble.
+    const birth = checkBirthDate(form.birth_date);
+    if (!birth.ok) setBirthError(birth.message);
+    if (!accepted) setMustAccept(true);
+    if (!birth.ok) {
+      birthRef.current?.focus();
       return;
     }
-    // Un email vide n'est pas envoyé : il reste facultatif côté serveur.
-    const { email, ...rest } = form;
+    if (!accepted) return;
+    // Un email vide n'est pas envoyé : il reste facultatif côté serveur. La date part au format AAAA-MM-JJ de l'API.
+    const { email, ...rest } = { ...form, birth_date: birth.iso };
     const terms = { terms_accepted: true as const, terms_version: LEGAL_VERSION };
-    // L'âge minimum et la politique de mot de passe sont vérifiés par le serveur.
+    // Le serveur revérifie l'âge minimum et applique la politique de mot de passe.
     const referral = referralCode ? { referral_code: referralCode } : {};
     const invite = inviteCode ? { invite_code: inviteCode } : {};
-    register.mutate({ ...(email ? form : rest), ...terms, ...referral, ...invite }, { onSuccess: () => navigate('/account', { replace: true }) });
+    register.mutate({ ...rest, ...(email ? { email } : {}), ...terms, ...referral, ...invite }, { onSuccess: () => navigate('/account', { replace: true }) });
   }
 
   return (
@@ -106,16 +115,30 @@ export function RegisterPage() {
           error={fieldErrors.email}
         />
         <TextField
+          ref={birthRef}
           label="Date de naissance"
-          type="date"
+          type="text"
+          inputMode="numeric"
           name="birth_date"
           autoComplete="bday"
           icon="calendar"
+          placeholder={BIRTH_DATE_FORMAT}
+          maxLength={10}
           required
           value={form.birth_date}
-          onChange={set('birth_date')}
-          error={fieldErrors.birth_date}
-          hint="Vous devez être majeur pour ouvrir un compte."
+          onChange={(e) => {
+            setForm({ ...form, birth_date: maskBirthDate(e.target.value, form.birth_date) });
+            setBirthError(undefined);
+          }}
+          onBlur={() => {
+            // Champ vide en le quittant : pas de reproche tant que le joueur n'a pas essayé d'envoyer.
+            if (form.birth_date !== '') {
+              const birth = checkBirthDate(form.birth_date);
+              setBirthError(birth.ok ? undefined : birth.message);
+            }
+          }}
+          error={birthError ?? fieldErrors.birth_date}
+          hint={`Tapez votre date au format ${BIRTH_DATE_FORMAT} (ex. 21/05/1998). Vous devez être majeur pour ouvrir un compte.`}
         />
         <TextField
           label="Mot de passe"
