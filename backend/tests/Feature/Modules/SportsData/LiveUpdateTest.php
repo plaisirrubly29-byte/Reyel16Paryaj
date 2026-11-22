@@ -89,6 +89,7 @@ class LiveUpdateTest extends TestCase
     {
         config(['betting.allow_live' => true]);
         $this->fake->setResult('fake-1', '0', '0', completed: false);
+        app(LiveUpdateService::class)->runScores(); // direct ouvert : le score est relu toutes les 30 s
         $this->live();
         app(CatalogueSyncService::class)->sync('soccer_epl'); // cotes d'avant-match fraîches pour fake-2
 
@@ -138,7 +139,8 @@ class LiveUpdateTest extends TestCase
 
     public function test_daily_credit_cap_stops_the_updates(): void
     {
-        config(['sports_data.live_daily_credits' => 5]); // 2 crédits par passage (scores + 1X2)
+        // 2 crédits par passage (scores + 1X2) ; la synchro des cotes n'a droit qu'à la moitié du plafond (5 sur 10).
+        config(['sports_data.live_daily_credits' => 10]);
         $this->fake->setResult('fake-1', '0', '0', completed: false);
 
         $this->live();

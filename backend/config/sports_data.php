@@ -175,6 +175,9 @@ return [
     'live_cron' => env('SPORTS_DATA_LIVE_CRON', '*/15 * * * *'),
     'live_window_minutes' => (int) env('SPORTS_DATA_LIVE_WINDOW', 180),
     'live_daily_credits' => (int) env('SPORTS_DATA_LIVE_DAILY_CREDITS', 30),
+    // Part de ce plafond que la synchro des cotes (sports-data:live, tous sports) peut dépenser : le reste est gardé
+    // pour les scores du football toutes les 30 s, sans lesquels les matchs en cours ne sont plus pariables.
+    'live_odds_max_share' => (float) env('SPORTS_DATA_LIVE_ODDS_MAX_SHARE', 0.5),
     // Règle de fraîcheur en direct : une cote bouge vite pendant le match, elle est bloquée plus tôt.
     'max_live_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_LIVE_ODDS_AGE', 20),
 
