@@ -4181,12 +4181,15 @@ components:
                     adjusted: { type: boolean, description: "V2-D03 (D-18) : true quand la cote est fixée à la main par l'administration, au lieu de la cote calculée" }
     LiveSuspendedReason:
       type: [string, "null"]
-      enum: [live_closed, not_available, suspended, score_stale, score_changed, closing, decided, null]
+      enum: [live_closed, not_available, suspended, score_stale, score_changed, closing, decided, score_unavailable, null]
       description: |
-        Motif d'un marché en direct suspendu (D-20) ; null s'il est ouvert ou hors direct. live_closed : paris en direct
-        coupés ; not_available : pas proposé en direct (seulement football 1X2 et plus/moins) ; suspended : par un
-        administrateur ; score_stale : score trop ancien ; score_changed : but en cours de vérification ; closing : fin de
-        match ; decided : issue acquise ou trop probable.
+        Motif d'un marché en direct suspendu ou fermé (D-20) ; null s'il est ouvert ou hors direct. live_closed : paris
+        en direct coupés ; not_available : pas proposé en direct (seulement football 1X2, plus/moins et score exact) ;
+        suspended : par un administrateur ; score_stale : score en retard (suspendu jusqu'au prochain score) ;
+        score_changed : but en cours de vérification (levé de lui-même après
+        live_model.action_suspension_seconds, 10 s) ; closing : fin de match (fermé) ; decided : issue acquise ou trop
+        probable ; score_unavailable : plus de score depuis live_model.score_unavailable_close_seconds (match arrêté ou
+        pas suivi en direct, fermé ; rouvert si le score revient).
     BetTicket:
       type: object
       description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.

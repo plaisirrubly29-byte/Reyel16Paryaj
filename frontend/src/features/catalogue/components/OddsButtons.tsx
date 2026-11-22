@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useBetSlip } from '../../betting/slip/BetSlipContext';
 import type { CatalogueEvent, CatalogueMarket } from '../api/catalogue';
-import { SUSPENDED_LABELS } from '../api/liveOdds';
+import { SUSPENDED_LABELS, isLiveClosed } from '../api/liveOdds';
 import { isLiveStatus } from '../format';
 import { favoriteSelection, impliedShares, marketColumns, marketTitle, matchingSelections } from '../markets';
 
@@ -25,7 +25,10 @@ function lockedReason(event: CatalogueEvent, market: CatalogueMarket): string {
   return isLiveStatus(event.status) ? 'Paris fermés pendant le match' : 'Cote en cours de mise à jour';
 }
 
-/** Marché en direct suspendu pour un moment (D-20) : affiché « Suspendu » à la place des cotes. */
+/**
+ * Marché en direct non pariable avec un motif (D-20) : « Suspendu » à la place des cotes pour un moment (but à vérifier),
+ * « Fermé » pour la suite du match (fin de match, score plus suivi).
+ */
 function isSuspended(event: CatalogueEvent, market: CatalogueMarket): boolean {
   return isLiveStatus(event.status) && market.bettable === false
     && !!market.suspended_reason && !['live_closed', 'not_available'].includes(market.suspended_reason);
@@ -57,7 +60,9 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
       role="group"
       aria-label={wide ? `${marketTitle(market)} : ${match}` : `Cotes ${match}`}
     >
-      {suspended && <span className="odds-suspended-badge" title={reason}>Suspendu</span>}
+      {suspended && (
+        <span className="odds-suspended-badge" title={reason}>{isLiveClosed(market.suspended_reason ?? null) ? 'Fermé' : 'Suspendu'}</span>
+      )}
       {visibleSelections.map((s) => {
         const selected = slip.has(s.id);
         const favorite = s.id === favoriteId;

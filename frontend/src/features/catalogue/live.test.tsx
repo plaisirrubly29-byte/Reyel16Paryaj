@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { currentQueryClient, mockApi, player, renderApp } from '../../test/renderApp';
 import type { BetTicket } from '../betting/api/bets';
@@ -92,7 +92,7 @@ describe('paris en direct', () => {
     await refreshLive();
 
     expect((await screen.findAllByText('Suspendu'))[0]).toBeInTheDocument();
-    const button = screen.getAllByRole('button', { name: /1 Everton à 1.85 \(suspendu : but en cours de vérification\)/ })[0];
+    const button = screen.getAllByRole('button', { name: /1 Everton à 1.85 \(suspendu quelques secondes : but en cours de vérification\)/ })[0];
     expect(button).toBeDisabled();
   });
 
@@ -159,6 +159,36 @@ describe('paris en direct', () => {
     expect(await within(slip).findByText(/Suspendu : score en cours de vérification/)).toBeInTheDocument();
     expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeDisabled();
     expect(within(slip).getByText(/attendez sa réouverture ou retirez-la/)).toBeInTheDocument();
+  });
+
+  /** Signalé par Rubly : une suspension après un but se lève d'elle-même ; un match arrêté se ferme clairement. */
+  it('rouvre la sélection après la suspension d\'un but, et la dit fermée quand le score n\'est plus suivi', async () => {
+    let current = liveOdds('1.85');
+    api(() => current);
+    renderApp('/');
+
+    await userEvent.click((await screen.findAllByRole('button', { name: '1 Everton à 1.85' }))[0]);
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
+    await userEvent.type(within(slip).getByLabelText('Montant de la mise'), '100');
+
+    current = liveOdds('1.85', 'score_changed');
+    await refreshLive();
+    expect(await within(slip).findByText(/Suspendu quelques secondes : but en cours de vérification/)).toBeInTheDocument();
+    expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeDisabled();
+
+    // 10 s plus tard, le serveur a levé la suspension : le pari est de nouveau possible.
+    current = liveOdds('1.85');
+    await refreshLive();
+    await waitFor(() => expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeEnabled());
+    expect(within(slip).queryByText(/but en cours de vérification/)).not.toBeInTheDocument();
+
+    current = liveOdds('1.85', 'score_unavailable');
+    await refreshLive();
+    expect(await within(slip).findByText(/Paris fermés : le score de ce match n'est plus suivi en direct : retirez-la du coupon/))
+      .toBeInTheDocument();
+    expect(within(slip).getByText('Fermé')).toBeInTheDocument();
+    expect(within(slip).getByText('Une sélection en direct est fermée : retirez-la du coupon.')).toBeInTheDocument();
+    expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeDisabled();
   });
 
   /** Demande de Rubly : « un match est à 2-1, je peux parier que le match peut terminer 3-1 ». */

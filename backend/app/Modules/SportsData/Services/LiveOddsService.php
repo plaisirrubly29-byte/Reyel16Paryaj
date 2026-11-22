@@ -18,9 +18,10 @@ use Illuminate\Support\Collection;
  * Un marché d'un match en cours n'est ouvert que si TOUT est vrai (sinon « suspendu », avec le motif) :
  *  - paris en direct autorisés (betting.allow_live, le coupe-circuit) ;
  *  - football, 1X2, plus/moins ou score exact final, marché ouvert (pas suspendu par un administrateur) ;
- *  - score reçu il y a moins de max_score_age_seconds, et pas de changement de score depuis moins de
- *    score_change_cooldown_seconds ;
- *  - avant la minute cutoff_minute, issue pas déjà acquise ni trop probable (max_probability) ;
+ *  - avant la minute cutoff_minute (sinon fermé : fin de match) ;
+ *  - score reçu il y a moins de max_score_age_seconds (sans score depuis score_unavailable_close_seconds : fermé), et
+ *    pas de changement de score depuis moins de action_suspension_seconds (10 s, levée d'elle-même ensuite) ;
+ *  - issue pas déjà acquise ni trop probable (max_probability) ;
  *  - modèle calé (force des équipes connue, LiveOddsModel).
  *
  * Cote = 1 / (probabilité du modèle × (1 + marge du direct, OddsMargin + live_extra)), plafonnée par la dernière cote
@@ -51,6 +52,27 @@ class LiveOddsService
     public const CLOSING = 'closing';
 
     public const DECIDED = 'decided';
+
+    /** Plus de score reçu depuis score_unavailable_close_seconds (match arrêté, pas suivi en direct) : direct fermé. */
+    public const SCORE_UNAVAILABLE = 'score_unavailable';
+
+    /**
+     * Durée de la suspension après une action (but, but refusé par la VAR, score corrigé) : levée d'elle-même ensuite,
+     * sans attendre une nouvelle lecture du score. 10 s par défaut (live_model.action_suspension_seconds).
+     */
+    public static function actionSuspensionSeconds(): int
+    {
+        return max(0, (int) config('sports_data.live_model.action_suspension_seconds', 10));
+    }
+
+    /** Délai sans score au-delà duquel le direct du match est fermé, jamais plus court que l'âge maximal du score. */
+    public static function scoreUnavailableCloseSeconds(): int
+    {
+        return max(
+            (int) config('sports_data.live_model.max_score_age_seconds', 90),
+            (int) config('sports_data.live_model.score_unavailable_close_seconds', 300),
+        );
+    }
 
     /** Match en cours : ses cotes viennent du modèle, pas de la base. */
     public function applies(Market $market): bool
@@ -205,17 +227,25 @@ class LiveOddsService
     {
         $config = config('sports_data.live_model');
 
-        if ($event->home_score === null || $event->away_score === null || $event->score_checked_at === null
-            || $event->score_checked_at->lt($now->copy()->subSeconds((int) $config['max_score_age_seconds']))) {
-            return self::SCORE_STALE;
-        }
-        if ($event->score_changed_at !== null
-            && $event->score_changed_at->gt($now->copy()->subSeconds((int) $config['score_change_cooldown_seconds']))) {
-            return self::SCORE_CHANGED;
-        }
+        // Fin de match d'abord : passé la minute limite, le direct est fermé, que le score soit encore relu ou non (un
+        // match fini ou arrêté n'est plus relu toutes les 30 s et restait « suspendu : score en cours de vérification »).
         $minute = LiveOddsModel::minute($event->starts_at, $now);
         if ($minute !== null && $minute >= (int) $config['cutoff_minute']) {
             return self::CLOSING;
+        }
+
+        $scoreKnown = $event->home_score !== null && $event->away_score !== null && $event->score_checked_at !== null;
+        if (! $scoreKnown || $event->score_checked_at->lt($now->copy()->subSeconds((int) $config['max_score_age_seconds']))) {
+            // Retard passager : suspendu, rouvert au prochain score reçu. Pas de score depuis trop longtemps (match
+            // arrêté, ou que le fournisseur ne suit pas en direct) : fermé, plutôt que « suspendu » pour toujours.
+            $since = $scoreKnown ? $event->score_checked_at : $event->starts_at;
+
+            return $since->lt($now->copy()->subSeconds(self::scoreUnavailableCloseSeconds()))
+                ? self::SCORE_UNAVAILABLE : self::SCORE_STALE;
+        }
+        if ($event->score_changed_at !== null
+            && $event->score_changed_at->gt($now->copy()->subSeconds(self::actionSuspensionSeconds()))) {
+            return self::SCORE_CHANGED;
         }
         if ($event->live_home_rate === null || $event->live_away_rate === null) {
             return self::NOT_AVAILABLE;

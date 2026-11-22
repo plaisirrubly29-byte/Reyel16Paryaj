@@ -175,6 +175,81 @@ class LiveBettingTest extends TestCase
         $this->bet($this->selection(), '2.00')->assertUnprocessable()->assertJsonPath('error.code', 'selection_unavailable');
     }
 
+    /** Signalé par Rubly : une suspension après une action ne doit pas durer plus d'une dizaine de secondes. */
+    public function test_a_goal_suspension_lifts_by_itself_after_ten_seconds_without_a_new_score(): void
+    {
+        $this->score('1', '0');
+        $live = app(LiveOddsService::class);
+        $this->assertSame(LiveOddsService::SCORE_CHANGED, $live->quote($this->market())->reason);
+
+        $this->travel(9)->seconds();
+        $this->assertSame(LiveOddsService::SCORE_CHANGED, $live->quote($this->market())->reason);
+        $this->assertFalse($this->market()->isBettable());
+
+        // Aucun nouveau score relu : la suspension est quand même levée, au bout de 10 s.
+        $this->travel(2)->seconds();
+        $this->assertTrue($live->quote($this->market())->open);
+        $this->assertTrue($live->quote($this->market('totals'))->open);
+        $this->assertTrue($this->market()->isBettable());
+        $this->getJson("/api/v1/live/odds?event_ids={$this->event()->id}")
+            ->assertJsonPath('data.0.markets.0.bettable', true)
+            ->assertJsonPath('data.0.markets.0.suspended_reason', null);
+        $this->bet($this->selection())->assertAccepted(); // pari en direct : en attente du délai d'acceptation
+    }
+
+    public function test_the_action_suspension_length_comes_from_the_config(): void
+    {
+        config(['sports_data.live_model.action_suspension_seconds' => 5]);
+        $this->score('0', '1');
+        $live = app(LiveOddsService::class);
+
+        $this->travel(4)->seconds();
+        $this->assertSame(LiveOddsService::SCORE_CHANGED, $live->quote($this->market())->reason);
+        $this->travel(2)->seconds();
+        $this->assertTrue($live->quote($this->market())->open);
+    }
+
+    public function test_a_match_whose_score_stops_coming_is_closed_instead_of_staying_suspended(): void
+    {
+        $live = app(LiveOddsService::class);
+
+        // Un score en retard : suspendu un moment, le temps du prochain passage.
+        $this->travel(91)->seconds();
+        $this->assertSame(LiveOddsService::SCORE_STALE, $live->quote($this->market())->reason);
+
+        // Plus aucun score depuis 5 min (match arrêté, ou plus suivi par le fournisseur) : direct fermé.
+        $this->travel(210)->seconds();
+        $this->assertSame(LiveOddsService::SCORE_UNAVAILABLE, $live->quote($this->market())->reason);
+        $this->assertFalse($this->market()->isBettable());
+        $this->getJson("/api/v1/live/odds?event_ids={$this->event()->id}")
+            ->assertJsonPath('data.0.markets.0.bettable', false)
+            ->assertJsonPath('data.0.markets.0.suspended_reason', LiveOddsService::SCORE_UNAVAILABLE);
+
+        // Le score revient (match repris) : rouvert de lui-même.
+        $this->score('0', '0');
+        $this->assertTrue($live->quote($this->market())->open);
+    }
+
+    public function test_a_match_never_scored_by_the_provider_is_closed_after_a_few_minutes(): void
+    {
+        // The Odds API ne donne pas le score en direct de toutes les compétitions : score jamais reçu.
+        $this->event()->update(['home_score' => null, 'away_score' => null, 'score_checked_at' => null,
+            'score_changed_at' => null, 'starts_at' => now()->subMinutes(2)]);
+        $live = app(LiveOddsService::class);
+        $this->assertSame(LiveOddsService::SCORE_STALE, $live->quote($this->market())->reason);
+
+        $this->travel(4)->minutes();
+        $this->assertSame(LiveOddsService::SCORE_UNAVAILABLE, $live->quote($this->market())->reason);
+    }
+
+    public function test_a_match_past_the_cutoff_minute_is_closed_even_when_its_score_is_no_longer_read(): void
+    {
+        // Fin de match : le score n'est plus relu toutes les 30 s. Avant, le motif restait « score en cours de
+        // vérification » (suspendu) jusqu'au résultat final.
+        $this->travel(80)->minutes();
+        $this->assertSame(LiveOddsService::CLOSING, app(LiveOddsService::class)->quote($this->market())->reason);
+    }
+
     public function test_the_live_markets_close_after_the_cutoff_minute(): void
     {
         $this->assertTrue(app(LiveOddsService::class)->quote($this->market('totals'))->open);
