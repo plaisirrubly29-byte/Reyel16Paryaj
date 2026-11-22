@@ -946,6 +946,12 @@ p { margin: 0; }
 .side-menu-list a.active { color: var(--brand); font-weight: 600; }
 .side-menu-label { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .side-sub { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+/* Compétitions regroupées par pays : le pays en titre, ses championnats en dessous (D1 → D2 → coupes) */
+.side-menu-country {
+  margin: 0.9rem 1.25rem 0 2rem; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.side-menu-group .side-menu-list { padding-top: 0.15rem; }
 
 /* Bandeau d'accueil : bordeaux en halos, trame fine, bordure lumineuse ; devise à gauche, logo incliné à droite,
    rangée de pastilles des sports proposés (défilement horizontal) en bas. */
@@ -1418,6 +1424,11 @@ a.match-line-teams:hover { color: var(--brand); }
 .competitions-list a:hover { background: var(--bg, #f3f5f9); color: var(--accent-ink); }
 .competitions-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .competitions-sub { color: var(--muted); font-size: 0.82rem; font-weight: 500; }
+.competitions-group ul { list-style: none; margin: 0; padding: 0; }
+.competitions-country {
+  margin: 0.75rem 0.7rem 0.2rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border);
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
 .competitions-all { color: var(--accent-ink) !important; }
 .competitions-count {
   min-width: 1.8rem; padding: 0 0.4rem; border-radius: 999px; background: #eef1f6; color: var(--muted);
@@ -1640,6 +1651,7 @@ a.match-line-teams:hover { color: var(--brand); }
   .side-menu-list a { font-size: 1rem; padding-left: 1.25rem; }
   .side-menu-top, .side-menu-title { padding-left: 1.25rem; margin-left: 0; }
   .side-menu-title { margin-left: 1.25rem; }
+  .side-menu-country { margin-left: 1.25rem; }
   .match-line-teams { font-size: 1.15rem; }
   .top-matches { grid-auto-columns: 320px; }
   .board-tabs button { padding: 0 2rem; font-size: 1.15rem; }

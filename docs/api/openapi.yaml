@@ -526,7 +526,11 @@ paths:
     get:
       tags: [Catalogue]
       summary: Sports ayant des matchs ouverts, avec leurs compétitions
-      description: Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+      description: |
+        Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+        Les compétitions d'un sport sont rangées par pays (ou zone : Europe, Monde, Amérique du Sud…) : d'abord les
+        pays des « top compétitions » (`sports_data.featured_competitions`) dans cet ordre, puis les autres par nom ;
+        dans un pays, 1re division → 2e → 3e → 4e → coupes, puis les compétitions sans niveau.
       responses:
         "200":
           description: OK
@@ -549,8 +553,15 @@ paths:
                             type: object
                             properties:
                               id: { type: string }
-                              name: { type: string, example: EPL }
-                              country: { type: [string, "null"] }
+                              name: { type: string, example: LaLiga }
+                              country: { type: [string, "null"], example: Espagne }
+                              tier:
+                                type: [string, "null"]
+                                enum: [d1, d2, d3, d4, cup, null]
+                                example: d1
+                                description: |
+                                  Niveau dans le pays (`sports_data.competition_labels.*.tier`) : d1 = 1re division …
+                                  d4, cup = coupe nationale ; null pour une compétition internationale ou sans niveau.
                               events_count: { type: integer }
   /competitions:
     get:
