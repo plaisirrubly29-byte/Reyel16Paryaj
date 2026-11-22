@@ -36,7 +36,7 @@ export function HomePage() {
               </ul>
             </div>
             {/* Plus grand élément visible de l'accueil : chargé en priorité (V2-E05). */}
-            <img className="hero-logo" src={BRAND_LOGO_SMALL_URL} alt="" width={151} height={190} fetchPriority="high" />
+            <img className="hero-logo" src={BRAND_LOGO_SMALL_URL} alt="" width={190} height={190} fetchPriority="high" />
           </div>
           {/* Rangée réservée pendant le chargement, pour que la page ne saute pas à l'arrivée des sports (V2-E05). */}
           {sportsQuery.isPending && <div className="hero-sports hero-sports-placeholder" aria-hidden="true" />}
