@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\Catalogue;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
+use App\Modules\SportsData\Models\Competition;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
@@ -41,6 +42,39 @@ class CatalogueApiTest extends TestCase
             ->assertJsonPath('data.0.competitions.0.name', 'Premier League')
             ->assertJsonPath('data.1.slug', 'basketball')
             ->assertJsonPath('data.1.events_count', 1);
+    }
+
+    public function test_sports_group_competitions_by_country_then_division_then_cups(): void
+    {
+        // Un match ouvert par compétition, copié du premier match de Premier League.
+        $source = $this->event('fake-1');
+        foreach ([
+            'soccer_spain_copa_del_rey', 'soccer_spain_segunda_division', 'soccer_spain_la_liga',
+            'soccer_uefa_europa_league', 'soccer_uefa_champs_league', 'soccer_efl_champ', 'soccer_fa_cup',
+            'soccer_greece_super_league',
+        ] as $i => $key) {
+            $label = config("sports_data.competition_labels.{$key}");
+            $competition = Competition::create([
+                'sport_id' => $source->competition->sport_id, 'provider' => $source->competition->provider,
+                'external_key' => $key, 'name' => $label['name'], 'country' => $label['country'], 'is_active' => true,
+            ]);
+            $event = $source->replicate()->fill(['external_id' => "copie-{$i}", 'competition_id' => $competition->id]);
+            $event->save();
+            $market = $source->markets()->where('key', 'h2h')->firstOrFail();
+            $copy = $market->replicate()->fill(['event_id' => $event->id]);
+            $copy->save();
+            $market->selections->each(fn ($s) => $s->replicate()->fill(['market_id' => $copy->id])->save());
+        }
+
+        $football = $this->getJson('/api/v1/sports')->assertOk()->json('data.0.competitions');
+
+        // Europe (Ligue des champions en tête des « top compétitions »), Angleterre, Espagne, puis la Grèce (hors top).
+        $this->assertSame([
+            ['Ligue des champions', 'Europe', null], ['Ligue Europa', 'Europe', null],
+            ['Premier League', 'Angleterre', 'd1'], ['Championship', 'Angleterre', 'd2'], ['FA Cup', 'Angleterre', 'cup'],
+            ['LaLiga', 'Espagne', 'd1'], ['LaLiga 2', 'Espagne', 'd2'], ['Coupe du Roi', 'Espagne', 'cup'],
+            ['Super League', 'Grèce', 'd1'],
+        ], array_map(fn ($c) => [$c['name'], $c['country'], $c['tier']], $football));
     }
 
     public function test_events_are_listed_by_start_time_with_inline_1x2_odds(): void

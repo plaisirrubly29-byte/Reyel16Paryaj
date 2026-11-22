@@ -4,12 +4,26 @@ import { api, type Envelope, type Paginated } from '../../../shared/api/client';
 import { isLiveStatus } from '../format';
 import { useLiveOverlay, type LiveSuspendedReason } from './liveOdds';
 
-/** GET /sports — sports ayant des matchs ouverts, y compris en direct. */
+/** Niveau d'une compétition dans son pays : 1re à 4e division, ou coupe nationale. */
+export type CompetitionTier = 'd1' | 'd2' | 'd3' | 'd4' | 'cup';
+
+/**
+ * GET /sports — sports ayant des matchs ouverts, y compris en direct. Les compétitions arrivent rangées par pays
+ * (pays des « top compétitions » d'abord), puis D1 → D2 → D3 → coupes dans chaque pays.
+ */
 export type CatalogueSport = {
   slug: string;
   name: string;
   events_count: number;
-  competitions: { id: string; name: string; country: string | null; events_count: number }[];
+  competitions: {
+    id: string;
+    name: string;
+    /** Pays, ou zone pour une compétition internationale (Europe, Monde, Amérique du Sud…). */
+    country: string | null;
+    /** null : compétition internationale ou sans niveau (féminine…). */
+    tier?: CompetitionTier | null;
+    events_count: number;
+  }[];
 };
 
 export type CatalogueSelection = {

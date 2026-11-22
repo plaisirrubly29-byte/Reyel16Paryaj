@@ -25,13 +25,22 @@ class CatalogueController extends Controller
             ->groupBy('competition_id')
             ->pluck('events_count', 'competition_id');
 
-        // Top compétitions d'abord (config sports_data.featured_competitions), puis les autres par nom.
+        // Rangées par pays (ou zone : Europe, Monde…) : d'abord les pays des « top compétitions »
+        // (config sports_data.featured_competitions) dans cet ordre, puis les autres par nom ; dans un pays,
+        // 1re division → 2e → 3e → coupes (sports_data.competition_labels.*.tier), puis l'ordre « top » et le nom.
         $featured = array_flip((array) config('sports_data.featured_competitions', []));
-        $competitions = Competition::with('sport')->whereIn('id', $counts->keys())->get()
-            ->sortBy([
-                fn ($a, $b) => ($featured[$a->external_key] ?? PHP_INT_MAX) <=> ($featured[$b->external_key] ?? PHP_INT_MAX),
-                fn ($a, $b) => strnatcasecmp($a->name, $b->name),
-            ])->values();
+        $rank = fn (Competition $c): int => $featured[$c->external_key] ?? PHP_INT_MAX;
+        $all = Competition::with('sport')->whereIn('id', $counts->keys())->get();
+        $countryRank = $all->groupBy(fn ($c) => $c->sport_id.'|'.$c->country)->map(fn ($items) => $items->min($rank));
+        $countryOf = fn (Competition $c): int => $countryRank[$c->sport_id.'|'.$c->country];
+        $competitions = $all->sortBy([
+            fn ($a, $b) => $countryOf($a) <=> $countryOf($b),
+            fn ($a, $b) => ($a->country === null) <=> ($b->country === null),
+            fn ($a, $b) => strnatcasecmp((string) $a->country, (string) $b->country),
+            fn ($a, $b) => self::tierOrder($a) <=> self::tierOrder($b),
+            fn ($a, $b) => $rank($a) <=> $rank($b),
+            fn ($a, $b) => strnatcasecmp($a->name, $b->name),
+        ])->values();
 
         $sports = $competitions->groupBy('sport_id')->map(function ($items) use ($counts) {
             /** @var Sport $sport */
@@ -46,6 +55,7 @@ class CatalogueController extends Controller
                     'id' => (string) $c->id,
                     'name' => $c->name,
                     'country' => $c->country,
+                    'tier' => self::tier($c),
                     'events_count' => (int) $counts[$c->id],
                 ])->values(),
             ];
@@ -53,6 +63,24 @@ class CatalogueController extends Controller
             ->map(fn ($s) => collect($s)->except('sort_order')->all());
 
         return response()->json(['data' => $sports]);
+    }
+
+    /** Ordre des niveaux dans un pays ; une compétition sans niveau (féminine, internationale…) vient après. */
+    private const TIERS = ['d1', 'd2', 'd3', 'd4', 'cup'];
+
+    /** Niveau de la compétition dans son pays (d1…d4, cup), ou null s'il n'est pas configuré. */
+    private static function tier(Competition $competition): ?string
+    {
+        $tier = config('sports_data.competition_labels')[$competition->external_key]['tier'] ?? null;
+
+        return in_array($tier, self::TIERS, true) ? $tier : null;
+    }
+
+    private static function tierOrder(Competition $competition): int
+    {
+        $index = array_search(self::tier($competition), self::TIERS, true);
+
+        return $index === false ? count(self::TIERS) : $index;
     }
 
     /** Compétitions ayant des matchs ouverts (filtrable par sport). */
