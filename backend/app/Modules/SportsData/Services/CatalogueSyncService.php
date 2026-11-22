@@ -242,6 +242,109 @@ class CatalogueSyncService
         if (! $live) {
             $this->syncHouseMarkets($event, $data, $report);
         }
+
+        if (str_starts_with($data->sportKey, 'soccer')) {
+            $this->calibrateLiveModel($event, $data, $live);
+        }
+    }
+
+    /**
+     * Modèle de cotes en direct (LiveOddsModel, D-20) : force offensive de chaque équipe tirée de la cote juste des
+     * bookmakers (1X2 et plus/moins, sans leur marge). Avant le match : point de départ, avec le coefficient des nuls.
+     * Pendant le match : recalage sur les cotes en direct de The Odds API, seulement si elles sont plus récentes que le
+     * dernier calage, prises après le dernier changement de score et pas plus récentes que le score connu (une cote qui
+     * intègre un but que nous ne connaissons pas encore fausserait la force des équipes). Une erreur de calcul ne touche
+     * pas au reste du match.
+     */
+    private function calibrateLiveModel(Event $event, EventData $data, bool $live): void
+    {
+        try {
+            [$h2h] = $this->pickMarket($data, 'h2h');
+            $results = array_values(array_filter(
+                $this->sourceOdds($data, 'h2h', null),
+                fn (array $odds) => isset($odds['home'], $odds['draw'], $odds['away']) && count($odds) === 3,
+            ));
+            if ($h2h === null || $results === []) {
+                return;
+            }
+            $result = $this->fairProbabilities($results);
+
+            [$totals, , $line] = $this->pickMarket($data, 'totals');
+            $over = null;
+            if ($totals !== null && $line !== null) {
+                $overs = array_values(array_filter(
+                    $this->sourceOdds($data, 'totals', $line),
+                    fn (array $odds) => isset($odds['over'], $odds['under']) && count($odds) === 2,
+                ));
+                $over = $overs === [] ? null : $this->fairProbabilities($overs)['over'];
+            }
+            $line = $line === null ? null : (float) $line;
+            $at = $h2h->updatedAt;
+            $defaultTotal = (float) config('sports_data.live_model.default_total_goals', 2.6);
+
+            if (! $live) {
+                $rates = LiveOddsModel::fit($result, $line, $over, 0, 0, LiveOddsModel::PLAYING_MINUTES, $defaultTotal);
+                if ($rates !== null) {
+                    $event->update([
+                        'live_home_rate' => $this->rate($rates[0]),
+                        'live_away_rate' => $this->rate($rates[1]),
+                        'live_draw_boost' => round(LiveOddsModel::drawBoost($result, $rates[0], $rates[1]), 3),
+                        'live_model_at' => $at,
+                    ]);
+                }
+
+                return;
+            }
+
+            $event->refresh();
+            if ($event->home_score === null || $event->away_score === null || $event->score_checked_at === null
+                || $at->gt($event->score_checked_at)
+                || ($event->score_changed_at !== null && $at->lt($event->score_changed_at))
+                || ($event->live_model_at !== null && $at->lte($event->live_model_at))) {
+                return;
+            }
+
+            $previousTotal = (float) $event->live_home_rate + (float) $event->live_away_rate;
+            $rates = LiveOddsModel::fit($result, $line, $over, (int) $event->home_score, (int) $event->away_score,
+                LiveOddsModel::remainingMinutes($event->starts_at, $at), $previousTotal > 0 ? $previousTotal : $defaultTotal);
+            if ($rates !== null) {
+                $event->update([
+                    'live_home_rate' => $this->rate($rates[0]),
+                    'live_away_rate' => $this->rate($rates[1]),
+                    'live_draw_boost' => $event->live_draw_boost ?? 1.0,
+                    'live_model_at' => $at,
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('sports_data.live_model_failed', ['id' => $data->externalId, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Probabilités justes d'un marché : probabilités implicites de chaque bookmaker ramenées à 1 (sans sa marge),
+     * puis moyenne des bookmakers.
+     *
+     * @param  non-empty-list<array<string, string>>  $sources
+     * @return array<string, float>
+     */
+    private function fairProbabilities(array $sources): array
+    {
+        $fair = [];
+        foreach ($sources as $odds) {
+            $implied = array_map(fn (string $o) => 1 / (float) $o, $odds);
+            $sum = array_sum($implied);
+            foreach ($implied as $key => $p) {
+                $fair[$key] = ($fair[$key] ?? 0.0) + $p / $sum / count($sources);
+            }
+        }
+
+        return $fair;
+    }
+
+    /** Buts attendus sur un match, bornés pour la colonne et contre une cote aberrante. */
+    private function rate(float $goals): float
+    {
+        return round(max(0.05, min(15.0, $goals)), 3);
     }
 
     /**

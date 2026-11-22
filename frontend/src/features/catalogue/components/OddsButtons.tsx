@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useBetSlip } from '../../betting/slip/BetSlipContext';
 import type { CatalogueEvent, CatalogueMarket } from '../api/catalogue';
+import { SUSPENDED_LABELS } from '../api/liveOdds';
 import { isLiveStatus } from '../format';
 import { favoriteSelection, impliedShares, marketColumns, marketTitle, matchingSelections } from '../markets';
 
@@ -15,9 +16,19 @@ type Props = {
   variant?: 'card' | 'bar' | 'wide';
 };
 
-/** Raison affichée sur une cote non pariable : match en cours (paris en direct fermés) ou cote trop ancienne. */
-function lockedReason(event: CatalogueEvent): string {
+/**
+ * Raison affichée sur une cote non pariable : marché en direct suspendu (score à vérifier, fin de match…), paris en
+ * direct fermés, ou cote trop ancienne.
+ */
+function lockedReason(event: CatalogueEvent, market: CatalogueMarket): string {
+  if (market.suspended_reason) return SUSPENDED_LABELS[market.suspended_reason] ?? 'Suspendu';
   return isLiveStatus(event.status) ? 'Paris fermés pendant le match' : 'Cote en cours de mise à jour';
+}
+
+/** Marché en direct suspendu pour un moment (D-20) : affiché « Suspendu » à la place des cotes. */
+function isSuspended(event: CatalogueEvent, market: CatalogueMarket): boolean {
+  return isLiveStatus(event.status) && market.bettable === false
+    && !!market.suspended_reason && !['live_closed', 'not_available'].includes(market.suspended_reason);
 }
 
 /**
@@ -28,7 +39,8 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
   const slip = useBetSlip();
   const match = `${event.home_team} – ${event.away_team}`;
   const locked = market.bettable === false;
-  const reason = lockedReason(event);
+  const reason = lockedReason(event, market);
+  const suspended = isSuspended(event, market);
   const favoriteId = favoriteSelection(market.selections);
   const shares = impliedShares(market.selections);
   const visibleSelections = matchingSelections(market, selectionSearch);
@@ -39,12 +51,13 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
 
   return (
     <div
-      className={wide
+      className={(wide
         ? `market-odds cols-${marketColumns(market, visibleSelections.length)} ${shortLabels ? 'short-labels' : 'long-names'}`
-        : `match-odds match-odds-${variant}`}
+        : `match-odds match-odds-${variant}`) + (suspended ? ' odds-suspended' : '')}
       role="group"
       aria-label={wide ? `${marketTitle(market)} : ${match}` : `Cotes ${match}`}
     >
+      {suspended && <span className="odds-suspended-badge" title={reason}>Suspendu</span>}
       {visibleSelections.map((s) => {
         const selected = slip.has(s.id);
         const favorite = s.id === favoriteId;
@@ -75,7 +88,7 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
             })}
           >
             <span className={wide ? 'odds-name' : 'odds-label'}>{text}</span>
-            <span className="odds-value">{s.odds}</span>
+            <span className="odds-value">{suspended ? '—' : s.odds}</span>
             {withBar && (
               <span className="odds-prob" aria-hidden="true">
                 <span style={{ '--share': `${shares[s.id] ?? 0}%` } as CSSProperties} />

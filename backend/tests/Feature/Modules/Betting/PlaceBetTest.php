@@ -13,6 +13,7 @@ use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Selection;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
+use App\Modules\SportsData\Services\LiveOddsService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
@@ -226,7 +227,10 @@ class PlaceBetTest extends TestCase
     {
         // Revue P8-02, E1 : un joueur qui voit un but parierait sur la cote d'avant le but.
         $selection = $this->selection();
-        Event::where('external_id', 'fake-1')->update(['status' => EventStatus::Live, 'starts_at' => now()->subMinutes(80)]);
+        Event::where('external_id', 'fake-1')->update([
+            'status' => EventStatus::Live, 'starts_at' => now()->subMinutes(80),
+            'home_score' => '0', 'away_score' => '0', 'score_checked_at' => now(),
+        ]);
         $selection->market->update(['odds_updated_at' => now()]);
 
         $this->assertFalse(config('betting.allow_live'));
@@ -236,8 +240,10 @@ class PlaceBetTest extends TestCase
         $this->assertSame(0, BetTicket::count());
         $this->assertSame(1000_00, $this->balance());
 
+        // Autorisé : cote du modèle en direct, ticket en attente d'acceptation (D-20, LiveBettingTest).
         config(['betting.allow_live' => true]);
-        $this->bet([[$selection]])->assertCreated();
+        $odds = app(LiveOddsService::class)->quote($selection->market->fresh())->odds['home'];
+        $this->bet([[$selection, $odds]])->assertStatus(202)->assertJsonPath('data.status', 'awaiting');
         $this->assertTrue(BetTicket::sole()->rules_snapshot['allow_live']);
     }
 

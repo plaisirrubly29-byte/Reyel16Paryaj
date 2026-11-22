@@ -72,7 +72,8 @@ class ExposureGuard
             ->join('bet_tickets', 'bet_tickets.id', '=', 'bet_selections.bet_ticket_id')
             ->whereIn('bet_selections.event_id', $eventIds)
             ->where('bet_selections.status', BetSelectionStatus::Pending->value)
-            ->where('bet_tickets.status', BetTicketStatus::Pending->value)
+            // Un pari en direct en attente d'acceptation compte déjà (D-20 : mise réservée, peut être accepté).
+            ->whereIn('bet_tickets.status', [BetTicketStatus::Pending->value, BetTicketStatus::Awaiting->value])
             ->where(fn ($q) => $q->where('bet_tickets.type', BetType::Single->value)
                 ->orWhereNotExists(fn ($other) => $other->selectRaw('1')->from('bet_selections as others')
                     ->whereColumn('others.bet_ticket_id', 'bet_tickets.id')

@@ -176,6 +176,26 @@ return [
     // Règle de fraîcheur en direct : une cote bouge vite pendant le match, elle est bloquée plus tôt.
     'max_live_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_LIVE_ODDS_AGE', 20),
 
+    // Paris en direct (D-20, option « Modèle + The Odds ») : cotes du football recalculées à chaque seconde par notre
+    // modèle (LiveOddsModel : force des équipes tirée des cotes, score, temps restant), recalées sur les cotes en direct
+    // de The Odds API à chaque synchro (live_cron) et jamais mieux payées que la dernière d'entre elles. Seulement le
+    // 1X2 et le plus/moins, seulement si betting.allow_live est activé.
+    'live_model' => [
+        // Score relu chez le fournisseur (sports-data:live-scores, 1 crédit par compétition en direct et par passage),
+        // seulement quand les paris en direct sont ouverts. Valeurs possibles : 10, 15, 20, 30 ou 60 secondes.
+        'scores_interval_seconds' => (int) env('SPORTS_DATA_LIVE_SCORES_SECONDS', 30),
+        // Score plus ancien : marchés du match suspendus (un but a pu être marqué sans qu'on le sache).
+        'max_score_age_seconds' => (int) env('SPORTS_DATA_LIVE_MAX_SCORE_AGE', 90),
+        // Après un changement de score, marchés suspendus ce temps (but refusé par la VAR, score corrigé).
+        'score_change_cooldown_seconds' => (int) env('SPORTS_DATA_LIVE_SCORE_COOLDOWN', 30),
+        // Plus de paris en direct après cette minute de jeu estimée (fin de match, cotes trop sensibles au retard).
+        'cutoff_minute' => (int) env('SPORTS_DATA_LIVE_CUTOFF_MINUTE', 85),
+        // Une issue plus probable que ça (cote sous ~1,05) : marché suspendu, il n'y a plus rien à parier.
+        'max_probability' => (float) env('SPORTS_DATA_LIVE_MAX_PROBABILITY', 0.95),
+        // Buts attendus sur un match quand les bookmakers n'ont pas de plus/moins pour ce match.
+        'default_total_goals' => (float) env('SPORTS_DATA_LIVE_DEFAULT_GOALS', 2.6),
+    ],
+
     // Cache des réponses du catalogue public (P8-03), en secondes ; 0 = désactivé (développement, tests). Le pari
     // revérifie toujours la cote côté serveur : une cote affichée depuis le cache peut avoir ce retard, jamais le ticket.
     'catalogue_cache_seconds' => (int) env('CATALOGUE_CACHE_SECONDS', 0),

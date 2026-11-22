@@ -15,7 +15,9 @@ import { virtualGamesEnabled } from '../../virtual/api/virtualGames';
 import { VirtualBets } from '../../virtual/components/VirtualBets';
 
 /** Statut d'un ticket vu par le joueur (« En cours » tant qu'il n'est pas réglé). */
-const STATUS_LABELS: Record<BetTicketStatus, string> = { pending: 'En cours', won: 'Gagné', lost: 'Perdu', void: 'Remboursé' };
+const STATUS_LABELS: Record<BetTicketStatus, string> = {
+  awaiting: 'En validation', pending: 'En cours', won: 'Gagné', lost: 'Perdu', void: 'Remboursé', rejected: 'Refusé',
+};
 
 const STATUS_FILTERS: { value: BetTicketStatus | null; label: string }[] = [
   { value: null, label: 'Tout' },
@@ -33,6 +35,8 @@ const PERIODS = [
 const DEFAULT_DAYS = 30;
 
 const SELECTION_ICONS: Record<BetTicketStatus, { icon: IconName; label: string }> = {
+  awaiting: { icon: 'clock', label: 'En validation' },
+  rejected: { icon: 'refresh', label: 'Refusée' },
   pending: { icon: 'clock', label: 'En cours' },
   won: { icon: 'trophy', label: 'Gagnée' },
   lost: { icon: 'close', label: 'Perdue' },
@@ -199,8 +203,11 @@ export function TicketCard({ ticket }: { ticket: BetTicket }) {
   const count = ticket.selections.length;
   const visible = expanded ? ticket.selections : ticket.selections.slice(0, VISIBLE_SELECTIONS);
   const title = ticket.type === 'multiple' ? `Sports - Multiple (${count})` : 'Sports - Simple';
-  const returnLabel = { pending: 'Gains potentiels', won: 'Gain versé', lost: 'Gain', void: 'Remboursé' }[ticket.status];
-  const returned = ticket.payout ?? (ticket.status === 'pending' ? ticket.potential_payout : { ...ticket.stake, minor: 0 });
+  const returnLabel = {
+    awaiting: 'Gains potentiels', pending: 'Gains potentiels', won: 'Gain versé', lost: 'Gain', void: 'Remboursé', rejected: 'Mise rendue',
+  }[ticket.status];
+  const returned = ticket.payout
+    ?? (ticket.status === 'pending' || ticket.status === 'awaiting' ? ticket.potential_payout : { ...ticket.stake, minor: 0 });
   const rebettable = canRebet(ticket);
 
   async function rebet() {

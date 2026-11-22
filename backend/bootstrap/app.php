@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
     // Commandes artisan des modules (ex. sports-data:check, settlement:import-results, identity:grant-role).
     ->withCommands([
         __DIR__.'/../app/Modules/SportsData/Console',
+        __DIR__.'/../app/Modules/Betting/Console',
         __DIR__.'/../app/Modules/Settlement/Console',
         __DIR__.'/../app/Modules/IdentityAccess/Console',
         __DIR__.'/../app/Modules/Monitoring/Console',

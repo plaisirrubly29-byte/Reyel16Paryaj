@@ -4,6 +4,7 @@ namespace App\Modules\SportsData\Models;
 
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
+use App\Modules\SportsData\Services\LiveOddsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -80,14 +81,19 @@ class Market extends Model
         $query->where('status', MarketStatus::Open)->whereNotNull('odds_updated_at');
     }
 
+    /**
+     * Pendant le match, la cote vient du modèle en direct (LiveOddsService) : pariable seulement s'il ouvre le marché
+     * (coupe-circuit, score récent, football 1X2 ou plus/moins…), quel que soit l'âge de la dernière cote du fournisseur.
+     */
     public function isBettable(): bool
     {
-        $live = $this->event?->status === EventStatus::Live;
+        if ($this->event?->status === EventStatus::Live) {
+            return self::liveBettingAllowed() && app(LiveOddsService::class)->quote($this)->open;
+        }
 
         return $this->status === MarketStatus::Open
             && $this->odds_updated_at !== null
-            && (! $live || self::liveBettingAllowed())
-            && $this->odds_updated_at->gte(now()->subMinutes(self::maxAgeMinutes($live)));
+            && $this->odds_updated_at->gte(now()->subMinutes(self::maxAgeMinutes(false)));
     }
 
     /** @return BelongsTo<Event, $this> */
