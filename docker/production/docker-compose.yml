@@ -62,6 +62,7 @@ services:
     image: ${REGISTRY_IMAGE}-web:${IMAGE_TAG}
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS manquant}
+      SITE_REDIRECT_FROM: ${SITE_REDIRECT_FROM:-http://redirect.invalid}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
     ports:
       - "${HTTP_PORT:-80}:80"
