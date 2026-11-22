@@ -11,6 +11,7 @@ use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
+use App\Support\TransactionLock;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -43,8 +44,10 @@ class FinanceCorrectionService
     public function request(User $requester, LedgerEntry $entry, string $reason): FinanceCorrection
     {
         return DB::transaction(function () use ($requester, $entry, $reason) {
-            // Verrou sur l'écriture : deux demandes simultanées ne passent pas toutes les deux.
-            $entry = LedgerEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
+            // Verrou sur l'écriture : deux demandes simultanées ne passent pas toutes les deux. Verrou applicatif, pas
+            // FOR UPDATE : ledger_entries est en ajout seul, sans droit UPDATE pour l'application en Production.
+            TransactionLock::acquire("ledger_entry:{$entry->id}");
+            $entry = LedgerEntry::whereKey($entry->id)->firstOrFail();
             $this->assertCorrectable($entry);
 
             $pending = FinanceCorrection::where('ledger_entry_id', $entry->id)->where('status', FinanceCorrectionStatus::Pending)->first();
@@ -87,7 +90,8 @@ class FinanceCorrectionService
                 throw new ApiException('approver_role_too_recent', __('Votre rôle est trop récent pour valider une demande.'), 403);
             }
 
-            $entry = LedgerEntry::whereKey($correction->ledger_entry_id)->lockForUpdate()->firstOrFail();
+            TransactionLock::acquire("ledger_entry:{$correction->ledger_entry_id}");
+            $entry = LedgerEntry::whereKey($correction->ledger_entry_id)->firstOrFail();
             $this->assertCorrectable($entry);
 
             $reversal = $this->ledger->reverse($entry, "correction:{$correction->id}:reversal", $correction->reason, $approver);
