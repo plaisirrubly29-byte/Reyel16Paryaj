@@ -194,3 +194,17 @@ suspendus pour toujours.
 
 Limite : The Odds API ne donne que le score, pas les cartons ni les penalties ; seule une action qui change le score
 (but, but annulé) suspend les marchés.
+
+### 10.3 Les scores passent avant les cotes (2026-11-22, retour de Rubly)
+
+Rubly : « les matchs en direct doivent être disponibles pour parier même s'ils sont en cours ; aucun match ne doit être
+bloqué ».
+
+| Constat en Production | Correction |
+|---|---|
+| Le plafond du direct (`SPORTS_DATA_LIVE_DAILY_CREDITS=4000`) était vide vers 19 h UTC : environ 1 000 crédits par heure pour les cotes de tous les sports (`sports-data:live` toutes les 2 min) et 1 300 pour les scores du football. Plus de score relu : tous les matchs en cours fermés. | Même soir, sur le serveur : plafond à 12 000, cotes du direct toutes les 10 min (`SPORTS_DATA_LIVE_CRON="*/10 * * * *"`). Sauvegarde `.env.avant-direct-debloque`. |
+| Les cotes et les scores puisent dans le même plafond, dans n'importe quel ordre. | La synchro des cotes s'arrête à la moitié du plafond (`SPORTS_DATA_LIVE_ODDS_MAX_SHARE=0.5`) : l'autre moitié reste aux scores du football. |
+| La synchro des cotes relisait aussi le score des compétitions déjà relues toutes les 30 s (1 crédit de plus à chaque fois). | Plus de double lecture tant que le direct est ouvert. |
+
+Offre The Odds API : 100 000 crédits par mois. Un soir chargé coûte plusieurs milliers de crédits ; Rubly prendra une
+offre plus grande si le mois ne suffit pas, et le plafond du jour sera relevé en conséquence.

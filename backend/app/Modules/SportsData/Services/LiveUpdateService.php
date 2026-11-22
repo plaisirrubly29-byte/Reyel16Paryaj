@@ -84,14 +84,22 @@ class LiveUpdateService
         return (int) Cache::get($this->counterKey(), 0);
     }
 
-    /** @return array{updated: list<string>, skipped: list<string>, errors: array<string, string>} */
+    /**
+     * Les scores des matchs pariables en direct passent avant tout : cette synchro (cotes de tous les sports) s'arrête
+     * dès que la dépense du jour atteint live_odds_max_share du plafond, le reste est gardé pour runScores(). Elle ne
+     * relit pas non plus le score des compétitions déjà relues toutes les 30 s par runScores().
+     *
+     * @return array{updated: list<string>, skipped: list<string>, errors: array<string, string>}
+     */
     public function run(): array
     {
         $outcome = ['updated' => [], 'skipped' => [], 'errors' => []];
-        $cost = $this->costPerCompetition();
-        $cap = (int) config('sports_data.live_daily_credits');
+        $cap = (int) floor((int) config('sports_data.live_daily_credits') * $this->oddsShare());
+        $scoredElsewhere = $this->scoresPolled() ? $this->liveBettingCompetitions() : [];
 
         foreach ($this->liveCompetitions() as $key) {
+            $readScores = ! in_array($key, $scoredElsewhere, true);
+            $cost = $this->budget->costPerCompetition() + ($readScores ? 1 : 0);
             if ($this->creditsSpentToday() + $cost > $cap) {
                 $outcome['skipped'][] = $key;
 
@@ -100,11 +108,11 @@ class LiveUpdateService
 
             $this->spend($cost);
 
-            $scores = $this->results->import($key, 0);
+            $scores = $readScores ? $this->results->import($key, 0) : null;
             $odds = $this->sync->syncLive($key);
             $this->correctScore->syncCompetition($key);
 
-            $errors = array_filter([$scores->error, $odds->error]);
+            $errors = array_filter([$scores?->error, $odds->error]);
             if ($errors !== []) {
                 $outcome['errors'][$key] = implode(' ; ', $errors);
             }
@@ -152,6 +160,18 @@ class LiveUpdateService
         }
 
         return $outcome;
+    }
+
+    /** Part du plafond du jour que la synchro des cotes peut dépenser (0 à 1), le reste revient aux scores. */
+    private function oddsShare(): float
+    {
+        return min(1.0, max(0.0, (float) config('sports_data.live_odds_max_share', 0.5)));
+    }
+
+    /** Scores relus toutes les 30 s par sports-data:live-scores : mêmes conditions que dans routes/console.php. */
+    private function scoresPolled(): bool
+    {
+        return (bool) config('sports_data.live_enabled') && (bool) config('betting.allow_live');
     }
 
     private function spend(int $credits): void
