@@ -38,9 +38,9 @@ const base = {
 
 const card = () => screen.getByRole('region', { name: 'Retrait' });
 
-/** Bouton « Retrait » sous le solde, puis le portefeuille choisi (si donné). */
+/** Bouton « Retirer » sous le solde, puis le portefeuille choisi (si donné). */
 async function openWithdrawal(method?: string) {
-  await userEvent.click(await screen.findByRole('button', { name: 'Retrait' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Retirer' }));
   if (method) await userEvent.click(await screen.findByRole('button', { name: method }));
 }
 

@@ -117,7 +117,9 @@ function RecentDeposits() {
  * confirme sur la page du prestataire. Sans moyen de
  * paiement activé, les instructions de dépôt auprès de l'opérateur restent affichées.
  */
-export function DepositCard({ accountId, currency, frozen }: { accountId?: string; currency: string; frozen: boolean }) {
+export function DepositCard({ accountId, currency, frozen, onClose }: {
+  accountId?: string; currency: string; frozen: boolean; onClose?: () => void;
+}) {
   const methods = useDepositMethods();
   const start = useStartDeposit();
   const [params, setParams] = useSearchParams();
@@ -159,10 +161,15 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
     <section className="money-card" aria-labelledby="deposit">
       <header className="money-card-head">
         <span className="money-card-icon" aria-hidden="true"><Icon name="deposit" size={22} /></span>
-        <div>
+        <div className="money-card-title">
           <h2 id="deposit">Dépôt</h2>
           <p className="muted small">Alimenter votre solde.</p>
         </div>
+        {onClose && (
+          <button type="button" className="money-card-close" aria-label="Fermer" onClick={onClose}>
+            <Icon name="close" size={18} />
+          </button>
+        )}
       </header>
       <div className="money-card-body">
         {followed && <DepositFollowUp reference={followed} onClose={() => setParams({ operation: 'depot' }, { replace: true })} />}

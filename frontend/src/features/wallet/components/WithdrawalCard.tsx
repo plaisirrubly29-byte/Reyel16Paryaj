@@ -84,8 +84,8 @@ function WithdrawalRow({ w }: { w: Withdrawal }) {
  * solde, puis versé par Plop Plop depuis le portefeuille marchand. Sans retraits ouverts, les instructions de retrait
  * auprès de l'opérateur restent affichées.
  */
-export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: {
-  accountId?: string; phone?: string; currency: string; balance?: Money; frozen: boolean;
+export function WithdrawalCard({ accountId, phone, currency, balance, frozen, onClose }: {
+  accountId?: string; phone?: string; currency: string; balance?: Money; frozen: boolean; onClose?: () => void;
 }) {
   const config = useDepositMethods();
   const withdrawals = useWithdrawals();
@@ -136,10 +136,15 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
     <section className="money-card" aria-labelledby="withdraw">
       <header className="money-card-head">
         <span className="money-card-icon" aria-hidden="true"><Icon name="withdraw" size={22} /></span>
-        <div>
+        <div className="money-card-title">
           <h2 id="withdraw">Retrait</h2>
           <p className="muted small">Retirer vos gains.</p>
         </div>
+        {onClose && (
+          <button type="button" className="money-card-close" aria-label="Fermer" onClick={onClose}>
+            <Icon name="close" size={18} />
+          </button>
+        )}
       </header>
       <div className="money-card-body">
         {config.isPending && <MethodPickerSkeleton />}

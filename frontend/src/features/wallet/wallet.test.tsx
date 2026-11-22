@@ -3,7 +3,10 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockApi, player, renderApp } from '../../test/renderApp';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.clear();
+});
 
 const NBSP = new RegExp(`[${String.fromCharCode(0xa0, 0x202f)}]`, 'g');
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(NBSP, ' ');
@@ -104,18 +107,57 @@ describe('espace joueur', () => {
     expect(await screen.findByRole('heading', { name: 'Solde', level: 1 })).toBeInTheDocument();
     const accountNumber = () => screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Votre numéro de compte : 1');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Dépôt' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Déposer' }));
     expect(screen.getByRole('heading', { name: 'Dépôt', level: 2 })).toBeInTheDocument();
     await waitFor(() => expect(accountNumber()).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'Retrait' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer' }));
     expect(screen.getByRole('heading', { name: 'Retrait', level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Dépôt', level: 2 })).toBeNull();
     await waitFor(() => expect(accountNumber()).toBeInTheDocument());
     expect(screen.queryByRole('textbox')).toBeNull();
+
+    // « Fermer » referme le panneau : la feuille montre de nouveau les dernières opérations.
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
+    expect(screen.queryByRole('heading', { name: 'Retrait', level: 2 })).toBeNull();
     expect(await screen.findByText('Dépôt', { selector: 'strong' })).toBeInTheDocument();
-    expect(screen.getByText('Retrait', { selector: 'strong' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Toutes mes transactions' })).toHaveAttribute('href', '/transactions');
+    const withdrawalRow = screen.getByText('Retrait', { selector: 'strong' }).closest('li')!;
+    expect(text(within(withdrawalRow).getByText((_, el) => el?.classList.contains('debit') ?? false))).toBe('-1 000,00 HTG');
+    expect(text(within(withdrawalRow).getByText(/^Solde /))).toBe('Solde 4 000,00 HTG');
+    expect(screen.getByRole('link', { name: 'Tout voir' })).toHaveAttribute('href', '/transactions');
+    expect(screen.getByRole('link', { name: 'Historique' })).toHaveAttribute('href', '/transactions');
+  });
+
+  it('dit bonjour avec le prénom et propose de vérifier son identité, message que le joueur peut fermer', async () => {
+    mockApi({
+      'GET /me': { status: 200, body: { data: { ...player, kyc_status: 'none', profile: { ...player.profile, first_name: 'Ana' } } } },
+      'GET /wallet': { status: 200, body: wallet },
+      'GET /wallet/transactions': { status: 200, body: page([]) },
+      'GET /payments/methods': { status: 200, body: { data: { methods: [{ provider: 'plopplop', method: 'moncash', label: 'MonCash' }], min_amount: htg(100_00), max_amount: htg(100_000_00) } } },
+    });
+
+    renderApp('/wallet');
+
+    expect(await screen.findByText('Bonjour, Ana')).toBeInTheDocument();
+    const tip = await screen.findByRole('complementary', { name: 'Vérifiez votre identité' });
+    expect(within(tip).getByRole('link', { name: 'Vérifier mon identité' })).toHaveAttribute('href', '/verification');
+
+    await userEvent.click(within(tip).getByRole('button', { name: 'Fermer ce message' }));
+    expect(screen.queryByRole('complementary', { name: 'Vérifiez votre identité' })).toBeNull();
+  });
+
+  it('identité vérifiée : rappelle les moyens de dépôt ouverts par le serveur', async () => {
+    mockApi({
+      'GET /me': { status: 200, body: { data: { ...player, kyc_status: 'approved' } } },
+      'GET /wallet': { status: 200, body: wallet },
+      'GET /wallet/transactions': { status: 200, body: page([]) },
+      'GET /payments/methods': { status: 200, body: { data: { methods: [{ provider: 'plopplop', method: 'moncash', label: 'MonCash' }, { provider: 'plopplop', method: 'natcash', label: 'NatCash' }], min_amount: htg(100_00), max_amount: htg(100_000_00) } } },
+    });
+
+    renderApp('/wallet');
+
+    expect(await screen.findByText('Bonjour, Ana')).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Dépôt avec MonCash ou NatCash' })).toBeInTheDocument();
   });
 
   it('affiche les 11 rubriques du compte, celles à venir signalées', async () => {
