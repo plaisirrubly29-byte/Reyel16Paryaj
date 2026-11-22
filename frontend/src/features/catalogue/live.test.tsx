@@ -38,7 +38,11 @@ function liveOdds(home: string, reason: LiveSuspendedReason | null = null, score
       id: '1', status: 'live', score, minute: 41,
       markets: [{
         id: 'm1', key: 'h2h', line: null, odds_version: 3, bettable: reason === null, suspended_reason: reason,
-        selections: [{ id: '11', key: 'home', odds: home }, { id: '12', key: 'draw', odds: '3.10' }, { id: '13', key: 'away', odds: '3.80' }],
+        selections: [
+          { id: '11', key: 'home', label: '1', name: 'Everton', odds: home },
+          { id: '12', key: 'draw', label: 'X', name: 'Match nul', odds: '3.10' },
+          { id: '13', key: 'away', label: '2', name: 'Chelsea', odds: '3.80' },
+        ],
       }],
     }],
     live_betting: { enabled: true, acceptance_delay_seconds: 8, max_stake_minor: 1000000, allow_multiple: false },
@@ -155,5 +159,48 @@ describe('paris en direct', () => {
     expect(await within(slip).findByText(/Suspendu : score en cours de vérification/)).toBeInTheDocument();
     expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeDisabled();
     expect(within(slip).getByText(/attendez sa réouverture ou retirez-la/)).toBeInTheDocument();
+  });
+
+  /** Demande de Rubly : « un match est à 2-1, je peux parier que le match peut terminer 3-1 ». */
+  it('propose le score exact final à partir du score du moment, sans les scores déjà dépassés', async () => {
+    const score = (key: string, id: string, odds: string) => ({ id, key, label: key, name: key.replace('-', ' - '), odds });
+    const event = {
+      ...LIVE_EVENT, score: { home: '2', away: '1' }, minute: 60,
+      markets: [...LIVE_EVENT.markets, {
+        id: 'm2', key: 'correct_score', name: 'Score exact', odds_version: 2, odds_updated_at: minutesAgo(1), bettable: true,
+        suspended_reason: null,
+        // Catalogue lu avant le dernier but : encore des scores dépassés.
+        selections: [score('1-0', '21', '7.00'), score('2-1', '22', '3.10'), score('3-1', '23', '4.50')],
+      }],
+    };
+    const correctScore = (selections: ReturnType<typeof score>[], at = { home: '2', away: '1' }) => {
+      const base = liveOdds('1.40', null, at);
+      base.data[0].markets.push({
+        id: 'm2', key: 'correct_score', line: null, odds_version: 3, bettable: true, suspended_reason: null, selections,
+      });
+      return base;
+    };
+    let current = correctScore([score('2-1', '22', '3.20'), score('3-1', '23', '4.80'), score('4-1', '24', '12.00')]);
+    api(() => current, { 'GET /events/1/markets': { status: 200, body: { data: event } } });
+    renderApp('/events/1');
+
+    // À 2-1 : « 3-1 » et le nouveau « 4-1 » se parient, « 1-0 » n'est plus proposé.
+    const threeOne = await screen.findByRole('button', { name: '3-1 3 - 1 à 4.80' });
+    expect(threeOne).toBeEnabled();
+    expect(screen.getByRole('button', { name: '4-1 4 - 1 à 12.00' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /^1-0/ })).not.toBeInTheDocument();
+
+    await userEvent.click(threeOne);
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
+    expect(within(slip).getByText('En direct')).toBeInTheDocument();
+    await userEvent.type(within(slip).getByLabelText('Montant de la mise'), '100');
+    expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeEnabled();
+
+    // Nouveau but (3-2) : « 3-1 » n'est plus possible, le coupon le dit et bloque le pari.
+    current = correctScore([score('3-2', '25', '3.00'), score('4-2', '26', '5.50')], { home: '3', away: '2' });
+    await refreshLive();
+    expect(await within(slip).findByText(/Cette issue n'est plus proposée pendant le match : retirez-la du coupon/)).toBeInTheDocument();
+    expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^3-1 3 - 1/ })).not.toBeInTheDocument();
   });
 });

@@ -375,7 +375,10 @@ export function BetSlipPanel() {
                     )}
                     {rowError && <p className="betslip-issue">{rowError}</p>}
                     {rowSuspended && (
-                      <p className="betslip-issue">{liveInfo.reason ? SUSPENDED_LABELS[liveInfo.reason] : 'Suspendu'}. Le pari reprend dès sa réouverture.</p>
+                      <p className="betslip-issue">
+                        {liveInfo.reason ? SUSPENDED_LABELS[liveInfo.reason] : 'Suspendu'}
+                        {liveInfo.reason === 'selection_closed' ? ' : retirez-la du coupon.' : '. Le pari reprend dès sa réouverture.'}
+                      </p>
                     )}
                   </li>
                 );
@@ -465,16 +468,24 @@ function useLiveSelections(selections: SlipSelection[]): Map<string, LiveSelecti
 
   return useMemo(() => {
     const map = new Map<string, LiveSelection>();
+    const liveEvents = new Set<string>();
     for (const event of data?.data ?? []) {
       if (event.status !== 'live') continue;
+      liveEvents.add(event.id);
       for (const market of event.markets) {
         for (const s of market.selections) {
           map.set(s.id, { odds: s.odds, oddsVersion: market.odds_version, bettable: market.bettable, reason: market.suspended_reason });
         }
       }
     }
+    // Match en cours sans cette issue : score exact déjà dépassé (« 1-0 » à 2-1) ou marché sans paris en direct.
+    for (const s of selections) {
+      if (liveEvents.has(s.eventId) && !map.has(s.selectionId)) {
+        map.set(s.selectionId, { odds: s.odds, oddsVersion: s.oddsVersion, bettable: false, reason: 'selection_closed' });
+      }
+    }
     return map;
-  }, [data]);
+  }, [data, selections]);
 }
 
 /** Ce qui manque pour pouvoir parier. */

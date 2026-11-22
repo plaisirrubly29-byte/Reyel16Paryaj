@@ -175,7 +175,7 @@ class LiveBettingTest extends TestCase
         $this->bet($this->selection(), '2.00')->assertUnprocessable()->assertJsonPath('error.code', 'selection_unavailable');
     }
 
-    public function test_only_the_1x2_and_totals_are_offered_live_and_nothing_after_the_cutoff_minute(): void
+    public function test_the_live_markets_close_after_the_cutoff_minute(): void
     {
         $this->assertTrue(app(LiveOddsService::class)->quote($this->market('totals'))->open);
 
@@ -194,6 +194,94 @@ class LiveBettingTest extends TestCase
         $this->score('2', '1');
 
         $this->assertSame(LiveOddsService::DECIDED, app(LiveOddsService::class)->quote($this->market('totals'))->reason);
+    }
+
+    /** Demande de Rubly : « un match est à 2-1, je peux parier que le match peut terminer 3-1 ». */
+    private function scoreTwoOne(): void
+    {
+        $this->score('2', '1');
+        $this->travel(31)->seconds(); // fin de la vérification du but
+        $this->score('2', '1');
+    }
+
+    public function test_the_final_correct_score_is_offered_live_from_the_current_score(): void
+    {
+        // Dès le début du match : un score exact coté par le modèle, de 0-0 à 3-3.
+        $quote = app(LiveOddsService::class)->quote($this->market('correct_score'));
+        $this->assertTrue($quote->open);
+        $this->assertArrayHasKey('0-0', $quote->odds);
+        $this->assertArrayHasKey('1-0', $quote->odds);
+
+        $this->scoreTwoOne();
+        $market = $this->market('correct_score');
+        $quote = app(LiveOddsService::class)->quote($market);
+        $this->assertTrue($quote->open);
+        $this->assertArrayHasKey('3-1', $quote->odds);
+        $this->assertArrayHasKey('2-1', $quote->odds);
+        $this->assertArrayNotHasKey('1-0', $quote->odds, 'Score déjà dépassé : plus proposé.');
+        $this->assertArrayNotHasKey('2-0', $quote->odds);
+        $this->assertLessThan((float) $quote->odds['5-4'], (float) $quote->odds['3-1'], 'Un but de plus est plus probable que cinq.');
+        $this->assertSame('reyel16', $market->source_bookmaker);
+
+        // Catalogue, onglet Live et coupon : seulement les scores encore possibles, dans l'ordre.
+        $catalogue = collect($this->getJson("/api/v1/events/{$this->event()->id}/markets")->assertOk()->json('data.markets'))
+            ->firstWhere('key', 'correct_score');
+        $keys = collect($catalogue['selections'])->pluck('key');
+        $this->assertTrue($catalogue['bettable']);
+        $this->assertSame('2-1', $keys->first());
+        $this->assertContains('3-1', $keys);
+        $this->assertNotContains('1-0', $keys);
+        $this->assertNotContains('0-0', $keys);
+        $this->assertSame('3-1', collect($catalogue['selections'])->firstWhere('key', '3-1')['label']);
+
+        $live = collect($this->getJson("/api/v1/live/odds?event_ids={$this->event()->id}")->assertOk()->json('data.0.markets'))
+            ->firstWhere('key', 'correct_score');
+        $this->assertTrue($live['bettable']);
+        $this->assertSame($keys->all(), collect($live['selections'])->pluck('key')->all());
+        $this->assertSame('3 - 1', collect($live['selections'])->firstWhere('key', '3-1')['name']);
+    }
+
+    public function test_a_live_bet_on_the_final_correct_score_is_accepted_but_not_on_a_score_already_passed(): void
+    {
+        $this->scoreTwoOne();
+
+        $this->bet($this->selection('correct_score', '1-0'), '10.00')->assertUnprocessable()
+            ->assertJsonPath('error.code', 'selection_unavailable');
+        // Coté par notre seul modèle : même mise maximale que les paris spéciaux REYEL 16.
+        $this->bet($this->selection('correct_score', '3-1'), null, 1_500_00)->assertUnprocessable()
+            ->assertJsonPath('error.code', 'stake_out_of_range');
+
+        $this->bet($this->selection('correct_score', '3-1'))->assertStatus(202)->assertJsonPath('data.status', 'awaiting');
+        $ticket = BetTicket::sole();
+        $this->assertSame('2-1', $ticket->selections()->value('live_score'));
+
+        $this->travel(8)->seconds();
+        $this->score('2', '1');
+        $this->actingAs($this->player)->getJson("/api/v1/bets/{$ticket->id}")->assertOk()
+            ->assertJsonPath('data.status', 'pending');
+    }
+
+    public function test_the_correct_score_bet_is_rejected_if_a_goal_is_scored_during_the_delay(): void
+    {
+        $this->scoreTwoOne();
+        $this->bet($this->selection('correct_score', '2-1'))->assertStatus(202);
+
+        $ticket = BetTicket::sole();
+
+        $this->travel(5)->seconds();
+        $this->score('3', '1');
+        $this->travel(3)->seconds();
+
+        $this->assertSame(BetTicketStatus::Rejected, app(LiveAcceptanceService::class)->process($ticket->id));
+        $this->assertSame('score_changed', $ticket->refresh()->rejection_reason);
+        $this->assertSame(50_000_00, $this->balance(), 'Mise rendue.');
+        // Après le but, « 2-1 » n'est plus proposé, « 4-1 » oui.
+        $this->travel(31)->seconds();
+        $this->score('3', '1');
+        $odds = app(LiveOddsService::class)->quote($this->market('correct_score'))->odds;
+        $this->assertArrayNotHasKey('2-1', $odds);
+        $this->assertArrayHasKey('4-1', $odds);
+        $this->assertArrayHasKey('6-4', $odds);
     }
 
     public function test_a_live_bet_waits_for_the_acceptance_delay_then_is_accepted(): void
@@ -342,6 +430,19 @@ class LiveBettingTest extends TestCase
 
         config(['sports_data.live_daily_credits' => $spent + 1]);
         $this->assertSame(['soccer_epl'], $live->runScores()['skipped']);
+    }
+
+    public function test_live_scores_are_only_read_while_the_match_can_still_be_bet_on(): void
+    {
+        // Plafond de crédits gardé pour les matchs pariables : après la fin des paris (85e minute + mi-temps + marge),
+        // le score n'est plus relu toutes les 30 s ; la synchro en direct (toutes les 15 min) s'occupe de la fin du match.
+        $live = app(LiveUpdateService::class);
+        $this->assertSame(['soccer_epl'], $live->liveBettingCompetitions());
+
+        $this->travel(80)->minutes(); // 110 minutes après le coup d'envoi
+        $this->assertSame([], $live->liveBettingCompetitions());
+        $this->assertSame([], $live->runScores()['updated']);
+        $this->assertContains('soccer_epl', $live->liveCompetitions());
     }
 
     public function test_the_live_scores_task_only_runs_when_live_betting_is_open(): void

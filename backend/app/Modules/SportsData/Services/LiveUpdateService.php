@@ -26,7 +26,36 @@ class LiveUpdateService
         private readonly CatalogueSyncService $sync,
         private readonly ResultImportService $results,
         private readonly CreditBudget $budget,
+        private readonly LiveCorrectScoreMarket $correctScore,
     ) {}
+
+    /**
+     * Compétitions de football dont un match peut encore être parié en direct : commencé depuis moins que la fin des paris
+     * (live_model.cutoff_minute + mi-temps + 5 min de marge). Seules celles-là ont besoin du score toutes les 30 s ;
+     * les autres sports (pas de paris en direct) et les matchs en fin de partie restent sur run() (toutes les 15 min).
+     * Sans ce tri, le plafond de crédits du jour partait en quelques dizaines de minutes et tous les marchés en direct
+     * restaient suspendus (« score en cours de vérification », motif score_stale).
+     *
+     * @return list<string>
+     */
+    public function liveBettingCompetitions(): array
+    {
+        $window = (int) config('sports_data.live_model.cutoff_minute') + LiveOddsModel::BREAK_MINUTES + 5;
+        $since = now()->subMinutes(min($window, (int) config('sports_data.live_window_minutes')));
+
+        return Event::query()
+            ->join('competitions', 'competitions.id', '=', 'events.competition_id')
+            ->where('competitions.is_active', true)
+            ->where('competitions.external_key', 'like', 'soccer%')
+            ->where('events.provider', $this->provider->name())
+            ->whereIn('events.status', [EventStatus::Scheduled, EventStatus::Live])
+            ->where('events.starts_at', '<=', now())
+            ->where('events.starts_at', '>', $since)
+            ->distinct()
+            ->orderBy('competitions.external_key')
+            ->pluck('competitions.external_key')
+            ->all();
+    }
 
     /** @return list<string> clés des compétitions qui ont un match en cours */
     public function liveCompetitions(): array
@@ -73,6 +102,7 @@ class LiveUpdateService
 
             $scores = $this->results->import($key, 0);
             $odds = $this->sync->syncLive($key);
+            $this->correctScore->syncCompetition($key);
 
             $errors = array_filter([$scores->error, $odds->error]);
             if ($errors !== []) {
@@ -89,7 +119,7 @@ class LiveUpdateService
     }
 
     /**
-     * Scores seulement (1 crédit par compétition en direct), plus souvent que les cotes (sports-data:live-scores,
+     * Scores seulement (1 crédit par compétition de football pariable en direct, liveBettingCompetitions), plus souvent que les cotes (sports-data:live-scores,
      * toutes les live_model.scores_interval_seconds) : un score récent garde les marchés en direct ouverts et un
      * changement de score les suspend (LiveOddsService). Même plafond de crédits du jour que run() : plafond atteint,
      * les scores vieillissent et le direct se ferme de lui-même.
@@ -101,7 +131,7 @@ class LiveUpdateService
         $outcome = ['updated' => [], 'skipped' => [], 'errors' => []];
         $cap = (int) config('sports_data.live_daily_credits');
 
-        foreach ($this->liveCompetitions() as $key) {
+        foreach ($this->liveBettingCompetitions() as $key) {
             if ($this->creditsSpentToday() + 1 > $cap) {
                 $outcome['skipped'][] = $key;
 
@@ -110,6 +140,7 @@ class LiveUpdateService
 
             $this->spend(1);
             $scores = $this->results->import($key, 0);
+            $this->correctScore->syncCompetition($key);
             if ($scores->error !== null) {
                 $outcome['errors'][$key] = $scores->error;
             }

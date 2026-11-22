@@ -107,6 +107,39 @@ final class LiveOddsModel
     }
 
     /**
+     * Probabilités justes du score exact final (sans marge), à partir du score du moment : seuls les scores encore
+     * possibles existent (à 2-1, « 3-1 » oui, « 1-0 » jamais). Même grille que probabilities() : les nuls reçoivent le
+     * même surplus de l'avant-match, atténué avec le temps, puis tout est ramené à 1.
+     *
+     * @param  int  $maxExtraGoals  buts supplémentaires par équipe renvoyés (au-delà : probabilité négligeable)
+     * @return array<string, float> clé "domicile-extérieur" (ex. "3-1") => probabilité, score du moment compris
+     */
+    public static function correctScores(float $homeRate, float $awayRate, float $drawBoost, int $homeGoals, int $awayGoals,
+        float $remainingMinutes, int $maxExtraGoals): array
+    {
+        $share = max(0.0, min(1.0, $remainingMinutes / self::PLAYING_MINUTES));
+        $grid = self::grid($homeRate * $share, $awayRate * $share);
+        $boost = 1 + ($drawBoost - 1) * $share;
+        $limit = max(0, min(self::MAX_GOALS, $maxExtraGoals));
+
+        $scores = [];
+        $sum = 0.0;
+        foreach ($grid as $x => $row) {
+            foreach ($row as $y => $p) {
+                $home = $homeGoals + $x;
+                $away = $awayGoals + $y;
+                $p *= $home === $away ? $boost : 1.0;
+                $sum += $p;
+                if ($x <= $limit && $y <= $limit) {
+                    $scores["{$home}-{$away}"] = $p;
+                }
+            }
+        }
+
+        return $sum > 0 ? array_map(fn (float $p) => $p / $sum, $scores) : [];
+    }
+
+    /**
      * Taux de Poisson (match entier) qui reproduisent des probabilités justes observées à un instant du match :
      * cotes d'avant-match (score 0-0, 96 minutes restantes) ou cotes en direct de The Odds API.
      *

@@ -619,9 +619,11 @@ paths:
       x-task: V2-D06
       description: |
         Public, jamais en cache : relu toutes les quelques secondes par l'onglet Live, la page du match et le coupon
-        (décision D-20, option « Modèle + The Odds »). Cotes du 1X2 et du plus/moins calculées à chaque appel par le
-        modèle en direct (force des équipes, score, temps restant), jamais mieux payées que la dernière cote en direct
-        du fournisseur. Un match qui n'est plus en cours est renvoyé avec son statut et sans marché.
+        (décision D-20, option « Modèle + The Odds »). Cotes du 1X2, du plus/moins et du score exact final calculées à
+        chaque appel par le modèle en direct (force des équipes, score, temps restant) ; 1X2 et plus/moins jamais mieux
+        payés que la dernière cote en direct du fournisseur. Le score exact ne contient que les scores encore possibles
+        (à 2-1 : « 3-1 » oui, « 1-0 » jamais), dans l'ordre à afficher : cette liste remplace celle du catalogue.
+        Un match qui n'est plus en cours est renvoyé avec son statut et sans marché.
       parameters:
         - { name: event_ids, in: query, required: true, description: "Identifiants des matchs, séparés par des virgules (50 au plus)", schema: { type: string, example: "12,15" } }
       responses:
@@ -647,14 +649,21 @@ paths:
                             type: object
                             properties:
                               id: { type: string }
-                              key: { type: string, enum: [h2h, totals] }
+                              key: { type: string, enum: [h2h, totals, correct_score] }
                               line: { type: [string, "null"] }
                               odds_version: { type: integer }
                               bettable: { type: boolean }
                               suspended_reason: { $ref: "#/components/schemas/LiveSuspendedReason" }
                               selections:
                                 type: array
-                                items: { type: object, properties: { id: { type: string }, key: { type: string }, odds: { type: string, example: "2.05" } } }
+                                items:
+                                  type: object
+                                  properties:
+                                    id: { type: string }
+                                    key: { type: string, example: "3-1" }
+                                    label: { type: string, description: "Libellé court du bouton de cote (1, X, 2, > 2.5, 3-1)" }
+                                    name: { type: string, example: "3 - 1" }
+                                    odds: { type: string, example: "2.05" }
                   live_betting:
                     type: object
                     properties:
