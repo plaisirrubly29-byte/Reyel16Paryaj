@@ -41,7 +41,8 @@ class AuthService
 
             $user->profile()->create([
                 'birth_date' => $data['birth_date'],
-                'country' => $data['country'] ?? null,
+                // Site conçu pour Haïti : le formulaire ne demande plus le pays.
+                'country' => $data['country'] ?? 'HT',
             ]);
 
             // V2-E01 : preuve de l'acceptation des textes (version, date, IP), dans la même transaction que le compte.
