@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { guest, mockApi, player, renderApp } from '../../test/renderApp';
 import { LEGAL_VERSION } from '../legal/legal';
@@ -183,20 +183,17 @@ describe('inscription', { timeout: 15_000 }, () => {
     expect(body).not.toHaveProperty('referral_code'); // aucun code parrain : rien n'est envoyé
   });
 
-  it('propose le pays dans une liste, Haïti par défaut et en tête', async () => {
+  it('ne demande ni le pays (Haïti) ni « 18 ans ou plus » : l\'âge vient de la date de naissance', async () => {
     const fetchMock = mockApi({
       'GET /me': guest,
       'POST /auth/register': { status: 201, body: { data: player } },
     });
     renderApp('/register');
 
-    const country = await screen.findByRole('combobox', { name: 'Pays' });
-    expect(country).toHaveValue('HT');
-    const options = within(country).getAllByRole('option');
-    expect(options[0]).toHaveTextContent('Haïti');
-    expect(options.length).toBeGreaterThan(200);
+    await screen.findByLabelText('Nom');
+    expect(screen.queryByRole('combobox', { name: 'Pays' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/18 ans ou plus/)).not.toBeInTheDocument();
 
-    await userEvent.selectOptions(country, 'Canada');
     await userEvent.type(screen.getByLabelText('Nom'), 'Ana Joueuse');
     await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
     await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
@@ -206,7 +203,7 @@ describe('inscription', { timeout: 15_000 }, () => {
     await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
 
     const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
-    expect(JSON.parse(String(registerCall?.[1]?.body)).country).toBe('CA');
+    expect(JSON.parse(String(registerCall?.[1]?.body)).country).toBe('HT');
   });
 
   it('exige la case des conditions et envoie la version acceptée', async () => {
