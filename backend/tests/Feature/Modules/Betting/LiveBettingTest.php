@@ -15,6 +15,7 @@ use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Models\Selection;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
+use App\Modules\SportsData\Services\CreditBudget;
 use App\Modules\SportsData\Services\LiveOddsService;
 use App\Modules\SportsData\Services\LiveUpdateService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
@@ -60,7 +61,9 @@ class LiveBettingTest extends TestCase
         $kickoff = CarbonImmutable::parse($this->event()->starts_at);
         $this->travelTo($kickoff->addMinutes(30));
         $this->fake->setStartsAt('fake-1', $kickoff)->setResult('fake-1', '0', '0', completed: false);
-        app(LiveUpdateService::class)->run(); // en direct : score 0-0 et cotes du fournisseur
+        // En direct : score 0-0 (relu toutes les 30 s), puis cotes du fournisseur.
+        app(LiveUpdateService::class)->runScores();
+        app(LiveUpdateService::class)->run();
 
         $this->player = User::factory()->create();
         $ledger = app(LedgerService::class);
@@ -505,6 +508,34 @@ class LiveBettingTest extends TestCase
 
         config(['sports_data.live_daily_credits' => $spent + 1]);
         $this->assertSame(['soccer_epl'], $live->runScores()['skipped']);
+    }
+
+    /** Signalé par Rubly : les cotes de tous les sports vidaient le plafond du jour, plus de score, direct fermé. */
+    public function test_the_odds_sync_leaves_half_of_the_daily_cap_to_the_scores(): void
+    {
+        $live = app(LiveUpdateService::class);
+        $spent = $live->creditsSpentToday();
+        config(['sports_data.live_daily_credits' => 2 * $spent]);
+
+        $this->assertSame(['soccer_epl'], $live->run()['skipped']);
+        $this->assertSame(['soccer_epl'], $live->runScores()['updated']);
+        $this->score('0', '0');
+        $this->assertTrue(app(LiveOddsService::class)->quote($this->market())->open);
+    }
+
+    public function test_the_odds_sync_does_not_pay_again_for_scores_read_every_30_seconds(): void
+    {
+        $live = app(LiveUpdateService::class);
+        $spent = $live->creditsSpentToday();
+
+        $live->run();
+        $this->assertSame($spent + app(CreditBudget::class)->costPerCompetition(), $live->creditsSpentToday());
+
+        // Direct coupé : plus de scores toutes les 30 s, la synchro des cotes relit le score elle-même.
+        config(['betting.allow_live' => false]);
+        $spent = $live->creditsSpentToday();
+        $live->run();
+        $this->assertSame($spent + 1 + app(CreditBudget::class)->costPerCompetition(), $live->creditsSpentToday());
     }
 
     public function test_live_scores_are_only_read_while_the_match_can_still_be_bet_on(): void
