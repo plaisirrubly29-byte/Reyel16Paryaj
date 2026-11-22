@@ -5,14 +5,23 @@ import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
 import { Icon } from '../../../shared/components/Icon';
 import { MoneyText } from '../../../shared/components/MoneyText';
-import { Spinner } from '../../../shared/components/Spinner';
 import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import { useDepositMethods } from '../api/deposits';
 import { WITHDRAWAL_STATUS_LABELS, isInProgress, useCancelWithdrawal, useRequestWithdrawal, useWithdrawals, type Withdrawal } from '../api/withdrawals';
 import { KycRequiredAlert } from './KycRequiredAlert';
-import { MethodChosen, MethodPicker, useChosenMethod } from './MethodPicker';
+import { MethodChosen, MethodPicker, MethodPickerSkeleton, useChosenMethod } from './MethodPicker';
+import { QuickAmounts, type QuickAmount } from './QuickAmounts';
+
+/** Montants proposés en un toucher (en gourdes), dans les bornes et sans dépasser le solde. */
+const QUICK_AMOUNTS = [500, 1_000, 2_500];
+
+/** Pastille de couleur du statut d'un retrait dans l'historique. */
+const WITHDRAWAL_TONES: Record<Withdrawal['status'], 'ok' | 'ko' | 'wait' | 'off'> = {
+  requested: 'wait', first_approved: 'wait', processing: 'wait', review: 'wait',
+  paid: 'ok', failed: 'ko', rejected: 'ko', cancelled: 'off',
+};
 
 /** Saisie « +509 3412-3456 », « 3412 3456 »… → « 34123456 » ; null si ce n'est pas un numéro haïtien à 8 chiffres. */
 function localNumber(value: string): string | null {
@@ -54,9 +63,8 @@ function WithdrawalRow({ w }: { w: Withdrawal }) {
     <li>
       <span>
         <strong>{w.method_label} · {formatRecipient(w.recipient)}</strong>
-        <span className="muted small">
-          {new Date(w.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} · {WITHDRAWAL_STATUS_LABELS[w.status]}
-        </span>
+        <span className="muted small">{new Date(w.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+        <span className={`op-status op-status-${WITHDRAWAL_TONES[w.status]}`}>{WITHDRAWAL_STATUS_LABELS[w.status]}</span>
       </span>
       <span className="withdrawal-side">
         <MoneyText value={w.amount} />
@@ -103,6 +111,14 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
   // Retrait demandé dans cette page : son statut suit la liste rafraîchie (versé, échoué…).
   const latest = request.data && (withdrawals.data?.data.find((w) => w.reference === request.data.reference) ?? request.data);
   const error = request.error instanceof ApiError ? request.error : null;
+  // Montants rapides : jamais au-dessus du solde ni du plafond ; « Tout » (ou « Maximum » si le plafond est plus bas
+  // que le solde) propose le plus gros retrait possible.
+  const cap = balance ? Math.min(balance.minor, max?.minor ?? balance.minor) : max?.minor;
+  const quick: QuickAmount[] = QUICK_AMOUNTS.map((v) => ({ minor: v * 100 }))
+    .filter((a) => (!min || a.minor >= min.minor) && (cap === undefined || a.minor <= cap));
+  if (balance && cap !== undefined && cap > 0 && (!min || cap >= min.minor) && !quick.some((a) => a.minor === cap)) {
+    quick.push({ minor: cap, label: cap === balance.minor ? 'Tout' : 'Maximum' });
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -126,7 +142,7 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
         </div>
       </header>
       <div className="money-card-body">
-        {config.isPending && <Spinner />}
+        {config.isPending && <MethodPickerSkeleton />}
 
         {config.data && !open && (
           <>
@@ -144,7 +160,12 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
                 Votre retrait de <MoneyText value={pending.amount} /> est en cours. Vous pourrez en demander un autre une fois celui-ci terminé.
               </Alert>
             )}
-            <MethodPicker title="Recevoir sur" options={settings.methods.map((m) => ({ key: m.method, label: m.label }))} onPick={setMethod} />
+            <MethodPicker
+              title="Recevoir sur"
+              options={settings.methods.map((m) => ({ key: m.method, label: m.label }))}
+              onPick={setMethod}
+              describe={() => 'Versement sur votre numéro'}
+            />
           </>
         ) : (
           <form className="deposit-form stack-sm" onSubmit={submit} noValidate>
@@ -182,6 +203,7 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
               error={error?.fieldErrors.recipient ?? (wallet !== '' && !phoneValid ? 'Indiquez un numéro haïtien à 8 chiffres.' : undefined)}
             />
             <TextField
+              className="amount-field"
               label="Montant du retrait"
               inputMode="decimal"
               name="withdrawal-amount"
@@ -195,12 +217,16 @@ export function WithdrawalCard({ accountId, phone, currency, balance, frozen }: 
                 ?? (aboveBalance ? 'Ce montant dépasse votre solde disponible.' : undefined)
                 ?? (outOfBounds && min && max ? `Le montant doit être compris entre ${formatMoney(min)} et ${formatMoney(max)}.` : undefined)}
             />
+            <QuickAmounts amounts={quick} currency={currency} current={amountMinor} onPick={setAmount} />
 
-            <Button type="submit" block loading={request.isPending}
+            <Button type="submit" block className="money-submit" loading={request.isPending}
               disabled={amountMinor === null || amountMinor === 0n || outOfBounds || aboveBalance || !phoneValid || chosen === null || !!pending}>
               Demander le retrait
             </Button>
-            <p className="muted small">Le montant est réservé tout de suite sur votre solde, puis versé sur votre portefeuille mobile.</p>
+            <p className="money-note">
+              <Icon name="lock" size={15} />
+              <span>Le montant est réservé tout de suite sur votre solde, puis versé sur votre portefeuille mobile.</span>
+            </p>
           </form>
         ))}
 
