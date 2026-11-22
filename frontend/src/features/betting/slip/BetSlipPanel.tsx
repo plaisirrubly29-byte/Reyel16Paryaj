@@ -7,7 +7,7 @@ import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { useMe } from '../../auth/api/auth';
 import { formatKickoff } from '../../catalogue/format';
-import { SUSPENDED_LABELS, useLiveOdds, type LiveSuspendedReason } from '../../catalogue/api/liveOdds';
+import { SUSPENDED_LABELS, isLiveClosed, useLiveOdds, type LiveSuspendedReason } from '../../catalogue/api/liveOdds';
 import { ApiError } from '../../../shared/api/client';
 import { MAX_SELECTIONS, useBetSlip, type BetMode, type SlipSelection } from './BetSlipContext';
 import { BetCodeShare } from '../tickets/BetCodeShare';
@@ -334,6 +334,7 @@ export function BetSlipPanel() {
                 const rowError = rowErrors[s.selectionId];
                 const liveInfo = live.get(s.selectionId);
                 const rowSuspended = liveInfo?.bettable === false;
+                const rowClosed = rowSuspended && isLiveClosed(liveInfo.reason);
                 return (
                   <li key={s.selectionId} className={conflicts.has(s.selectionId) || rowError || rowSuspended ? 'has-issue' : undefined}>
                     <div className="betslip-pick">
@@ -343,7 +344,7 @@ export function BetSlipPanel() {
                         {s.market ?? 'Résultat du match'} · {liveInfo ? <span className="live-indicator">En direct</span> : `${day} ${time}`}
                       </div>
                     </div>
-                    <span className="odds-value">{rowSuspended ? 'Suspendu' : s.odds}</span>
+                    <span className="odds-value">{rowClosed ? 'Fermé' : rowSuspended ? 'Suspendu' : s.odds}</span>
                     <button
                       type="button"
                       className="remove"
@@ -377,7 +378,7 @@ export function BetSlipPanel() {
                     {rowSuspended && (
                       <p className="betslip-issue">
                         {liveInfo.reason ? SUSPENDED_LABELS[liveInfo.reason] : 'Suspendu'}
-                        {liveInfo.reason === 'selection_closed' ? ' : retirez-la du coupon.' : '. Le pari reprend dès sa réouverture.'}
+                        {rowClosed ? ' : retirez-la du coupon.' : '. Le pari reprend dès sa réouverture.'}
                       </p>
                     )}
                   </li>
@@ -437,7 +438,11 @@ export function BetSlipPanel() {
                 </button>
               )}
               {user && suspended.length > 0 && (
-                <p className="muted small place-hint">Une sélection en direct est suspendue : attendez sa réouverture ou retirez-la.</p>
+                <p className="muted small place-hint">
+                  {suspended.some((s) => isLiveClosed(live.get(s.selectionId)?.reason ?? null))
+                    ? 'Une sélection en direct est fermée : retirez-la du coupon.'
+                    : 'Une sélection en direct est suspendue : attendez sa réouverture ou retirez-la.'}
+                </p>
               )}
               {user && suspended.length === 0 && <PlaceHint singles={singles} allStaked={allSinglesStaked} stakeMissing={stakeMinor === null} conflicts={conflicts.size > 0} />}
             </div>

@@ -10,6 +10,7 @@ import type { CatalogueEvent, CatalogueMarket } from './catalogue';
  */
 export type LiveSuspendedReason =
   | 'live_closed' | 'not_available' | 'suspended' | 'score_stale' | 'score_changed' | 'closing' | 'decided'
+  | 'score_unavailable'
   // Coupon seulement : issue plus proposée pendant le match (score exact déjà dépassé, marché sans direct).
   | 'selection_closed';
 
@@ -46,11 +47,24 @@ export const SUSPENDED_LABELS: Record<LiveSuspendedReason, string> = {
   not_available: 'Pas de pari en direct sur ce marché',
   suspended: 'Suspendu',
   score_stale: 'Suspendu : score en cours de vérification',
-  score_changed: 'Suspendu : but en cours de vérification',
-  closing: 'Suspendu : fin de match',
+  score_changed: 'Suspendu quelques secondes : but en cours de vérification',
+  closing: 'Paris fermés : fin de match',
   decided: 'Suspendu : issue presque acquise',
+  score_unavailable: 'Paris fermés : le score de ce match n\'est plus suivi en direct',
   selection_closed: 'Cette issue n\'est plus proposée pendant le match',
 };
+
+/**
+ * Motifs d'un marché fermé pour la suite du match (pas une suspension de quelques secondes) : inutile d'attendre sa
+ * réouverture, la sélection est à retirer du coupon.
+ */
+const CLOSED_REASONS: ReadonlySet<LiveSuspendedReason> = new Set<LiveSuspendedReason>([
+  'live_closed', 'not_available', 'closing', 'score_unavailable', 'selection_closed',
+]);
+
+export function isLiveClosed(reason: LiveSuspendedReason | null): boolean {
+  return reason !== null && CLOSED_REASONS.has(reason);
+}
 
 /** Score, minute et cotes du moment de ces matchs ; aucune requête sans match. */
 export function useLiveOdds(eventIds: string[]) {
