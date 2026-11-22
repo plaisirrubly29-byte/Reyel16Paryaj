@@ -28,6 +28,8 @@ class AccessAndSessionTest extends TestCase
     /** Routes de l'API accessibles sans session. Toute nouvelle route publique doit être ajoutée ici sciemment. */
     private const PUBLIC_ROUTES = [
         'GET api/v1/health',
+        // Cotes en direct de l'onglet Live (D-20), publiques comme le catalogue.
+        'GET api/v1/live/odds',
         'POST api/v1/auth/register',
         'POST api/v1/auth/login',
         'POST api/v1/auth/forgot-password',

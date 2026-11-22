@@ -4,6 +4,7 @@ import { Icon } from '../../../shared/components/Icon';
 import { sportIcon } from '../../../shared/components/sportIcon';
 import { useLotteryDraws } from '../../lottery/api/lottery';
 import { useSports } from '../api/catalogue';
+import { groupByCountry, tierLabel } from '../competitionGroups';
 
 function normalize(value: string): string {
   return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -59,7 +60,7 @@ export function CompetitionsMenu() {
 
 /**
  * Contenu du menu des championnats : sports à gauche (pastilles défilantes sur mobile), compétitions du sport choisi
- * à droite (déjà dans l'ordre « top compétitions » de l'API), avec une recherche sur toutes les compétitions.
+ * à droite, regroupées par pays (D1 → D2 → D3 → coupes, avec la division), avec une recherche sur toutes les compétitions.
  */
 export function CompetitionsBrowser({ autoFocus = false }: { autoFocus?: boolean }) {
   const sports = useSports();
@@ -105,7 +106,9 @@ export function CompetitionsBrowser({ autoFocus = false }: { autoFocus?: boolean
               <Link to={competitionLink(c.sport.slug, c.id)}>
                 <span className="competitions-name">
                   {c.name}
-                  <span className="competitions-sub">{c.sport.name}{c.country ? ` · ${c.country}` : ''}</span>
+                  <span className="competitions-sub">
+                    {[c.sport.name, c.country, tierLabel(c.tier)].filter(Boolean).join(' · ')}
+                  </span>
                 </span>
                 <span className="competitions-count">{c.events_count}</span>
               </Link>
@@ -148,15 +151,22 @@ export function CompetitionsBrowser({ autoFocus = false }: { autoFocus?: boolean
                   <Icon name="arrowRight" size={18} />
                 </Link>
               </li>
-              {sport.competitions.map((c) => (
-                <li key={c.id}>
-                  <Link to={competitionLink(sport.slug, c.id)}>
-                    <span className="competitions-name">
-                      {c.name}
-                      {c.country && <span className="competitions-sub">{c.country}</span>}
-                    </span>
-                    <span className="competitions-count">{c.events_count}</span>
-                  </Link>
+              {groupByCountry(sport.competitions).map((group) => (
+                <li key={group.country} className="competitions-group">
+                  <p className="competitions-country" aria-hidden="true">{group.country}</p>
+                  <ul aria-label={group.country}>
+                    {group.competitions.map((c) => (
+                      <li key={c.id}>
+                        <Link to={competitionLink(sport.slug, c.id)}>
+                          <span className="competitions-name">
+                            {c.name}
+                            {tierLabel(c.tier) && <span className="competitions-sub">{tierLabel(c.tier)}</span>}
+                          </span>
+                          <span className="competitions-count">{c.events_count}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>

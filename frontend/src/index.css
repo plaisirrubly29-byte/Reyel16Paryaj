@@ -82,15 +82,15 @@ p { margin: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--gap); }
 .content { padding: 1.5rem 1rem; max-width: 1200px; width: 100%; margin: 0 auto; }
 
-/* --- Logo : vignette bordeaux recadrée sur « Reyel16 PARYAJ » (logo officiel carré) --- */
+/* --- Logo : toujours le logo officiel ENTIER (carré), jamais recadré ni retouché (consigne de Rubly) --- */
 .brand { display: inline-flex; align-items: center; flex: 0 0 auto; }
 .brand-logo {
-  display: block; height: 4.6rem; aspect-ratio: 840 / 330; border-radius: 10px;
+  display: block; height: 4.6rem; aspect-ratio: 1; border-radius: 6px;
   background-color: #7d0214; background-repeat: no-repeat;
-  background-size: 114.9% auto; background-position: 57.1% 76.5%;
-  box-shadow: 0 2px 10px rgba(94, 0, 16, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background-size: contain; background-position: center;
+  box-shadow: 0 2px 10px rgba(94, 0, 16, 0.35);
 }
-.site-footer .brand-logo { height: 4rem; }
+.site-footer .brand-logo { height: 6.5rem; }
 
 /* --- En-tête : une seule barre bordeaux collante (logo, navigation, recherche, compte), liseré or --- */
 .site-header {
@@ -102,7 +102,7 @@ p { margin: 0; }
   max-width: 1880px; margin: 0 auto; height: var(--nav-h); padding: 0 1.5rem;
   display: flex; align-items: center; gap: 1.25rem;
 }
-.site-header .brand-logo { height: 2.9rem; border-radius: 8px; box-shadow: none; }
+.site-header .brand-logo { height: 4rem; box-shadow: none; }
 
 /* Navigation : pastilles discrètes, l'onglet actif est souligné d'or */
 .main-nav { display: flex; align-items: center; gap: 0.25rem; height: 100%; margin-left: 0.5rem; }
@@ -310,9 +310,8 @@ p { margin: 0; }
 }
 .auth-visual-brand { display: flex; align-items: center; gap: 0.6rem; position: relative; z-index: 1; }
 .auth-visual-brand .brand-logo { height: 5.5rem; }
-/* Logo complet (carré) : écrans de connexion et d'inscription. */
-.brand-logo-full { aspect-ratio: 1; background-size: cover; background-position: center; border-radius: 18px; }
-.auth-visual-brand .brand-logo-full { height: 10rem; }
+/* Grand logo (720 px) : écrans de connexion et d'inscription. */
+.auth-visual-brand .brand-logo-full { height: 10rem; border-radius: 12px; }
 .auth-visual-heading { position: relative; z-index: 1; color: #fff; font-size: 1.4rem; line-height: 1.3; letter-spacing: -0.01em; margin: 0 0 1.15rem; max-width: 20ch; }
 .auth-visual-list { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.8rem; }
 .auth-visual-list li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.92rem; font-weight: 500; color: rgba(255, 255, 255, 0.95); }
@@ -387,7 +386,7 @@ p { margin: 0; }
 }
 .admin-brand { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0.4rem 0.75rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .admin-brand-link { display: block; flex: none; }
-.admin-brand .brand-logo { height: 2.6rem; border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+.admin-brand .brand-logo { height: 3.4rem; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 .admin-brand-tag {
   font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--accent-text); background: var(--accent); border-radius: 999px; padding: 0.15rem 0.55rem;
@@ -947,6 +946,12 @@ p { margin: 0; }
 .side-menu-list a.active { color: var(--brand); font-weight: 600; }
 .side-menu-label { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .side-sub { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+/* Compétitions regroupées par pays : le pays en titre, ses championnats en dessous (D1 → D2 → coupes) */
+.side-menu-country {
+  margin: 0.9rem 1.25rem 0 2rem; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.side-menu-group .side-menu-list { padding-top: 0.15rem; }
 
 /* Bandeau d'accueil : bordeaux en halos, trame fine, bordure lumineuse ; devise à gauche, logo incliné à droite,
    rangée de pastilles des sports proposés (défilement horizontal) en bas. */
@@ -1266,6 +1271,13 @@ a.match-line-teams:hover { color: var(--brand); }
 }
 .odds-btn:active:not(:disabled) { transform: scale(0.98); }
 .odds-btn:disabled { cursor: not-allowed; opacity: 0.45; }
+/* Marché en direct suspendu un moment (score à vérifier, fin de match) : « Suspendu » par-dessus les cotes grisées */
+.odds-suspended { position: relative; }
+.odds-suspended-badge {
+  position: absolute; z-index: 1; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
+  padding: 0.2rem 0.7rem; border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+}
 .odds-btn-bar, .odds-btn-wide {
   flex-direction: row; justify-content: space-between; align-items: stretch; min-height: 3.4rem; padding: 0;
   background: var(--surface); color: var(--text); border: 2px solid var(--odds); border-radius: 4px; overflow: visible;
@@ -1412,6 +1424,11 @@ a.match-line-teams:hover { color: var(--brand); }
 .competitions-list a:hover { background: var(--bg, #f3f5f9); color: var(--accent-ink); }
 .competitions-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .competitions-sub { color: var(--muted); font-size: 0.82rem; font-weight: 500; }
+.competitions-group ul { list-style: none; margin: 0; padding: 0; }
+.competitions-country {
+  margin: 0.75rem 0.7rem 0.2rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border);
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
 .competitions-all { color: var(--accent-ink) !important; }
 .competitions-count {
   min-width: 1.8rem; padding: 0 0.4rem; border-radius: 999px; background: #eef1f6; color: var(--muted);
@@ -1634,6 +1651,7 @@ a.match-line-teams:hover { color: var(--brand); }
   .side-menu-list a { font-size: 1rem; padding-left: 1.25rem; }
   .side-menu-top, .side-menu-title { padding-left: 1.25rem; margin-left: 0; }
   .side-menu-title { margin-left: 1.25rem; }
+  .side-menu-country { margin-left: 1.25rem; }
   .match-line-teams { font-size: 1.15rem; }
   .top-matches { grid-auto-columns: 320px; }
   .board-tabs button { padding: 0 2rem; font-size: 1.15rem; }
@@ -1652,7 +1670,7 @@ a.match-line-teams:hover { color: var(--brand); }
   :root { --nav-h: 60px; }
   .sportsbook { grid-template-columns: minmax(0, 1fr); }
   .site-header-inner { padding: 0 1rem; gap: 0.75rem; }
-  .site-header .brand-logo { height: 2.5rem; }
+  .site-header .brand-logo { height: 3.2rem; }
   .main-nav, .header-search { display: none; }
   .header-actions { margin-left: auto; }
   .header-actions > .btn { height: 2.3rem; font-size: 0.88rem; padding: 0 0.8rem; }
@@ -1916,6 +1934,7 @@ a.match-line-teams:hover { color: var(--brand); }
 .ticket-status.status-won { background: var(--success-soft); border-color: #a7dcbb; color: var(--success); }
 .ticket-status.status-lost { background: #fdecec; border-color: #f2b8b5; color: var(--danger); }
 .ticket-status.status-void { background: var(--surface-2); border-color: var(--border-strong); color: var(--muted); }
+.ticket-status.status-rejected { background: var(--surface-2); border-color: var(--border-strong); color: var(--muted); }
 .ticket-selections .selection-won .odds-value { color: var(--success); }
 .ticket-selections .selection-lost .odds-value { color: var(--danger); text-decoration: line-through; }
 .ticket-selections { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }

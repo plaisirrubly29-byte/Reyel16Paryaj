@@ -217,5 +217,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('payments-withdrawal', fn (Request $request) => Limit::perMinute(5)->by('payments-withdrawal:'.$request->user()?->id));
 
         RateLimiter::for('catalogue', fn (Request $request) => Limit::perMinute(120)->by('catalogue:'.$request->ip()));
+        // Cotes en direct relues toutes les 3 s par page ouverte (D-20) ; large, plusieurs joueurs partagent souvent une IP.
+        RateLimiter::for('live-odds', fn (Request $request) => Limit::perMinute(240)->by('live-odds:'.$request->ip()));
     }
 }

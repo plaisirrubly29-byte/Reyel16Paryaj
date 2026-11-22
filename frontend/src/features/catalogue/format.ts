@@ -49,3 +49,9 @@ export function isLiveStatus(status: string): boolean {
 export function liveLabel(status: string): string | null {
   return isLiveStatus(status) ? 'EN DIRECT' : null;
 }
+
+/** Minute de jeu estimée par le serveur (« 31' »), « Mi-temps » pendant la pause, sinon « En cours ». */
+export function liveMinute(minute: number | null | undefined): string {
+  if (minute === null) return 'Mi-temps';
+  return typeof minute === 'number' ? `${minute}'` : 'En cours';
+}

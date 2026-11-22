@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Icon } from '../../../shared/components/Icon';
 import type { CatalogueEvent } from '../api/catalogue';
-import { formatKickoff, liveLabel } from '../format';
+import { formatKickoff, liveLabel, liveMinute } from '../format';
 import { OddsButtons } from './OddsButtons';
 
 /**
@@ -41,7 +41,7 @@ export function MatchRow({ event, marketKey = 'h2h' }: { event: CatalogueEvent; 
           {live && event.score
             ? <strong className="match-line-score" aria-label={`Score : ${event.score.home} à ${event.score.away}`}>{event.score.home} - {event.score.away}</strong>
             : <strong className={live ? 'live-indicator' : undefined}>{live ? 'En cours' : time}</strong>}
-          <span className={live ? 'live-indicator' : undefined}>{live ? 'En cours' : day}</span>
+          <span className={live ? 'live-indicator' : undefined}>{live ? liveMinute(event.minute) : day}</span>
           <Link to={`/events/${event.id}`} className="match-line-more" aria-label={`Voir tous les paris : ${event.home_team} – ${event.away_team}`}>
             Plus de paris <Icon name="chevron" size={18} />
           </Link>

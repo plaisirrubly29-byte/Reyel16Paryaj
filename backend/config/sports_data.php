@@ -29,61 +29,63 @@ return [
     // Motifs acceptés ("*", "tennis_*") ; les compétitions que la liste ne désigne plus sont retirées du catalogue.
     'sports' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_SPORTS', 'soccer_epl'))))),
 
-    // Noms affichés des compétitions (le fournisseur n'a que des codes : "EPL", "NBA"…).
+    // Noms affichés des compétitions (le fournisseur n'a que des codes : "EPL", "NBA"…), avec leur pays.
+    // « tier » : niveau dans le pays (d1 = 1re division … d4, cup = coupe nationale), pour ranger le menu des
+    // championnats par pays (D1 → D2 → D3 → coupes) ; absent pour les compétitions internationales et les autres.
     'competition_labels' => [
-        'soccer_epl' => ['name' => 'Premier League', 'country' => 'Angleterre'],
-        'soccer_france_ligue_one' => ['name' => 'Ligue 1', 'country' => 'France'],
-        'soccer_spain_la_liga' => ['name' => 'LaLiga', 'country' => 'Espagne'],
-        'soccer_italy_serie_a' => ['name' => 'Serie A', 'country' => 'Italie'],
-        'soccer_germany_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Allemagne'],
+        'soccer_epl' => ['name' => 'Premier League', 'country' => 'Angleterre', 'tier' => 'd1'],
+        'soccer_france_ligue_one' => ['name' => 'Ligue 1', 'country' => 'France', 'tier' => 'd1'],
+        'soccer_spain_la_liga' => ['name' => 'LaLiga', 'country' => 'Espagne', 'tier' => 'd1'],
+        'soccer_italy_serie_a' => ['name' => 'Serie A', 'country' => 'Italie', 'tier' => 'd1'],
+        'soccer_germany_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Allemagne', 'tier' => 'd1'],
         'soccer_uefa_champs_league' => ['name' => 'Ligue des champions', 'country' => 'Europe'],
         'soccer_uefa_europa_league' => ['name' => 'Ligue Europa', 'country' => 'Europe'],
         'soccer_uefa_europa_conference_league' => ['name' => 'Ligue Europa Conférence', 'country' => 'Europe'],
         'soccer_uefa_nations_league' => ['name' => 'Ligue des nations', 'country' => 'Europe'],
         'soccer_conmebol_copa_libertadores' => ['name' => 'Copa Libertadores', 'country' => 'Amérique du Sud'],
         'soccer_conmebol_copa_sudamericana' => ['name' => 'Copa Sudamericana', 'country' => 'Amérique du Sud'],
-        'soccer_efl_champ' => ['name' => 'Championship', 'country' => 'Angleterre'],
-        'soccer_france_ligue_two' => ['name' => 'Ligue 2', 'country' => 'France'],
-        'soccer_brazil_campeonato' => ['name' => 'Brasileirão Série A', 'country' => 'Brésil'],
-        'soccer_usa_mls' => ['name' => 'MLS', 'country' => 'États-Unis'],
-        'soccer_saudi_arabia_pro_league' => ['name' => 'Saudi Pro League', 'country' => 'Arabie saoudite'],
-        'soccer_mexico_ligamx' => ['name' => 'Liga MX', 'country' => 'Mexique'],
+        'soccer_efl_champ' => ['name' => 'Championship', 'country' => 'Angleterre', 'tier' => 'd2'],
+        'soccer_france_ligue_two' => ['name' => 'Ligue 2', 'country' => 'France', 'tier' => 'd2'],
+        'soccer_brazil_campeonato' => ['name' => 'Brasileirão Série A', 'country' => 'Brésil', 'tier' => 'd1'],
+        'soccer_usa_mls' => ['name' => 'MLS', 'country' => 'États-Unis', 'tier' => 'd1'],
+        'soccer_saudi_arabia_pro_league' => ['name' => 'Saudi Pro League', 'country' => 'Arabie saoudite', 'tier' => 'd1'],
+        'soccer_mexico_ligamx' => ['name' => 'Liga MX', 'country' => 'Mexique', 'tier' => 'd1'],
         // Football des autres pays (SPORTS_DATA_SPORTS=soccer_*) : le fournisseur n'y met pas toujours le pays.
-        'soccer_argentina_primera_division' => ['name' => 'Primera División', 'country' => 'Argentine'],
-        'soccer_australia_aleague' => ['name' => 'A-League', 'country' => 'Australie'],
-        'soccer_austria_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Autriche'],
-        'soccer_belgium_first_div' => ['name' => 'Pro League', 'country' => 'Belgique'],
-        'soccer_brazil_serie_b' => ['name' => 'Série B', 'country' => 'Brésil'],
-        'soccer_chile_campeonato' => ['name' => 'Primera División', 'country' => 'Chili'],
-        'soccer_china_superleague' => ['name' => 'Super League', 'country' => 'Chine'],
-        'soccer_denmark_superliga' => ['name' => 'Superliga', 'country' => 'Danemark'],
-        'soccer_england_efl_cup' => ['name' => 'Coupe de la Ligue', 'country' => 'Angleterre'],
-        'soccer_england_league1' => ['name' => 'League One', 'country' => 'Angleterre'],
-        'soccer_england_league2' => ['name' => 'League Two', 'country' => 'Angleterre'],
-        'soccer_fa_cup' => ['name' => 'FA Cup', 'country' => 'Angleterre'],
-        'soccer_finland_veikkausliiga' => ['name' => 'Veikkausliiga', 'country' => 'Finlande'],
-        'soccer_france_coupe_de_france' => ['name' => 'Coupe de France', 'country' => 'France'],
-        'soccer_germany_bundesliga2' => ['name' => '2. Bundesliga', 'country' => 'Allemagne'],
+        'soccer_argentina_primera_division' => ['name' => 'Primera División', 'country' => 'Argentine', 'tier' => 'd1'],
+        'soccer_australia_aleague' => ['name' => 'A-League', 'country' => 'Australie', 'tier' => 'd1'],
+        'soccer_austria_bundesliga' => ['name' => 'Bundesliga', 'country' => 'Autriche', 'tier' => 'd1'],
+        'soccer_belgium_first_div' => ['name' => 'Pro League', 'country' => 'Belgique', 'tier' => 'd1'],
+        'soccer_brazil_serie_b' => ['name' => 'Série B', 'country' => 'Brésil', 'tier' => 'd2'],
+        'soccer_chile_campeonato' => ['name' => 'Primera División', 'country' => 'Chili', 'tier' => 'd1'],
+        'soccer_china_superleague' => ['name' => 'Super League', 'country' => 'Chine', 'tier' => 'd1'],
+        'soccer_denmark_superliga' => ['name' => 'Superliga', 'country' => 'Danemark', 'tier' => 'd1'],
+        'soccer_england_efl_cup' => ['name' => 'Coupe de la Ligue', 'country' => 'Angleterre', 'tier' => 'cup'],
+        'soccer_england_league1' => ['name' => 'League One', 'country' => 'Angleterre', 'tier' => 'd3'],
+        'soccer_england_league2' => ['name' => 'League Two', 'country' => 'Angleterre', 'tier' => 'd4'],
+        'soccer_fa_cup' => ['name' => 'FA Cup', 'country' => 'Angleterre', 'tier' => 'cup'],
+        'soccer_finland_veikkausliiga' => ['name' => 'Veikkausliiga', 'country' => 'Finlande', 'tier' => 'd1'],
+        'soccer_france_coupe_de_france' => ['name' => 'Coupe de France', 'country' => 'France', 'tier' => 'cup'],
+        'soccer_germany_bundesliga2' => ['name' => '2. Bundesliga', 'country' => 'Allemagne', 'tier' => 'd2'],
         'soccer_germany_bundesliga_women' => ['name' => 'Bundesliga féminine', 'country' => 'Allemagne'],
-        'soccer_germany_dfb_pokal' => ['name' => 'Coupe d\'Allemagne', 'country' => 'Allemagne'],
-        'soccer_germany_liga3' => ['name' => '3. Liga', 'country' => 'Allemagne'],
-        'soccer_greece_super_league' => ['name' => 'Super League', 'country' => 'Grèce'],
-        'soccer_italy_serie_b' => ['name' => 'Serie B', 'country' => 'Italie'],
-        'soccer_japan_j_league' => ['name' => 'J1 League', 'country' => 'Japon'],
-        'soccer_korea_kleague1' => ['name' => 'K League 1', 'country' => 'Corée du Sud'],
-        'soccer_league_of_ireland' => ['name' => 'Premier Division', 'country' => 'Irlande'],
-        'soccer_netherlands_eredivisie' => ['name' => 'Eredivisie', 'country' => 'Pays-Bas'],
-        'soccer_norway_eliteserien' => ['name' => 'Eliteserien', 'country' => 'Norvège'],
-        'soccer_poland_ekstraklasa' => ['name' => 'Ekstraklasa', 'country' => 'Pologne'],
-        'soccer_portugal_primeira_liga' => ['name' => 'Liga Portugal', 'country' => 'Portugal'],
-        'soccer_russia_premier_league' => ['name' => 'Premier Liga', 'country' => 'Russie'],
-        'soccer_spain_copa_del_rey' => ['name' => 'Copa del Rey', 'country' => 'Espagne'],
-        'soccer_spain_segunda_division' => ['name' => 'LaLiga 2', 'country' => 'Espagne'],
-        'soccer_spl' => ['name' => 'Premiership', 'country' => 'Écosse'],
-        'soccer_sweden_allsvenskan' => ['name' => 'Allsvenskan', 'country' => 'Suède'],
-        'soccer_sweden_superettan' => ['name' => 'Superettan', 'country' => 'Suède'],
-        'soccer_switzerland_superleague' => ['name' => 'Super League', 'country' => 'Suisse'],
-        'soccer_turkey_super_league' => ['name' => 'Süper Lig', 'country' => 'Turquie'],
+        'soccer_germany_dfb_pokal' => ['name' => 'Coupe d\'Allemagne', 'country' => 'Allemagne', 'tier' => 'cup'],
+        'soccer_germany_liga3' => ['name' => '3. Liga', 'country' => 'Allemagne', 'tier' => 'd3'],
+        'soccer_greece_super_league' => ['name' => 'Super League', 'country' => 'Grèce', 'tier' => 'd1'],
+        'soccer_italy_serie_b' => ['name' => 'Serie B', 'country' => 'Italie', 'tier' => 'd2'],
+        'soccer_japan_j_league' => ['name' => 'J1 League', 'country' => 'Japon', 'tier' => 'd1'],
+        'soccer_korea_kleague1' => ['name' => 'K League 1', 'country' => 'Corée du Sud', 'tier' => 'd1'],
+        'soccer_league_of_ireland' => ['name' => 'Premier Division', 'country' => 'Irlande', 'tier' => 'd1'],
+        'soccer_netherlands_eredivisie' => ['name' => 'Eredivisie', 'country' => 'Pays-Bas', 'tier' => 'd1'],
+        'soccer_norway_eliteserien' => ['name' => 'Eliteserien', 'country' => 'Norvège', 'tier' => 'd1'],
+        'soccer_poland_ekstraklasa' => ['name' => 'Ekstraklasa', 'country' => 'Pologne', 'tier' => 'd1'],
+        'soccer_portugal_primeira_liga' => ['name' => 'Liga Portugal', 'country' => 'Portugal', 'tier' => 'd1'],
+        'soccer_russia_premier_league' => ['name' => 'Premier Liga', 'country' => 'Russie', 'tier' => 'd1'],
+        'soccer_spain_copa_del_rey' => ['name' => 'Coupe du Roi', 'country' => 'Espagne', 'tier' => 'cup'],
+        'soccer_spain_segunda_division' => ['name' => 'LaLiga 2', 'country' => 'Espagne', 'tier' => 'd2'],
+        'soccer_spl' => ['name' => 'Premiership', 'country' => 'Écosse', 'tier' => 'd1'],
+        'soccer_sweden_allsvenskan' => ['name' => 'Allsvenskan', 'country' => 'Suède', 'tier' => 'd1'],
+        'soccer_sweden_superettan' => ['name' => 'Superettan', 'country' => 'Suède', 'tier' => 'd2'],
+        'soccer_switzerland_superleague' => ['name' => 'Super League', 'country' => 'Suisse', 'tier' => 'd1'],
+        'soccer_turkey_super_league' => ['name' => 'Süper Lig', 'country' => 'Turquie', 'tier' => 'd1'],
         // Compétitions saisonnières (actives seulement pendant le tournoi ou les qualifications).
         'soccer_fifa_world_cup' => ['name' => 'Coupe du monde', 'country' => 'Monde'],
         'soccer_fifa_world_cup_qualifiers_europe' => ['name' => 'Qualifications Coupe du monde', 'country' => 'Europe'],
@@ -175,6 +177,26 @@ return [
     'live_daily_credits' => (int) env('SPORTS_DATA_LIVE_DAILY_CREDITS', 30),
     // Règle de fraîcheur en direct : une cote bouge vite pendant le match, elle est bloquée plus tôt.
     'max_live_odds_age_minutes' => (int) env('SPORTS_DATA_MAX_LIVE_ODDS_AGE', 20),
+
+    // Paris en direct (D-20, option « Modèle + The Odds ») : cotes du football recalculées à chaque seconde par notre
+    // modèle (LiveOddsModel : force des équipes tirée des cotes, score, temps restant), recalées sur les cotes en direct
+    // de The Odds API à chaque synchro (live_cron) et jamais mieux payées que la dernière d'entre elles. Seulement le
+    // 1X2 et le plus/moins, seulement si betting.allow_live est activé.
+    'live_model' => [
+        // Score relu chez le fournisseur (sports-data:live-scores, 1 crédit par compétition en direct et par passage),
+        // seulement quand les paris en direct sont ouverts. Valeurs possibles : 10, 15, 20, 30 ou 60 secondes.
+        'scores_interval_seconds' => (int) env('SPORTS_DATA_LIVE_SCORES_SECONDS', 30),
+        // Score plus ancien : marchés du match suspendus (un but a pu être marqué sans qu'on le sache).
+        'max_score_age_seconds' => (int) env('SPORTS_DATA_LIVE_MAX_SCORE_AGE', 90),
+        // Après un changement de score, marchés suspendus ce temps (but refusé par la VAR, score corrigé).
+        'score_change_cooldown_seconds' => (int) env('SPORTS_DATA_LIVE_SCORE_COOLDOWN', 30),
+        // Plus de paris en direct après cette minute de jeu estimée (fin de match, cotes trop sensibles au retard).
+        'cutoff_minute' => (int) env('SPORTS_DATA_LIVE_CUTOFF_MINUTE', 85),
+        // Une issue plus probable que ça (cote sous ~1,05) : marché suspendu, il n'y a plus rien à parier.
+        'max_probability' => (float) env('SPORTS_DATA_LIVE_MAX_PROBABILITY', 0.95),
+        // Buts attendus sur un match quand les bookmakers n'ont pas de plus/moins pour ce match.
+        'default_total_goals' => (float) env('SPORTS_DATA_LIVE_DEFAULT_GOALS', 2.6),
+    ],
 
     // Cache des réponses du catalogue public (P8-03), en secondes ; 0 = désactivé (développement, tests). Le pari
     // revérifie toujours la cote côté serveur : une cote affichée depuis le cache peut avoir ce retard, jamais le ticket.

@@ -146,3 +146,26 @@ Quand le plafond de crédits du jour est atteint, les cotes en direct vieillisse
 
 Cash-out (V2-D07), autres sports en direct, flux de faits de jeu d'un autre fournisseur (buts, cartons en temps
 réel), diffusion vidéo.
+
+## 10. Mise en œuvre — option « Modèle + The Odds » (choisie par Rubly, 2026-11-22)
+
+Code livré, **`betting.allow_live` toujours coupé par défaut** : rien ne change en Staging ni en Production tant qu'un
+Super Admin ne l'active pas (conditions du §7).
+
+| Élément | Mise en œuvre |
+|---|---|
+| Cotes en direct | Modèle maison (`LiveOddsModel`, Poisson) : force offensive de chaque équipe tirée du 1X2 et du plus/moins d'avant-match, puis score et temps restant. Recalculées **à chaque lecture** (rien n'est écrit chaque seconde). Football, 1X2 et plus/moins seulement. |
+| Correction par The Odds API | À chaque synchro en direct (`sports-data:live`, `SPORTS_DATA_LIVE_CRON`), le modèle est recalé sur les cotes en direct reçues ; notre cote n'est **jamais mieux payée** que la dernière cote The Odds (marge comprise) prise après le dernier changement de score. |
+| Marge | `OddsMargin` + `live_extra` (2 points), toujours appliquée aux cotes du modèle. |
+| Score | `sports-data:live-scores` toutes les 30 s (`SPORTS_DATA_LIVE_SCORES_SECONDS` : 10 à 60 s), 1 crédit par compétition en direct, **seulement quand le direct est ouvert**, sous le même plafond de crédits du jour. |
+| Suspension automatique | Score de plus de 90 s, changement de score depuis moins de 30 s (VAR), après la 85e minute, issue acquise ou probabilité > 95 %, suspension par un administrateur, direct coupé. Affiché « Suspendu » côté joueur. |
+| Délai d'acceptation | Option 3.2 C : ticket `awaiting` (202), mise réservée, revérifié après 8 s (5 à 15 s, réglable par le Super Admin) : score identique, aucun changement de score depuis le pari, marché ouvert, cote pas plus basse de plus de 3 %. Sinon `rejected`, mise rendue (écriture `bet:{id}:rejected`). Jamais vérifié en 60 s : refusé. |
+| Cote qui bouge | La cote vue reste acceptée si celle du moment n'est pas plus basse de plus de 3 % (`BETTING_LIVE_ODDS_TOLERANCE`) ; le ticket prend la plus basse des deux. |
+| Mise maximale | 10 000 HTG par ticket en direct (`BETTING_LIVE_MAX_STAKE_MINOR`, réglable par le Super Admin). Paris simples seulement (`BETTING_LIVE_ALLOW_MULTIPLE=false`). |
+| Coupe-circuit | `betting.allow_live` (paramètres audités) : coupé, plus aucun pari en direct, les tickets en attente sont refusés et les scores ne sont plus relus (aucun crédit). |
+| Écrans | Onglet Live et page du match : cotes, score et minute relus toutes les 3 s (`GET /live/odds`) ; coupon : cote mise à jour, « Suspendu », « Pari en cours de validation… » puis accepté ou refusé avec le motif. |
+
+**Risque restant** : nous ne connaissons un but qu'au rythme des scores de The Odds API (30 s + leur propre retard). Un
+pari pris juste après un but que nous n'avons pas encore vu n'est refusé que si le nouveau score arrive avant la fin du
+délai d'acceptation. Réduire ce risque : scores plus fréquents (15 s), délai plus long (10 à 15 s), mise maximale plus
+basse, ou fin des paris plus tôt (`SPORTS_DATA_LIVE_CUTOFF_MINUTE`).
