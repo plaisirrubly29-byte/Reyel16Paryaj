@@ -101,4 +101,30 @@ class LiveOddsModelTest extends TestCase
         $this->assertSame('1.90', substr(LiveOddsModel::odds(0.5, 0.05), 0, 4));
         $this->assertSame('1.010', LiveOddsModel::odds(0.999, 0.08));
     }
+
+    public function test_the_final_correct_score_starts_from_the_current_score(): void
+    {
+        [$home, $away, $boost] = $this->anchor();
+        // 2-1 à la 60e minute environ (36 minutes de jeu restantes).
+        $p = LiveOddsModel::correctScores($home, $away, $boost, 2, 1, 36, 3);
+
+        $this->assertArrayHasKey('3-1', $p, 'À 2-1, le match peut encore finir 3-1.');
+        $this->assertArrayHasKey('2-1', $p);
+        $this->assertArrayHasKey('5-4', $p);
+        $this->assertArrayNotHasKey('1-0', $p, 'Un score déjà dépassé n\'existe plus.');
+        $this->assertArrayNotHasKey('2-0', $p);
+        $this->assertArrayNotHasKey('6-1', $p, 'Au-delà de 3 buts de plus : pas proposé.');
+        $this->assertCount(16, $p);
+        $this->assertSame('2-1', array_search(max($p), $p, true), 'Le score du moment est l\'issue la plus probable.');
+        $this->assertGreaterThan($p['2-2'], $p['3-1'], 'L\'équipe favorite marque plus souvent.');
+        $this->assertEqualsWithDelta(1.0, array_sum($p), 0.01);
+
+        // Le temps passe : le score du moment devient de plus en plus probable.
+        $late = LiveOddsModel::correctScores($home, $away, $boost, 2, 1, 6, 3);
+        $this->assertGreaterThan($p['2-1'], $late['2-1']);
+        $this->assertLessThan($p['3-1'], $late['3-1']);
+
+        // Fin du match : seul le score du moment reste.
+        $this->assertEqualsWithDelta(1.0, LiveOddsModel::correctScores($home, $away, $boost, 2, 1, 0, 3)['2-1'], 1e-9);
+    }
 }

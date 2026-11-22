@@ -165,6 +165,16 @@ Super Admin ne l'active pas (conditions du §7).
 | Coupe-circuit | `betting.allow_live` (paramètres audités) : coupé, plus aucun pari en direct, les tickets en attente sont refusés et les scores ne sont plus relus (aucun crédit). |
 | Écrans | Onglet Live et page du match : cotes, score et minute relus toutes les 3 s (`GET /live/odds`) ; coupon : cote mise à jour, « Suspendu », « Pari en cours de validation… » puis accepté ou refusé avec le motif. |
 
+### 10.1 Score exact final en direct et scores relus (2026-11-22, retour de Rubly)
+
+Rubly : « je devrais être capable de parier sur une équipe même si le match est en cours. Exemple : un match est à 2-1,
+je peux parier que le match peut terminer 3-1. »
+
+| Constat en Production | Correction |
+|---|---|
+| Tous les matchs de football en cours affichaient « Suspendu : score en cours de vérification » (`score_stale`) : le score n'était plus relu depuis plus de 90 s. `sports-data:live-scores` relisait toutes les compétitions qui ont un match commencé depuis moins de 3 h, **tous sports confondus** (NFL, NBA, tennis, matchs déjà finis) : 1 crédit par compétition toutes les 30 s, le plafond du jour (`SPORTS_DATA_LIVE_DAILY_CREDITS`) partait en quelques dizaines de minutes. | Les scores toutes les 30 s ne concernent plus que les compétitions de **football** dont un match peut encore être parié (commencé depuis moins de 85 min + mi-temps + 5 min). La fin des matchs reste suivie par `sports-data:live` (15 min). |
+| Pas de score exact en direct (D-20 §4.1). | Marché **score exact final** (`correct_score`) coté par le modèle à partir du score du moment : seuls les scores encore possibles, jusqu'à 3 buts de plus par équipe (`SPORTS_DATA_LIVE_CORRECT_SCORE_EXTRA_GOALS`), cote au plus 100 (`SPORTS_DATA_LIVE_CORRECT_SCORE_MAX_ODDS`). Sélections créées à chaque relecture du score (`LiveCorrectScoreMarket`) ; un score dépassé n'est plus affiché ni pariable (`selection_unavailable`). Marge « secondaire » + 2 points ; mise maximale des paris spéciaux (1 000 HTG) : aucun bookmaker ne borne cette cote. Même délai d'acceptation, mêmes suspensions, même règlement sur le score final. |
+
 **Risque restant** : nous ne connaissons un but qu'au rythme des scores de The Odds API (30 s + leur propre retard). Un
 pari pris juste après un but que nous n'avons pas encore vu n'est refusé que si le nouveau score arrive avant la fin du
 délai d'acceptation. Réduire ce risque : scores plus fréquents (15 s), délai plus long (10 à 15 s), mise maximale plus

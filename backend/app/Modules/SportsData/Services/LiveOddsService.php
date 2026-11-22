@@ -6,7 +6,9 @@ use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Market;
+use App\Modules\SportsData\Models\Selection;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 /**
  * Cotes en direct proposées aux joueurs (D-20, option « Modèle + The Odds »), calculées à la demande à chaque lecture :
@@ -15,7 +17,7 @@ use Carbon\CarbonInterface;
  *
  * Un marché d'un match en cours n'est ouvert que si TOUT est vrai (sinon « suspendu », avec le motif) :
  *  - paris en direct autorisés (betting.allow_live, le coupe-circuit) ;
- *  - football, 1X2 ou plus/moins, marché ouvert (pas suspendu par un administrateur) ;
+ *  - football, 1X2, plus/moins ou score exact final, marché ouvert (pas suspendu par un administrateur) ;
  *  - score reçu il y a moins de max_score_age_seconds, et pas de changement de score depuis moins de
  *    score_change_cooldown_seconds ;
  *  - avant la minute cutoff_minute, issue pas déjà acquise ni trop probable (max_probability) ;
@@ -24,11 +26,17 @@ use Carbon\CarbonInterface;
  * Cote = 1 / (probabilité du modèle × (1 + marge du direct, OddsMargin + live_extra)), plafonnée par la dernière cote
  * en direct de The Odds API (marge comprise) quand elle date d'après le dernier changement de score et reste assez
  * récente (max_live_odds_age_minutes) : jamais mieux payée que le marché.
+ *
+ * Score exact final (correct_score) : coté par le modèle seul à partir du score du moment (The Odds API n'en donne pas
+ * en direct). Seuls les scores encore possibles sont proposés : à 2-1, « 3-1 » oui, « 1-0 » jamais. Les sélections
+ * manquantes sont créées à chaque relecture du score (LiveCorrectScoreMarket).
  */
 class LiveOddsService
 {
-    /** Marchés proposés en direct (D-20 §4.1). */
-    public const MARKETS = ['h2h', 'totals'];
+    /** Marchés proposés en direct (D-20 §4.1, plus le score exact final demandé par Rubly le 2026-11-22). */
+    public const MARKETS = ['h2h', 'totals', self::CORRECT_SCORE];
+
+    public const CORRECT_SCORE = 'correct_score';
 
     public const LIVE_CLOSED = 'live_closed';
 
@@ -73,6 +81,10 @@ class LiveOddsService
 
         $home = (int) $event->home_score;
         $away = (int) $event->away_score;
+        if ($market->key === self::CORRECT_SCORE) {
+            return $this->correctScoreQuote($market, $event, $sportKey, $home, $away, $now);
+        }
+
         $line = $market->line === null ? null : (float) $market->line;
         if ($market->key === 'totals' && ($line === null || $home + $away > $line)) {
             return LiveQuote::closed(self::DECIDED); // « plus » déjà gagné
@@ -111,6 +123,78 @@ class LiveOddsService
         }
 
         return new LiveQuote(true, null, $odds);
+    }
+
+    /**
+     * Sélections à montrer pendant le match. Le score exact ne garde que les scores encore possibles (à 2-1 : ni « 1-0 »
+     * ni « 2-0 »), seulement ceux qui sont cotés quand le marché est ouvert, dans l'ordre domicile puis extérieur.
+     * Les autres marchés gardent toutes leurs sélections.
+     *
+     * @template TSelection of Selection
+     *
+     * @param  Collection<int, TSelection>  $selections
+     * @return Collection<int, TSelection>
+     */
+    public function visibleSelections(Market $market, LiveQuote $quote, Collection $selections): Collection
+    {
+        if ($market->key !== self::CORRECT_SCORE) {
+            return $selections;
+        }
+
+        $home = (int) $market->event?->home_score;
+        $away = (int) $market->event?->away_score;
+
+        return $selections
+            ->filter(fn (Selection $s) => $quote->open
+                ? isset($quote->odds[$s->key])
+                : (($goals = self::goals($s->key)) !== null && $goals[0] >= $home && $goals[1] >= $away))
+            ->sortBy(fn (Selection $s) => self::goals($s->key) ?? [PHP_INT_MAX, PHP_INT_MAX])
+            ->values();
+    }
+
+    /** @return array{0: int, 1: int}|null buts domicile et extérieur d'une clé de score exact ("3-1") */
+    public static function goals(string $key): ?array
+    {
+        return preg_match('/^(\d{1,2})-(\d{1,2})$/', $key, $m) === 1 ? [(int) $m[1], (int) $m[2]] : null;
+    }
+
+    /**
+     * Score exact final : probabilité de chaque score encore possible (modèle, sans plafond du fournisseur : The Odds
+     * API ne cote pas le score exact en direct). Un score impossible, ou trop improbable (cote au-delà de
+     * live_model.max_correct_score_odds), n'a pas de cote : il n'est ni affiché ni pariable.
+     */
+    private function correctScoreQuote(Market $market, Event $event, string $sportKey, int $home, int $away,
+        CarbonInterface $now): LiveQuote
+    {
+        $config = config('sports_data.live_model');
+        $p = LiveOddsModel::correctScores(
+            (float) $event->live_home_rate,
+            (float) $event->live_away_rate,
+            (float) ($event->live_draw_boost ?? 1.0),
+            $home,
+            $away,
+            LiveOddsModel::remainingMinutes($event->starts_at, $now),
+            (int) ($config['correct_score_extra_goals'] ?? 3),
+        );
+        if ($p === [] || max($p) > (float) ($config['max_probability'] ?? 0.95)) {
+            return LiveQuote::closed(self::DECIDED);
+        }
+
+        $margin = OddsMargin::rate($sportKey, self::CORRECT_SCORE, true);
+        $maxOdds = (float) ($config['max_correct_score_odds'] ?? 100);
+        $selections = $market->relationLoaded('selections') ? $market->selections : $market->selections()->get();
+        $odds = [];
+        foreach ($selections as $selection) {
+            if (! isset($p[$selection->key])) {
+                continue; // score déjà dépassé, ou trop loin du score du moment
+            }
+            $value = LiveOddsModel::odds($p[$selection->key], $margin);
+            if ((float) $value <= $maxOdds) {
+                $odds[$selection->key] = $value;
+            }
+        }
+
+        return $odds === [] ? LiveQuote::closed(self::NOT_AVAILABLE) : new LiveQuote(true, null, $odds);
     }
 
     /**

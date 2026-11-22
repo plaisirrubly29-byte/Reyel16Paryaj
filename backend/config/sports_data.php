@@ -196,6 +196,10 @@ return [
         'max_probability' => (float) env('SPORTS_DATA_LIVE_MAX_PROBABILITY', 0.95),
         // Buts attendus sur un match quand les bookmakers n'ont pas de plus/moins pour ce match.
         'default_total_goals' => (float) env('SPORTS_DATA_LIVE_DEFAULT_GOALS', 2.6),
+        // Score exact final en direct : scores proposés jusqu'à ce nombre de buts de plus par équipe que le score du
+        // moment (3 : à 2-1, de 2-1 à 5-4), et jamais au-delà de cette cote (issue trop improbable, risque de la maison).
+        'correct_score_extra_goals' => (int) env('SPORTS_DATA_LIVE_CORRECT_SCORE_EXTRA_GOALS', 3),
+        'max_correct_score_odds' => (float) env('SPORTS_DATA_LIVE_CORRECT_SCORE_MAX_ODDS', 100),
     ],
 
     // Cache des réponses du catalogue public (P8-03), en secondes ; 0 = désactivé (développement, tests). Le pari

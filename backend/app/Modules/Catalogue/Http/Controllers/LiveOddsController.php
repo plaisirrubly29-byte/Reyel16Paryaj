@@ -14,8 +14,8 @@ use Illuminate\Http\Request;
 
 /**
  * GET /live/odds?event_ids=1,2,3 — score, minute et cotes du moment des matchs en cours demandés (D-20), relus toutes
- * les quelques secondes par l'onglet Live, la page du match et le coupon. Seulement le 1X2 et le plus/moins (marchés
- * proposés en direct) ; cotes calculées à la demande par le modèle (LiveOddsService), jamais mises en cache.
+ * les quelques secondes par l'onglet Live, la page du match et le coupon. Seulement le 1X2, le plus/moins et le score
+ * exact final (marchés proposés en direct, le score exact limité aux scores encore possibles) ; cotes calculées à la demande par le modèle (LiveOddsService), jamais mises en cache.
  * Un match qui n'est plus en cours est renvoyé avec son statut et sans marché : l'écran le retire ou le fige.
  */
 class LiveOddsController extends Controller
@@ -57,9 +57,11 @@ class LiveOddsController extends Controller
                         'odds_version' => $market->odds_version,
                         'bettable' => $quote->open,
                         'suspended_reason' => $quote->open ? null : $quote->reason,
-                        'selections' => $market->selections->map(fn ($s) => [
+                        'selections' => $live->visibleSelections($market, $quote, $market->selections)->map(fn ($s) => [
                             'id' => (string) $s->id,
                             'key' => $s->key,
+                            'label' => MarketResource::selectionLabel($s->key, $market->line),
+                            'name' => $s->name,
                             'odds' => MarketResource::odds($quote->odds[$s->key] ?? (string) $s->odds),
                         ])->values(),
                     ];

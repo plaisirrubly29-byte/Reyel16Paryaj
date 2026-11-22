@@ -265,7 +265,7 @@ class BetPlacementService
 
         foreach ($picks as $pick) {
             $selection = $found->get((int) $pick['selection_id']);
-            if ($selection === null || ! $this->isOpen($selection->market)) {
+            if ($selection === null || ! $this->isOpen($selection->market) || ! $this->isQuotedLive($selection)) {
                 $unavailable[] = (string) $pick['selection_id'];
             }
         }
@@ -293,6 +293,18 @@ class BetPlacementService
             || $event->status === EventStatus::Live;
 
         return $eventOpen && $market->isBettable();
+    }
+
+    /**
+     * En direct, la sélection elle-même doit être cotée : un score exact déjà dépassé (« 1-0 » à 2-1) ou trop improbable
+     * n'a pas de cote, même si son marché est ouvert. Avant le match : toujours vrai.
+     */
+    private function isQuotedLive(Selection $selection): bool
+    {
+        $market = $selection->market;
+
+        return $market->event->status !== EventStatus::Live
+            || isset(app(LiveOddsService::class)->quote($market)->odds[$selection->key]);
     }
 
     /**
@@ -362,18 +374,23 @@ class BetPlacementService
 
     /**
      * Marchés maison (V2-D10), cotés par REYEL 16 sans bookmaker de référence : mise plafonnée plus bas
-     * (sports_data.house_markets.max_stake_minor) pour tout ticket qui en contient un.
+     * (sports_data.house_markets.max_stake_minor) pour tout ticket qui en contient un. Même plafond pour le score exact en
+     * direct : coté par notre seul modèle, sans cote de bookmaker pour le borner.
      *
      * @param  Collection<int, Selection>  $selections
      */
     private function assertHouseMarketStake(Collection $selections, int $stakeMinor, string $currency): void
     {
         $max = (int) config('sports_data.house_markets.max_stake_minor');
-        if ($stakeMinor <= $max || ! $selections->contains(fn (Selection $s) => HouseMarkets::isHouse($s->market->key))) {
+        $housePriced = fn (Selection $s) => HouseMarkets::isHouse($s->market->key)
+            || ($s->market->key === LiveOddsService::CORRECT_SCORE && $s->market->event->status === EventStatus::Live);
+        if ($stakeMinor <= $max || ! $selections->contains($housePriced)) {
             return;
         }
 
-        throw new ApiException('stake_out_of_range', __('Mise maximale sur les paris spéciaux REYEL 16 : :max.', [
+        $label = $selections->contains(fn (Selection $s) => HouseMarkets::isHouse($s->market->key))
+            ? 'Mise maximale sur les paris spéciaux REYEL 16 : :max.' : 'Mise maximale sur le score exact en direct : :max.';
+        throw new ApiException('stake_out_of_range', __($label, [
             'max' => number_format(intdiv($max, 100), 0, ',', ' ')." {$currency}",
         ]), 422, [
             'min' => ['minor' => (int) config('betting.min_stake_minor'), 'currency' => $currency],
