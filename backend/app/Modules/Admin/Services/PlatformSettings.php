@@ -7,6 +7,7 @@ use App\Modules\Admin\Models\SettingVersion;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Support\Http\ApiException;
+use App\Support\TransactionLock;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -129,7 +130,10 @@ class PlatformSettings
 
         try {
             return DB::transaction(function () use ($actor, $values, $reason, $baseVersion) {
-                $latest = SettingVersion::query()->orderByDesc('version')->lockForUpdate()->first();
+                // Pas de FOR UPDATE : setting_versions est en ajout seul, le compte de l'application n'y a pas le
+                // droit UPDATE en Production (erreur « permission denied »). Verrou applicatif à la place.
+                TransactionLock::acquire('setting_versions');
+                $latest = SettingVersion::query()->orderByDesc('version')->first();
                 $currentVersion = $latest?->version ?? 0;
 
                 if ($currentVersion !== $baseVersion) {
