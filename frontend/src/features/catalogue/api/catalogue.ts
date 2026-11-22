@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, type Envelope, type Paginated } from '../../../shared/api/client';
 import { isLiveStatus } from '../format';
+import { useLiveOverlay, type LiveSuspendedReason } from './liveOdds';
 
 /** GET /sports — sports ayant des matchs ouverts, y compris en direct. */
 export type CatalogueSport = {
@@ -27,8 +29,10 @@ export type CatalogueMarket = {
   odds_updated_at: string;
   /** Ligne du marché « Nombre de buts » (ex. "2.5") ; null pour le 1X2. */
   line?: string | null;
-  /** false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable. */
+  /** false : cote trop ancienne (règle de fraîcheur) ou marché en direct suspendu, affichée mais non pariable. */
   bettable: boolean;
+  /** Match en cours : motif de la suspension (score à vérifier, fin de match…) ; null s'il est ouvert. */
+  suspended_reason?: LiveSuspendedReason | null;
   selections: CatalogueSelection[];
 };
 
@@ -42,6 +46,8 @@ export type CatalogueEvent = {
   status: string;
   /** Score du moment d'un match en cours ("live") ; null avant le coup d'envoi ou s'il n'est pas encore connu. */
   score?: { home: string; away: string } | null;
+  /** Minute de jeu estimée d'un match en cours ; null à la pause. */
+  minute?: number | null;
   /** Paris maison REYEL 16 sur la page du match (repère « Spécial R16 » de la liste). */
   has_house_markets?: boolean;
   markets: CatalogueMarket[];
@@ -65,13 +71,17 @@ export function useSports() {
 
 /** GET /events/{id}/markets — un match avec tous ses marchés affichés (404 s'il n'est plus proposé). */
 export function useEventMarkets(id: string) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['catalogue', 'event', id],
     queryFn: async ({ signal }) => (await api<Envelope<CatalogueEvent>>(`/events/${encodeURIComponent(id)}/markets`, { signal })).data,
     refetchInterval: (query) => query.state.data && isLiveOrStarted(query.state.data)
       ? LIVE_REFRESH_MS
       : REFRESH_MS,
   });
+  // Match en cours : score et cotes du moment relus toutes les 3 s (GET /live/odds).
+  const events = useMemo(() => (query.data ? [query.data] : undefined), [query.data]);
+  const live = useLiveOverlay(events);
+  return { ...query, data: live?.[0] ?? query.data };
 }
 
 /** Marchés affichables dans la liste des matchs (GET /events?market=). */
@@ -85,6 +95,14 @@ export const LIST_MARKETS = [
 export type ListMarketKey = (typeof LIST_MARKETS)[number]['key'];
 
 export function useEvents(filters: { sport?: string; competition?: string; page?: number; perPage?: number; market?: ListMarketKey }) {
+  const query = useEventsQuery(filters);
+  // Matchs en cours de la page : score et cotes du moment relus toutes les 3 s (GET /live/odds).
+  const live = useLiveOverlay(query.data?.data);
+  const data = useMemo(() => (query.data && live ? { ...query.data, data: live } : query.data), [query.data, live]);
+  return { ...query, data };
+}
+
+function useEventsQuery(filters: { sport?: string; competition?: string; page?: number; perPage?: number; market?: ListMarketKey }) {
   return useQuery({
     queryKey: ['catalogue', 'events', filters],
     queryFn: ({ signal }) => api<Paginated<CatalogueEvent>>('/events', {

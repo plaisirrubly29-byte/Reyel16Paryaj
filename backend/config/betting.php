@@ -32,7 +32,26 @@ return [
     // Paris sur les matchs en cours : HORS PÉRIMÈTRE V1 (docs/architecture.md, revue P8-02 E1). Un match en direct
     // reste affiché avec son score, mais ses marchés ne sont pas pariables (selection_unavailable). Ne l'activer
     // qu'après une décision écrite, avec des cotes rafraîchies en quelques secondes et un délai d'acceptation.
+    // Coupe-circuit de tout le direct (D-20) : coupé, les marchés en direct ne sont plus pariables et les paris en
+    // attente d'acceptation sont refusés (mise rendue). Réglable par un Super Admin (paramètres audités).
     'allow_live' => (bool) env('BETTING_ALLOW_LIVE', false),
+
+    // Délai d'acceptation d'un pari en direct (D-20) : le ticket reste « awaiting », mise réservée, puis il est
+    // revérifié (score inchangé, marché ouvert, cote encore assez proche) et accepté ou refusé avec la mise rendue.
+    // Borné de 5 à 15 s. Sans vérification dans live_acceptance_timeout_seconds : refusé, jamais accepté par défaut.
+    'live_acceptance_delay_seconds' => (int) env('BETTING_LIVE_ACCEPTANCE_DELAY', 8),
+    'live_acceptance_timeout_seconds' => (int) env('BETTING_LIVE_ACCEPTANCE_TIMEOUT', 60),
+
+    // Les cotes en direct bougent à chaque seconde (temps qui passe) : une cote vue par le joueur reste acceptée si la
+    // cote du moment n'est pas plus basse de plus de cette fraction (0.03 = 3 %). Le ticket prend la plus basse des
+    // deux. Même règle à la fin du délai d'acceptation.
+    'live_odds_tolerance' => (float) env('BETTING_LIVE_ODDS_TOLERANCE', 0.03),
+
+    // Mise maximale d'un ticket en direct (10 000,00 au lancement, D-20), jamais au-dessus de max_stake_minor.
+    'live_max_stake_minor' => (int) env('BETTING_LIVE_MAX_STAKE_MINOR', 10_000_00),
+
+    // Combinés avec une sélection en direct : non au lancement (paris simples seulement, D-20 question 4).
+    'live_allow_multiple' => (bool) env('BETTING_LIVE_ALLOW_MULTIPLE', false),
 
     // Paris placés au plus par minute et par joueur (V2-C06) : 1 toutes les 6 s suffit à un humain, une rafale de
     // robot ou de double envoi est refusée (429). Pas une règle d'acceptation : hors rules_snapshot.

@@ -20,6 +20,12 @@ use Illuminate\Support\Carbon;
  * @property string|null $home_score
  * @property string|null $away_score
  * @property Carbon|null $last_synced_at
+ * @property float|null $live_home_rate buts attendus de l'équipe à domicile sur un match entier (modèle en direct)
+ * @property float|null $live_away_rate buts attendus de l'équipe à l'extérieur sur un match entier
+ * @property float|null $live_draw_boost coefficient des nuls de l'avant-match
+ * @property Carbon|null $live_model_at heure des cotes sur lesquelles le modèle a été calé
+ * @property Carbon|null $score_checked_at dernier score reçu du fournisseur pendant le match
+ * @property Carbon|null $score_changed_at dernier changement de score vu
  */
 class Event extends Model
 {
@@ -27,6 +33,7 @@ class Event extends Model
     protected $fillable = [
         'competition_id', 'provider', 'external_id', 'home_team_id', 'away_team_id', 'starts_at', 'status',
         'home_score', 'away_score', 'result_received_at', 'last_synced_at', 'created_at', 'updated_at',
+        'live_home_rate', 'live_away_rate', 'live_draw_boost', 'live_model_at', 'score_checked_at', 'score_changed_at',
     ];
 
     protected function casts(): array
@@ -36,6 +43,12 @@ class Event extends Model
             'status' => EventStatus::class,
             'result_received_at' => 'datetime',
             'last_synced_at' => 'datetime',
+            'live_home_rate' => 'float',
+            'live_away_rate' => 'float',
+            'live_draw_boost' => 'float',
+            'live_model_at' => 'datetime',
+            'score_checked_at' => 'datetime',
+            'score_changed_at' => 'datetime',
         ];
     }
 

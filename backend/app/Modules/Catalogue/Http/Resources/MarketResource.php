@@ -4,6 +4,7 @@ namespace App\Modules\Catalogue\Http\Resources;
 
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Services\HouseMarkets;
+use App\Modules\SportsData\Services\LiveOddsService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -20,6 +21,10 @@ class MarketResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
+        // Match en cours : cote du modèle en direct à cet instant (D-20), ou marché suspendu avec son motif.
+        $quote = $this->event !== null && app(LiveOddsService::class)->applies($this->resource)
+            ? app(LiveOddsService::class)->quote($this->resource) : null;
+
         return [
             'id' => (string) $this->id,
             'key' => $this->key,
@@ -29,15 +34,17 @@ class MarketResource extends JsonResource
             // À renvoyer avec la sélection lors du pari : le serveur refuse une version périmée (P4-03).
             'odds_version' => $this->odds_version,
             'odds_updated_at' => $this->odds_updated_at?->toIso8601String(),
-            // false : cote trop ancienne (règle de fraîcheur), affichée mais non pariable.
-            'bettable' => $this->isBettable(),
+            // false : cote trop ancienne (règle de fraîcheur) ou marché en direct suspendu, affiché mais non pariable.
+            'bettable' => $quote !== null ? (bool) config('betting.allow_live') && $quote->open : $this->isBettable(),
+            // Direct : motif de la suspension (score_stale, score_changed, closing, decided, live_closed…), sinon null.
+            'suspended_reason' => $quote !== null && ! $quote->open ? $quote->reason : null,
             'selections' => $this->selections->map(fn ($s) => [
                 'id' => (string) $s->id,
                 'key' => $s->key,
                 'label' => self::selectionLabel($s->key, $this->line),
                 'name' => $s->name,
                 // Cote en chaîne décimale (ex. "2.10") : jamais de nombre flottant.
-                'odds' => self::odds($s->odds),
+                'odds' => self::odds($quote->odds[$s->key] ?? (string) $s->odds),
                 // Cote fixée à la main par l'administration (V2-D03, D-18), au lieu de la cote calculée.
                 'adjusted' => (bool) $s->adjusted,
             ])->values(),

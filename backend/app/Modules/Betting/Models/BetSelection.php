@@ -28,6 +28,7 @@ use LogicException;
  * @property string $selection_name
  * @property string $odds cote acceptée (chaîne, ex. "2.050")
  * @property int $odds_version version de cote du marché au moment de l'acceptation
+ * @property string|null $live_score score du match au moment d'un pari en direct (ex. "1-0")
  * @property BetSelectionStatus $status
  * @property Carbon|null $settled_at
  */
@@ -36,14 +37,14 @@ class BetSelection extends Model
     /** Ce qui a été accepté : seuls le statut et la date de règlement évoluent. */
     private const FROZEN = [
         'bet_ticket_id', 'event_id', 'market_id', 'event_name', 'event_starts_at', 'market_key',
-        'market_line', 'selection_key', 'selection_name', 'odds', 'odds_version',
+        'market_line', 'selection_key', 'selection_name', 'odds', 'odds_version', 'live_score',
     ];
 
     /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
     protected $fillable = [
         'bet_ticket_id', 'event_id', 'market_id', 'selection_id', 'event_name', 'event_starts_at', 'market_key',
         'market_line', 'selection_key', 'selection_name', 'odds', 'odds_version', 'status', 'settled_at',
-        'created_at', 'updated_at', 'result_id',
+        'created_at', 'updated_at', 'result_id', 'live_score',
     ];
 
     /** @var array<string, mixed> */

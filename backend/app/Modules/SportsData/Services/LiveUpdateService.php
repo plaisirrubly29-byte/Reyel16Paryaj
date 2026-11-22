@@ -88,6 +88,41 @@ class LiveUpdateService
         return $outcome;
     }
 
+    /**
+     * Scores seulement (1 crédit par compétition en direct), plus souvent que les cotes (sports-data:live-scores,
+     * toutes les live_model.scores_interval_seconds) : un score récent garde les marchés en direct ouverts et un
+     * changement de score les suspend (LiveOddsService). Même plafond de crédits du jour que run() : plafond atteint,
+     * les scores vieillissent et le direct se ferme de lui-même.
+     *
+     * @return array{updated: list<string>, skipped: list<string>, errors: array<string, string>}
+     */
+    public function runScores(): array
+    {
+        $outcome = ['updated' => [], 'skipped' => [], 'errors' => []];
+        $cap = (int) config('sports_data.live_daily_credits');
+
+        foreach ($this->liveCompetitions() as $key) {
+            if ($this->creditsSpentToday() + 1 > $cap) {
+                $outcome['skipped'][] = $key;
+
+                continue;
+            }
+
+            $this->spend(1);
+            $scores = $this->results->import($key, 0);
+            if ($scores->error !== null) {
+                $outcome['errors'][$key] = $scores->error;
+            }
+            $outcome['updated'][] = $key;
+        }
+
+        if ($outcome['skipped'] !== []) {
+            Log::warning('sports_data.live_cap_reached', ['skipped' => $outcome['skipped'], 'cap' => $cap, 'spent' => $this->creditsSpentToday()]);
+        }
+
+        return $outcome;
+    }
+
     private function spend(int $credits): void
     {
         $key = $this->counterKey();

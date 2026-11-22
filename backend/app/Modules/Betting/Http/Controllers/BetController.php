@@ -10,6 +10,7 @@ use App\Modules\Betting\Http\Requests\PlaceBetRequest;
 use App\Modules\Betting\Http\Resources\BetTicketResource;
 use App\Modules\Betting\Models\BetTicket;
 use App\Modules\Betting\Services\BetPlacementService;
+use App\Modules\Betting\Services\LiveAcceptanceService;
 use App\Support\Http\Pagination;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -55,12 +56,21 @@ class BetController extends Controller
             strtolower((string) $request->header(RequireIdempotencyKey::HEADER)),
         );
 
-        return (new BetTicketResource($ticket))->response()->setStatusCode(201);
+        // Pari en direct : 202, ticket « awaiting » revérifié à la fin du délai (D-20) ; le coupon relit GET /bets/{id}.
+        return (new BetTicketResource($ticket))->response()
+            ->setStatusCode($ticket->status === BetTicketStatus::Awaiting ? 202 : 201);
     }
 
-    public function show(Request $request, string $id): BetTicketResource
+    /** Un pari en direct dont le délai est écoulé est traité ici s'il ne l'a pas encore été (file en retard). */
+    public function show(Request $request, string $id, LiveAcceptanceService $acceptance): BetTicketResource
     {
-        return new BetTicketResource($this->ownTickets($request)->findOrFail($id));
+        $ticket = $this->ownTickets($request)->findOrFail($id);
+        if ($ticket->status === BetTicketStatus::Awaiting && $ticket->acceptance_due_at !== null && ! $ticket->acceptance_due_at->isFuture()
+            && $acceptance->process($ticket->id) !== null) {
+            $ticket = $this->ownTickets($request)->findOrFail($id);
+        }
+
+        return new BetTicketResource($ticket);
     }
 
     /** @return Builder<BetTicket> */

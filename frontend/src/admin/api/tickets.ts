@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, type Envelope, type Money, type Paginated } from '../../shared/api/client';
 
-export type TicketStatus = 'pending' | 'won' | 'lost' | 'void';
+/** awaiting / rejected : pari en direct en validation, puis refusé avec la mise rendue (D-20). */
+export type TicketStatus = 'awaiting' | 'pending' | 'won' | 'lost' | 'void' | 'rejected';
 export type SelectionStatus = 'pending' | 'won' | 'lost' | 'void';
 
 /** Ticket vu par l'administration (GET /admin/tickets) : données minimales du joueur (id, nom). */
@@ -59,10 +60,12 @@ export type TicketFilters = {
 };
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  awaiting: 'En validation (direct)',
   pending: 'En cours',
   won: 'Gagné',
   lost: 'Perdu',
   void: 'Annulé',
+  rejected: 'Refusé (direct)',
 };
 
 export const LEDGER_TYPE_LABELS: Record<AdminLedgerEntry['type'], string> = {

@@ -34,6 +34,27 @@ Schedule::command('sports-data:live')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Paris en direct (D-20) : score relu toutes les N secondes (SPORTS_DATA_LIVE_SCORES_SECONDS : 10, 15, 20, 30 ou 60),
+// seulement quand les paris en direct sont ouverts — aucun crédit dépensé tant que BETTING_ALLOW_LIVE est coupé.
+$scores = Schedule::command('sports-data:live-scores')
+    ->when(fn () => (bool) config('sports_data.live_enabled') && (bool) config('betting.allow_live'))
+    ->withoutOverlapping()
+    ->onOneServer();
+match ((int) config('sports_data.live_model.scores_interval_seconds')) {
+    10 => $scores->everyTenSeconds(),
+    15 => $scores->everyFifteenSeconds(),
+    20 => $scores->everyTwentySeconds(),
+    60 => $scores->everyMinute(),
+    default => $scores->everyThirtySeconds(),
+};
+
+// Paris en direct en attente d'acceptation (D-20) : revérifiés à la fin du délai, refusés (mise rendue) passé
+// betting.live_acceptance_timeout_seconds. Filet de sécurité de la tâche en file ; tourne même live coupé, pour refuser.
+Schedule::command('betting:live-acceptance')
+    ->everyFiveSeconds()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Marchés supplémentaires des matchs de football proches (double chance, handicap, buts par équipe…), match par match,
 // plafonnés en crédits par jour (SPORTS_DATA_EXTRA_DAILY_CREDITS). Désactivé par défaut (SPORTS_DATA_EXTRA).
 Schedule::command('sports-data:extra-markets')

@@ -601,6 +601,60 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
         "404": { description: Match inconnu ou plus proposé }
 
+  /live/odds:
+    get:
+      tags: [Catalogue]
+      summary: Score et cotes du moment des matchs en cours (paris en direct)
+      x-task: V2-D06
+      description: |
+        Public, jamais en cache : relu toutes les quelques secondes par l'onglet Live, la page du match et le coupon
+        (décision D-20, option « Modèle + The Odds »). Cotes du 1X2 et du plus/moins calculées à chaque appel par le
+        modèle en direct (force des équipes, score, temps restant), jamais mieux payées que la dernière cote en direct
+        du fournisseur. Un match qui n'est plus en cours est renvoyé avec son statut et sans marché.
+      parameters:
+        - { name: event_ids, in: query, required: true, description: "Identifiants des matchs, séparés par des virgules (50 au plus)", schema: { type: string, example: "12,15" } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        status: { type: string, enum: [scheduled, live, finished, postponed, cancelled] }
+                        score: { type: [object, "null"], properties: { home: { type: string }, away: { type: string } } }
+                        minute: { type: [integer, "null"], description: "Minute de jeu estimée d'après l'heure de début ; null à la pause" }
+                        markets:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string }
+                              key: { type: string, enum: [h2h, totals] }
+                              line: { type: [string, "null"] }
+                              odds_version: { type: integer }
+                              bettable: { type: boolean }
+                              suspended_reason: { $ref: "#/components/schemas/LiveSuspendedReason" }
+                              selections:
+                                type: array
+                                items: { type: object, properties: { id: { type: string }, key: { type: string }, odds: { type: string, example: "2.05" } } }
+                  live_betting:
+                    type: object
+                    properties:
+                      enabled: { type: boolean, description: "Coupe-circuit betting.allow_live" }
+                      acceptance_delay_seconds: { type: integer, example: 8 }
+                      max_stake_minor: { type: integer, example: 1000000 }
+                      allow_multiple: { type: boolean }
+                  server_time: { type: string, format: date-time }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { description: Trop de requêtes }
+
   /lottery/draws:
     get:
       tags: [Lottery]
@@ -676,7 +730,7 @@ paths:
       x-task: V2-D09
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -825,6 +879,13 @@ paths:
         "201":
           description: Ticket créé (reçu immuable)
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "202":
+          description: |
+            Pari en direct (D-20) : ticket « awaiting », mise réservée, revérifié à acceptance_due_at (score inchangé,
+            marché ouvert, cote pas plus basse que betting.live_odds_tolerance) puis « pending » ou « rejected » avec la mise
+            rendue. Le coupon relit GET /bets/{id}. En direct, la cote vue reste acceptée si la cote du moment n'est pas
+            plus basse de plus de la tolérance ; le ticket prend la plus basse des deux.
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "409":
           description: |
@@ -837,8 +898,9 @@ paths:
           description: |
             validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
             direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ;
-            multiple_not_allowed ; stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée
-            par un administrateur pour ce joueur, V2-D05) ; currency_mismatch ; insufficient_funds ;
+            multiple_not_allowed ; live_multiple_not_allowed (D-20 : sélection en direct dans un combiné) ;
+            stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée par un administrateur
+            pour ce joueur, V2-D05, et de la mise maximale en direct, D-20) ; currency_mismatch ; insufficient_funds ;
             jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
             limit_minor, remaining_minor) ; loss_limit_exceeded (V2-E06 : si le pari est perdu, la perte nette de la
             période dépasserait la limite du joueur ; mêmes details) ; risk_limit_exceeded (V2-D05 : le pari ferait dépasser la perte maximale
@@ -856,7 +918,7 @@ paths:
       description: Tickets du joueur connecté uniquement, avec leurs sélections.
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: type, in: query, schema: { type: string, enum: [single, multiple] } }
         - { name: days, in: query, description: Tickets placés depuis N jours, schema: { type: integer, enum: [1, 7, 30, 90] } }
         - $ref: "#/components/parameters/Page"
@@ -879,7 +941,9 @@ paths:
     get:
       tags: [Bets]
       summary: Reçu d'un ticket
-      description: Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+      description: |
+        Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+        Pari en direct « awaiting » dont le délai est écoulé : revérifié à cette lecture s'il ne l'a pas encore été.
       security: [{ sessionCookie: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
@@ -2538,7 +2602,7 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string, example: R16-7KQ2M9XAPB } }
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: user_id, in: query, schema: { type: integer } }
         - { name: placed_from, in: query, description: Jour inclus, schema: { type: string, format: date } }
         - { name: placed_to, in: query, description: Jour inclus, schema: { type: string, format: date } }
@@ -3116,7 +3180,7 @@ paths:
         - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string } }
         - { name: draw, in: query, schema: { type: string } }
         - { name: date, in: query, description: Date locale du tirage, schema: { type: string, format: date } }
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: user_id, in: query, schema: { type: string } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
@@ -4069,6 +4133,7 @@ components:
           properties:
             home: { type: string, example: "1" }
             away: { type: string, example: "0" }
+        minute: { type: [integer, "null"], description: "Match en cours : minute de jeu estimée d'après l'heure de début ; null à la pause et avant le match" }
         has_house_markets: { type: boolean, description: "true : le match a des paris maison REYEL 16 (r16_*) sur sa page ; repère « Spécial R16 » de la liste" }
         markets:
           type: array
@@ -4081,7 +4146,8 @@ components:
               line: { type: [string, "null"], example: "2.5", description: "Ligne du plus/moins ou du handicap (celle de l'équipe à domicile, ex. \"-0.5\") ; null pour les autres marchés, dont ceux à plusieurs lignes (ligne dans la clé de la sélection)" }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
-              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou match en direct (paris en direct désactivés, betting.allow_live), affichée mais non pariable" }
+              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou marché en direct suspendu (suspended_reason), affichée mais non pariable" }
+              suspended_reason: { $ref: "#/components/schemas/LiveSuspendedReason" }
               selections:
                 type: array
                 items:
@@ -4093,6 +4159,14 @@ components:
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
                     adjusted: { type: boolean, description: "V2-D03 (D-18) : true quand la cote est fixée à la main par l'administration, au lieu de la cote calculée" }
+    LiveSuspendedReason:
+      type: [string, "null"]
+      enum: [live_closed, not_available, suspended, score_stale, score_changed, closing, decided, null]
+      description: |
+        Motif d'un marché en direct suspendu (D-20) ; null s'il est ouvert ou hors direct. live_closed : paris en direct
+        coupés ; not_available : pas proposé en direct (seulement football 1X2 et plus/moins) ; suspended : par un
+        administrateur ; score_stale : score trop ancien ; score_changed : but en cours de vérification ; closing : fin de
+        match ; decided : issue acquise ou trop probable.
     BetTicket:
       type: object
       description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
@@ -4100,7 +4174,10 @@ components:
         id: { type: string }
         reference: { type: string, example: R16-7KQ2M9XAPB, description: Référence à communiquer au support }
         type: { type: string, enum: [single, multiple] }
-        status: { type: string, enum: [pending, won, lost, void], description: "void : annulé et remboursé" }
+        status: { type: string, enum: [awaiting, pending, won, lost, void, rejected], description: "awaiting : pari en direct en attente d'acceptation (D-20) ; void : annulé et remboursé ; rejected : pari en direct refusé à la fin du délai, mise rendue" }
+        live: { type: boolean, description: Pari sur un match en cours }
+        acceptance_due_at: { type: [string, "null"], format: date-time, description: Fin du délai d'acceptation d'un pari en direct }
+        rejection_reason: { type: [string, "null"], enum: [odds_changed, score_changed, market_suspended, live_closed, timeout, null] }
         stake: { $ref: "#/components/schemas/Money" }
         total_odds: { type: string, example: "3.895", description: "Produit des cotes acceptées (chaîne, jamais de float)" }
         potential_payout: { $ref: "#/components/schemas/Money" }

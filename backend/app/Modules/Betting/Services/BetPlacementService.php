@@ -3,7 +3,9 @@
 namespace App\Modules\Betting\Services;
 
 use App\Models\User;
+use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Enums\BetType;
+use App\Modules\Betting\Jobs\ProcessLiveTicket;
 use App\Modules\Betting\Models\BetSelection;
 use App\Modules\Betting\Models\BetTicket;
 use App\Modules\Catalogue\Http\Resources\MarketResource;
@@ -13,6 +15,7 @@ use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Models\Selection;
 use App\Modules\SportsData\Services\HouseMarkets;
+use App\Modules\SportsData\Services\LiveOddsService;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Http\ApiException;
 use App\Support\Money;
@@ -134,11 +137,15 @@ class BetPlacementService
 
             $selections = $this->lockSelections($picks);
             $this->assertAvailable($picks, $selections);
-            $this->assertOddsUnchanged($picks, $selections);
+            $live = $selections->contains(fn (Selection $s) => $s->market->event->status === EventStatus::Live);
+            if ($live) {
+                $this->assertLiveRules($selections, $stakeMinor, $wallet->currency);
+            }
+            $odds = $this->resolveOdds($picks, $selections);
             $this->assertHouseMarketStake($selections, $stakeMinor, $wallet->currency);
 
             // Cotes du serveur uniquement. Produit gardé à 6 décimales pour le gain, arrondi à 3 pour l'affichage.
-            $product = $selections->reduce(fn (string $carry, Selection $s) => bcmul($carry, (string) $s->odds, 6), '1');
+            $product = $selections->reduce(fn (string $carry, Selection $s) => bcmul($carry, $odds[$s->id], 6), '1');
             $payout = min((int) bcmul((string) $stakeMinor, $product, 0), (int) config('betting.max_payout_minor'));
 
             $ticket = BetTicket::create([
@@ -152,6 +159,10 @@ class BetPlacementService
                 'potential_payout_minor' => $payout,
                 'rules_version' => (string) config('betting.rules_version'),
                 'rules_snapshot' => $this->rulesSnapshot(),
+                // En direct : en attente d'acceptation, revérifié à la fin du délai (D-20, LiveAcceptanceService).
+                'status' => $live ? BetTicketStatus::Awaiting : BetTicketStatus::Pending,
+                'live' => $live,
+                'acceptance_due_at' => $live ? now()->addSeconds(LiveAcceptanceService::delaySeconds()) : null,
             ]);
 
             foreach ($selections as $selection) {
@@ -169,8 +180,10 @@ class BetPlacementService
                     'market_line' => $market->line,
                     'selection_key' => $selection->key,
                     'selection_name' => $selection->name,
-                    'odds' => $selection->odds,
+                    'odds' => $odds[$selection->id],
                     'odds_version' => $market->odds_version,
+                    // Score au moment du pari en direct : un score différent à la fin du délai refuse le pari.
+                    'live_score' => $event->status === EventStatus::Live ? "{$event->home_score}-{$event->away_score}" : null,
                 ]);
             }
 
@@ -180,8 +193,37 @@ class BetPlacementService
             // Échec (solde insuffisant, portefeuille gelé) : l'exception annule toute la transaction.
             $this->ledger->reserveStake($wallet, Money::ofMinor($stakeMinor, $wallet->currency), "bet:{$ticket->id}:stake", (string) $ticket->id);
 
+            if ($live) {
+                ProcessLiveTicket::dispatch($ticket->id)->delay($ticket->acceptance_due_at)->afterCommit();
+            }
+
             return $ticket->load('selections.event.competition.sport');
         });
+    }
+
+    /**
+     * Règles propres au direct (D-20) : paris simples seulement (sauf betting.live_allow_multiple), mise maximale du
+     * direct, jamais au-dessus de la mise maximale générale ni de celle du joueur.
+     *
+     * @param  Collection<int, Selection>  $selections
+     */
+    private function assertLiveRules(Collection $selections, int $stakeMinor, string $currency): void
+    {
+        if ($selections->count() > 1 && ! config('betting.live_allow_multiple')) {
+            throw new ApiException('live_multiple_not_allowed', __('Les paris en direct se jouent en simple : retirez les autres sélections.'), 422);
+        }
+
+        $max = (int) config('betting.live_max_stake_minor');
+        if ($stakeMinor <= $max) {
+            return;
+        }
+
+        throw new ApiException('stake_out_of_range', __('Mise maximale en direct : :max.', [
+            'max' => number_format(intdiv($max, 100), 0, ',', ' ')." {$currency}",
+        ]), 422, [
+            'min' => ['minor' => (int) config('betting.min_stake_minor'), 'currency' => $currency],
+            'max' => ['minor' => $max, 'currency' => $currency],
+        ]);
     }
 
     /**
@@ -254,29 +296,46 @@ class BetPlacementService
     }
 
     /**
-     * Refuse le pari si la cote vue a changé, ou si la version du marché vue (odds_version) n'est plus la bonne :
-     * un changement de ligne (totals/spreads 2.5 → 3.5) à cote égale change le pari sans changer la cote.
+     * Cote de chaque sélection du ticket. Refuse le pari si la cote vue a changé, ou si la version du marché vue
+     * (odds_version) n'est plus la bonne : un changement de ligne (totals/spreads 2.5 → 3.5) à cote égale change le
+     * pari sans changer la cote.
+     *
+     * En direct (D-20), la cote vient du modèle et bouge à chaque seconde : la cote vue reste acceptée si celle du moment
+     * n'est pas plus basse de plus de betting.live_odds_tolerance, et le ticket prend la plus basse des deux. La version
+     * n'est comparée que pour le plus/moins (sa ligne peut changer) : celle du 1X2 change à chaque cote du fournisseur.
      *
      * @param  list<array{selection_id: int|string, odds: string, odds_version?: int|string}>  $picks
      * @param  Collection<int, Selection>  $selections
+     * @return array<int, string> identifiant de la sélection => cote du ticket
      */
-    private function assertOddsUnchanged(array $picks, Collection $selections): void
+    private function resolveOdds(array $picks, Collection $selections): array
     {
         $found = $selections->keyBy('id');
         $changed = [];
+        $odds = [];
+        $tolerance = (float) config('betting.live_odds_tolerance', 0.03);
 
         foreach ($picks as $pick) {
             $selection = $found[(int) $pick['selection_id']];
-            $staleVersion = isset($pick['odds_version']) && (int) $pick['odds_version'] !== (int) $selection->market->odds_version;
-            if ($staleVersion || bccomp($pick['odds'], (string) $selection->odds, 3) !== 0) {
-                $changed[] = [
-                    'selection_id' => (string) $selection->id,
-                    'odds' => MarketResource::odds((string) $selection->odds), // même format que le catalogue
+            $market = $selection->market;
+            $staleVersion = isset($pick['odds_version']) && (int) $pick['odds_version'] !== (int) $market->odds_version;
 
-                    'odds_version' => $selection->market->odds_version,
-                    // Libellé avec la ligne en vigueur (ex. « > 3.5 ») : le coupon montre ce qui a changé.
-                    'label' => MarketResource::selectionLabel($selection->key, $selection->market->line),
-                ];
+            if ($market->event->status === EventStatus::Live) {
+                $current = app(LiveOddsService::class)->quote($market)->odds[$selection->key] ?? null;
+                if ($current !== null && ! ($staleVersion && $market->key !== 'h2h')
+                    && (float) $current >= (float) $pick['odds'] * (1 - $tolerance)) {
+                    $odds[$selection->id] = bccomp($current, $pick['odds'], 3) < 0 ? $current : bcadd($pick['odds'], '0', 3);
+
+                    continue;
+                }
+                $changed[] = $this->changedOdds($selection, $current ?? (string) $selection->odds);
+
+                continue;
+            }
+
+            $odds[$selection->id] = (string) $selection->odds;
+            if ($staleVersion || bccomp($pick['odds'], (string) $selection->odds, 3) !== 0) {
+                $changed[] = $this->changedOdds($selection, (string) $selection->odds);
             }
         }
 
@@ -285,6 +344,20 @@ class BetPlacementService
                 'selections' => $changed,
             ]);
         }
+
+        return $odds;
+    }
+
+    /** @return array<string, mixed> nouvelle cote renvoyée au coupon (409 odds_changed) */
+    private function changedOdds(Selection $selection, string $odds): array
+    {
+        return [
+            'selection_id' => (string) $selection->id,
+            'odds' => MarketResource::odds(bcadd($odds, '0', 3)), // même format que le catalogue
+            'odds_version' => $selection->market->odds_version,
+            // Libellé avec la ligne en vigueur (ex. « > 3.5 ») : le coupon montre ce qui a changé.
+            'label' => MarketResource::selectionLabel($selection->key, $selection->market->line),
+        ];
     }
 
     /**
@@ -318,6 +391,9 @@ class BetPlacementService
             'allow_multiple' => (bool) config('betting.allow_multiple'),
             'max_selections' => (int) config('betting.max_selections'),
             'allow_live' => (bool) config('betting.allow_live'),
+            'live_acceptance_delay_seconds' => LiveAcceptanceService::delaySeconds(),
+            'live_odds_tolerance' => (float) config('betting.live_odds_tolerance'),
+            'live_max_stake_minor' => (int) config('betting.live_max_stake_minor'),
             'odds_change_policy' => (string) config('betting.odds_change_policy'),
             'postponed_void_hours' => (int) config('betting.postponed_void_hours'),
         ];

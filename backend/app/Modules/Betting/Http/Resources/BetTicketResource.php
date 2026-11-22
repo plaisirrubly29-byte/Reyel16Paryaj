@@ -30,6 +30,11 @@ class BetTicketResource extends JsonResource
             'payout' => $this->payout_minor === null ? null : ['minor' => $this->payout_minor, 'currency' => $this->currency],
             'placed_at' => $this->placed_at->toIso8601String(),
             'settled_at' => $this->settled_at?->toIso8601String(),
+            // Pari en direct (D-20) : « awaiting » jusqu'à acceptance_due_at, puis « pending » ou « rejected » (motif :
+            // odds_changed, score_changed, market_suspended, live_closed, timeout ; mise rendue).
+            'live' => (bool) $this->live,
+            'acceptance_due_at' => $this->acceptance_due_at?->toIso8601String(),
+            'rejection_reason' => $this->rejection_reason,
             'selections' => BetSelectionResource::collection($this->whenLoaded('selections')),
         ];
     }

@@ -3,7 +3,11 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, ApiError, newIdempotencyKey, type Envelope, type Money, type Paginated } from '../../../shared/api/client';
 
 /** Ticket accepté par le serveur (docs/api/openapi.yaml, schéma BetTicket) : reçu immuable. */
-export type BetTicketStatus = 'pending' | 'won' | 'lost' | 'void';
+/** awaiting : pari en direct en validation (quelques secondes) ; rejected : refusé à la fin du délai, mise rendue. */
+export type BetTicketStatus = 'awaiting' | 'pending' | 'won' | 'lost' | 'void' | 'rejected';
+
+/** Motif d'un pari en direct refusé (D-20). */
+export type RejectionReason = 'odds_changed' | 'score_changed' | 'market_suspended' | 'live_closed' | 'timeout';
 
 export type BetSelection = {
   id: string;
@@ -39,6 +43,11 @@ export type BetTicket = {
   payout: Money | null;
   placed_at: string;
   settled_at: string | null;
+  /** Pari sur un match en cours ; absent des anciennes réponses. */
+  live?: boolean;
+  /** Fin du délai d'acceptation d'un pari en direct. */
+  acceptance_due_at?: string | null;
+  rejection_reason?: RejectionReason | null;
   selections: BetSelection[];
 };
 
@@ -129,8 +138,49 @@ export function usePlaceBet() {
 }
 
 export const TICKET_STATUS_LABELS: Record<BetTicketStatus, string> = {
+  awaiting: 'En validation',
   pending: 'En attente',
   won: 'Gagné',
   lost: 'Perdu',
   void: 'Remboursé',
+  rejected: 'Refusé',
 };
+
+export const REJECTION_LABELS: Record<RejectionReason, string> = {
+  odds_changed: 'la cote a changé',
+  score_changed: 'le score a changé',
+  market_suspended: 'le marché a été suspendu',
+  live_closed: 'les paris en direct sont fermés',
+  timeout: 'la validation a pris trop de temps',
+};
+
+/** Message d'un pari en direct refusé : motif et mise rendue. */
+export function rejectionMessage(ticket: BetTicket): string {
+  const reason = ticket.rejection_reason ? REJECTION_LABELS[ticket.rejection_reason] : null;
+  return `Pari refusé${reason ? ` : ${reason}` : ''}. Votre mise vous a été rendue.`;
+}
+
+const ACCEPTANCE_POLL_MS = 1_000;
+/** Au-delà, le serveur refuse de toute façon (BETTING_LIVE_ACCEPTANCE_TIMEOUT) : on arrête de demander. */
+const ACCEPTANCE_GIVE_UP_MS = 75_000;
+
+/**
+ * Pari en direct (202, statut « awaiting ») : relit GET /bets/{id} chaque seconde jusqu'à l'acceptation (« pending »)
+ * ou au refus (« rejected », mise rendue). Le serveur revérifie le ticket à la fin du délai d'acceptation.
+ */
+export async function waitForAcceptance(
+  ticket: BetTicket,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<BetTicket> {
+  let current = ticket;
+  const giveUpAt = Date.now() + ACCEPTANCE_GIVE_UP_MS;
+  while (current.status === 'awaiting' && Date.now() < giveUpAt) {
+    await sleep(ACCEPTANCE_POLL_MS);
+    try {
+      current = (await api<Envelope<BetTicket>>(`/bets/${encodeURIComponent(current.id)}`)).data;
+    } catch {
+      // Réseau coupé un instant : on réessaie à la seconde suivante ; le ticket reste visible dans « Mes paris ».
+    }
+  }
+  return current;
+}
