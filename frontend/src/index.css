@@ -82,15 +82,15 @@ p { margin: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--gap); }
 .content { padding: 1.5rem 1rem; max-width: 1200px; width: 100%; margin: 0 auto; }
 
-/* --- Logo : vignette bordeaux recadrée sur « Reyel16 PARYAJ » (logo officiel carré) --- */
+/* --- Logo : toujours le logo officiel ENTIER (carré), jamais recadré ni retouché (consigne de Rubly) --- */
 .brand { display: inline-flex; align-items: center; flex: 0 0 auto; }
 .brand-logo {
-  display: block; height: 4.6rem; aspect-ratio: 840 / 330; border-radius: 10px;
+  display: block; height: 4.6rem; aspect-ratio: 1; border-radius: 6px;
   background-color: #7d0214; background-repeat: no-repeat;
-  background-size: 114.9% auto; background-position: 57.1% 76.5%;
-  box-shadow: 0 2px 10px rgba(94, 0, 16, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background-size: contain; background-position: center;
+  box-shadow: 0 2px 10px rgba(94, 0, 16, 0.35);
 }
-.site-footer .brand-logo { height: 4rem; }
+.site-footer .brand-logo { height: 6.5rem; }
 
 /* --- En-tête : une seule barre bordeaux collante (logo, navigation, recherche, compte), liseré or --- */
 .site-header {
@@ -102,7 +102,7 @@ p { margin: 0; }
   max-width: 1880px; margin: 0 auto; height: var(--nav-h); padding: 0 1.5rem;
   display: flex; align-items: center; gap: 1.25rem;
 }
-.site-header .brand-logo { height: 2.9rem; border-radius: 8px; box-shadow: none; }
+.site-header .brand-logo { height: 4rem; box-shadow: none; }
 
 /* Navigation : pastilles discrètes, l'onglet actif est souligné d'or */
 .main-nav { display: flex; align-items: center; gap: 0.25rem; height: 100%; margin-left: 0.5rem; }
@@ -310,9 +310,8 @@ p { margin: 0; }
 }
 .auth-visual-brand { display: flex; align-items: center; gap: 0.6rem; position: relative; z-index: 1; }
 .auth-visual-brand .brand-logo { height: 5.5rem; }
-/* Logo complet (carré) : écrans de connexion et d'inscription. */
-.brand-logo-full { aspect-ratio: 1; background-size: cover; background-position: center; border-radius: 18px; }
-.auth-visual-brand .brand-logo-full { height: 10rem; }
+/* Grand logo (720 px) : écrans de connexion et d'inscription. */
+.auth-visual-brand .brand-logo-full { height: 10rem; border-radius: 12px; }
 .auth-visual-heading { position: relative; z-index: 1; color: #fff; font-size: 1.4rem; line-height: 1.3; letter-spacing: -0.01em; margin: 0 0 1.15rem; max-width: 20ch; }
 .auth-visual-list { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.8rem; }
 .auth-visual-list li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.92rem; font-weight: 500; color: rgba(255, 255, 255, 0.95); }
@@ -387,7 +386,7 @@ p { margin: 0; }
 }
 .admin-brand { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0.4rem 0.75rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .admin-brand-link { display: block; flex: none; }
-.admin-brand .brand-logo { height: 2.6rem; border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+.admin-brand .brand-logo { height: 3.4rem; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 .admin-brand-tag {
   font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--accent-text); background: var(--accent); border-radius: 999px; padding: 0.15rem 0.55rem;
@@ -1659,7 +1658,7 @@ a.match-line-teams:hover { color: var(--brand); }
   :root { --nav-h: 60px; }
   .sportsbook { grid-template-columns: minmax(0, 1fr); }
   .site-header-inner { padding: 0 1rem; gap: 0.75rem; }
-  .site-header .brand-logo { height: 2.5rem; }
+  .site-header .brand-logo { height: 3.2rem; }
   .main-nav, .header-search { display: none; }
   .header-actions { margin-left: auto; }
   .header-actions > .btn { height: 2.3rem; font-size: 0.88rem; padding: 0 0.8rem; }
