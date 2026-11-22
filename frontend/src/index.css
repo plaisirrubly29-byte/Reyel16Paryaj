@@ -2499,56 +2499,139 @@ a.match-line-teams:hover { color: var(--brand); }
 .pay-choice-moncash:has(input:checked) { border-color: #d6202f; background: #fdecee; color: #a3121f; }
 .pay-choice-natcash:has(input:checked) { border-color: #f08c00; background: #fff4e5; color: #8a4b00; }
 
-/* PORTEFEUILLE (page Solde, dépôt et retrait) : pensé d'abord pour le téléphone (375 px), dans la charte bordeaux et or.
-   Carte du solde avec les deux boutons, panneau de l'opération, cartes MonCash / NatCash, montants rapides, alertes
-   avec pastille, historique repliable. Les règles sont limitées à .wallet-page quand la classe sert ailleurs. */
+/* PORTEFEUILLE (page Solde, dépôt et retrait) : façon application mobile, pensé d'abord pour le téléphone (375 px), dans
+   la charte bordeaux et or. En haut sur fond bordeaux : « Bonjour », solde en grand, boutons ronds, carte d'information ;
+   en dessous, une feuille claire arrondie : dernières opérations, ou dépôt / retrait ouvert (cartes MonCash / NatCash,
+   montants rapides, alertes avec pastille, historique repliable). Les règles sont limitées à .wallet-page quand la
+   classe sert ailleurs. */
 .wallet-page { width: 100%; max-width: 760px; }
-.wallet-page .toolbar { align-items: center; }
-.wallet-page .toolbar h2 { margin: 0; font-size: 1.05rem; }
-.wallet-page .toolbar a { color: var(--accent-ink); font-size: 0.88rem; font-weight: 500; }
-
-/* Carte du solde : dégradé bordeaux, reflet or, chiffre en grand ; les boutons « Dépôt » et « Retrait » en bas. */
-.wallet-hero {
-  position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 1.15rem;
-  padding: 1.4rem 1.3rem 1.3rem; border-radius: 22px; color: #fff;
+.wallet-app {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; border-radius: 28px; color: #fff;
   background:
-    radial-gradient(120% 90% at 100% 0%, rgba(245, 179, 1, 0.26), transparent 55%),
-    radial-gradient(90% 80% at 0% 100%, rgba(255, 255, 255, 0.07), transparent 60%),
-    linear-gradient(140deg, var(--slate) 0%, var(--navy) 48%, var(--brand) 100%);
-  box-shadow: 0 14px 32px rgba(74, 0, 12, 0.26);
+    radial-gradient(90% 55% at 50% 18%, rgba(245, 179, 1, 0.16), transparent 70%),
+    linear-gradient(175deg, #3a0009 0%, var(--slate) 38%, var(--navy) 100%);
+  box-shadow: 0 16px 36px rgba(74, 0, 12, 0.28);
 }
-.wallet-hero::after {
-  content: ''; position: absolute; right: -70px; top: -70px; width: 200px; height: 200px; border-radius: 50%;
-  border: 1px solid rgba(245, 179, 1, 0.3); box-shadow: 0 0 0 26px rgba(245, 179, 1, 0.05); pointer-events: none;
+/* Cercles fins derrière le solde, comme des ondes. */
+.wallet-app::before {
+  content: ''; position: absolute; left: 50%; top: 150px; width: 300px; height: 300px; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 1px solid rgba(245, 179, 1, 0.12);
+  box-shadow: 0 0 0 46px rgba(255, 255, 255, 0.025), 0 0 0 47px rgba(245, 179, 1, 0.08); pointer-events: none;
 }
-.wallet-balance { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0.35rem; min-height: 4.1rem; }
-.wallet-balance-label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.82); }
-.wallet-balance-label svg { color: var(--gold); }
-.wallet-hero .balance {
-  font-size: clamp(2rem, 9vw, 2.6rem); font-weight: 600; line-height: 1.1; letter-spacing: -0.02em;
+.wallet-top { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1.3rem; padding: 1rem 1.1rem 1.25rem; }
+
+.wallet-greet { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2.6rem; }
+.wallet-hello {
+  display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; padding: 0.25rem 1rem 0.25rem 0.25rem;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 0.95rem; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wallet-avatar {
+  flex: none; display: grid; place-items: center; width: 2.15rem; height: 2.15rem; border-radius: 50%;
+  background: linear-gradient(145deg, #ffd34d, var(--gold)); color: var(--accent-text); font-weight: 700;
+}
+.wallet-round-link {
+  flex: none; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.32); color: #fff; transition: background 0.15s;
+}
+.wallet-round-link:hover { background: rgba(255, 255, 255, 0.1); }
+.wallet-hello:focus-visible, .wallet-round-link:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.wallet-balance { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-height: 4.6rem; text-align: center; }
+.wallet-balance-label { font-size: 0.9rem; color: rgba(255, 255, 255, 0.72); }
+.wallet-app .balance {
+  font-size: clamp(2.2rem, 11vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
+.wallet-balance .skeleton-amount { width: 60%; margin: 0.35rem auto 0; }
 
-.money-actions { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
-.money-action {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 3.15rem; padding: 0 1rem;
-  border: 1px solid transparent; border-radius: 14px; cursor: pointer; font: inherit; font-size: 1rem; font-weight: 600;
-  transition: transform 0.12s, box-shadow 0.15s, background 0.15s;
+/* Boutons ronds avec le libellé dessous ; « Déposer » en pilule or, plus large. */
+.wallet-actions { display: grid; grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.wallet-action {
+  display: flex; flex-direction: column; align-items: center; gap: 0.4rem; min-width: 0; padding: 0; border: 0;
+  background: none; color: #fff; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.money-action-deposit { background: var(--accent); color: var(--accent-text); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2); }
-.money-action-deposit:hover { background: var(--accent-hover); }
-.money-action-withdraw { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: rgba(255, 255, 255, 0.38); }
-.money-action-withdraw:hover { background: rgba(255, 255, 255, 0.2); }
-.money-action:active { transform: scale(0.98); }
-.money-action:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-.money-action.active { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85), 0 6px 16px rgba(0, 0, 0, 0.2); }
+.wallet-action-icon {
+  display: grid; place-items: center; width: 3.15rem; height: 3.15rem; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.22); color: #fff;
+  transition: transform 0.12s, background 0.15s, box-shadow 0.15s;
+}
+.wallet-action-main .wallet-action-icon {
+  width: 100%; background: linear-gradient(145deg, #ffcf3a, var(--gold)); border-color: transparent; color: var(--accent-text);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+.wallet-action-label { font-size: 0.8rem; color: rgba(255, 255, 255, 0.85); white-space: nowrap; }
+.wallet-action:hover .wallet-action-icon { background: rgba(255, 255, 255, 0.18); }
+.wallet-action-main:hover .wallet-action-icon { background: linear-gradient(145deg, #ffd65c, var(--accent-hover)); }
+.wallet-action:active .wallet-action-icon { transform: scale(0.95); }
+.wallet-action:focus-visible { outline: 0; }
+.wallet-action:focus-visible .wallet-action-icon { outline: 3px solid #fff; outline-offset: 2px; }
+.wallet-action.active .wallet-action-icon { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7); }
+.wallet-action.active .wallet-action-label { color: var(--gold); font-weight: 600; }
 
-/* Panneau de l'opération ouverte. */
+/* Carte d'information qu'on peut fermer. */
+.wallet-tip {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 0.7rem; padding: 0.85rem 0.6rem 0.85rem 0.9rem;
+  border-radius: 18px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.wallet-tip-icon { color: var(--gold); margin-top: 0.1rem; }
+.wallet-tip-text { display: flex; flex-direction: column; gap: 0.15rem; }
+.wallet-tip-text strong { font-size: 0.95rem; }
+.wallet-tip-text span { font-size: 0.84rem; line-height: 1.45; color: rgba(255, 255, 255, 0.78); }
+.wallet-tip-text a { color: var(--gold); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.wallet-tip-close {
+  display: grid; place-items: center; width: 2rem; height: 2rem; margin: -0.3rem 0 0; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: rgba(255, 255, 255, 0.75); cursor: pointer;
+}
+.wallet-tip-close:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.wallet-tip-close:focus-visible { outline: 2px solid var(--gold); }
+.wallet-top .alert { color: var(--text); }
+
+/* Feuille claire arrondie, avec sa poignée : liste des opérations ou panneau ouvert. */
+.wallet-sheet {
+  position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0.8rem; min-height: 14rem;
+  padding: 1.35rem 0.9rem 1.1rem; border-radius: 26px 26px 0 0; background: #f6f3ef; color: var(--text);
+}
+.wallet-sheet::before {
+  content: ''; position: absolute; top: 0.55rem; left: 50%; width: 2.6rem; height: 4px; transform: translateX(-50%);
+  border-radius: 999px; background: #d6d0c8;
+}
+.wallet-ops-block { display: flex; flex-direction: column; gap: 0.7rem; }
+.wallet-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 0.2rem; }
+.wallet-sheet-head h2 { margin: 0; font-size: 1.05rem; }
+.wallet-sheet-head a { color: var(--muted); font-size: 0.88rem; font-weight: 500; }
+.wallet-sheet-head a:hover { color: var(--brand); }
+.wallet-ops-list { display: flex; flex-direction: column; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.wallet-op {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.8rem 0.85rem; border-radius: 16px; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
+}
+.wallet-op-icon { flex: none; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 50%; }
+.wallet-op-icon.is-in { background: var(--success-soft); color: var(--success); }
+.wallet-op-icon.is-out { background: #fdf1ef; color: var(--brand); }
+.wallet-op-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.wallet-op-text strong { font-size: 0.95rem; }
+.wallet-op-text span, .wallet-op-balance { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+.wallet-op-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }
+.wallet-op-pill { padding: 0.12rem 0.55rem; border-radius: 999px; font-size: 0.82rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; color: #fff; }
+.wallet-op-pill.is-in { background: #16a34a; }
+.wallet-op-pill.is-out { background: #dc2626; }
+.wallet-op-pill .money { color: inherit; }
+
+/* Panneau de l'opération ouverte, dans la feuille. */
 .money-panel { animation: money-panel-in 0.18s ease-out; }
 .money-panel > .money-card { width: 100%; }
 @keyframes money-panel-in { from { opacity: 0; transform: translateY(-6px); } }
-.wallet-page .money-card { gap: 1rem; padding: 1.3rem; border-color: transparent; border-radius: 20px; box-shadow: var(--shadow); }
-.wallet-page .money-card-icon { border-radius: 14px; background: var(--accent-soft); color: var(--accent-ink); }
+/* Le panneau est posé à même la feuille : pas de seconde carte, les lignes MonCash / NatCash en tiennent lieu. */
+.wallet-page .money-card { gap: 1rem; padding: 0 0.2rem; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.wallet-page .money-card-head { align-items: center; }
+.wallet-page .money-card-title { flex: 1; min-width: 0; }
+.wallet-page .money-card-icon { border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); }
+.money-card-close {
+  flex: none; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; padding: 0; border: 0; border-radius: 50%;
+  background: var(--surface); color: var(--muted); cursor: pointer; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+}
+.money-card-close:hover { background: var(--surface-3); color: var(--text); }
 .wallet-page .money-card-body { gap: 0.9rem; }
 
 /* Choix du moyen : une carte par portefeuille (logo officiel, nom, ligne d'aide, flèche), liseré à sa couleur. */
@@ -2667,10 +2750,6 @@ a.match-line-teams:hover { color: var(--brand); }
 .wallet-page .recent-ops { border-radius: 16px; box-shadow: var(--shadow-sm); }
 .wallet-page .recent-ops li { gap: 0.75rem; padding: 0.8rem 1rem; }
 .wallet-page .recent-ops .money { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.wallet-ops .op-icon { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 12px; }
-.wallet-ops .op-icon-in { background: var(--success-soft); color: var(--success); }
-.wallet-ops .op-icon-out { background: #fdf1ef; color: var(--brand); }
-.wallet-ops li > .op-text { flex: 1; min-width: 0; }
 .op-status { align-self: flex-start; margin-top: 0.25rem; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.74rem; font-weight: 600; }
 .op-status-ok { background: var(--success-soft); color: var(--success); }
 .op-status-ko { background: #fdecea; color: var(--danger); }
@@ -2695,13 +2774,14 @@ a.match-line-teams:hover { color: var(--brand); }
 /* Ordinateur : les deux moyens côte à côte. Petit téléphone : montants rapides sur deux lignes. */
 @media (min-width: 640px) { .method-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) {
-  .wallet-hero { padding: 1.25rem 1.1rem 1.1rem; border-radius: 20px; }
-  .wallet-page .money-card { padding: 1.05rem; border-radius: 18px; }
+  .wallet-app { border-radius: 24px; }
+  .wallet-top { padding: 0.85rem 0.9rem 1.1rem; }
+  .wallet-sheet { padding: 1.3rem 0.7rem 1rem; border-radius: 24px 24px 0 0; }
   .wallet-page .money-card-head h2 { font-size: 1.05rem; }
 }
 @media (max-width: 359px) { .amount-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) {
-  .money-panel, .money-action, .method-tile, .skeleton { animation: none; transition: none; }
+  .money-panel, .wallet-action-icon, .method-tile, .skeleton { animation: none; transition: none; }
 }
 
 /* FIDÉLITÉ ET PARRAINAGE (V2-E07) : bandeau du palier ou du code, cartes, conditions de mise, filleuls. */

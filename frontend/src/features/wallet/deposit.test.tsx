@@ -32,9 +32,9 @@ const base = {
   'GET /payments/withdrawals': { status: 200, body: page([]) },
 };
 
-/** Bouton « Dépôt » sous le solde, puis le moyen de paiement choisi (si donné). */
+/** Bouton « Déposer » sous le solde, puis le moyen de paiement choisi (si donné). */
 async function openDeposit(method?: string) {
-  await userEvent.click(await screen.findByRole('button', { name: 'Dépôt' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Déposer' }));
   if (method) await userEvent.click(await screen.findByRole('button', { name: method }));
 }
 
@@ -61,7 +61,7 @@ describe('dépôt en ligne', () => {
     const router = renderApp('/wallet');
 
     // Rien d'ouvert sous le solde tant que le joueur n'a pas choisi Dépôt ou Retrait.
-    expect(await screen.findByRole('button', { name: 'Retrait' })).toHaveAttribute('aria-expanded', 'false');
+    expect(await screen.findByRole('button', { name: 'Retirer' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
 
     await openDeposit();
