@@ -38,9 +38,9 @@ const base = {
 
 const card = () => screen.getByRole('region', { name: 'Retrait' });
 
-/** Bouton « Retrait » sous le solde, puis le portefeuille choisi (si donné). */
+/** Bouton « Retirer » sous le solde, puis le portefeuille choisi (si donné). */
 async function openWithdrawal(method?: string) {
-  await userEvent.click(await screen.findByRole('button', { name: 'Retrait' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Retirer' }));
   if (method) await userEvent.click(await screen.findByRole('button', { name: method }));
 }
 
@@ -77,6 +77,18 @@ describe('retrait en ligne', () => {
     const post = fetchMock.mock.calls.find(([u, init]) => String(u).endsWith('/payments/withdrawals') && init?.method === 'POST')!;
     expect(JSON.parse(String(post[1]!.body))).toEqual({ provider: 'plopplop', method: 'moncash', recipient: '34123456', amount_minor: 40000 });
     expect(new Headers(post[1]!.headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('propose des montants rapides jamais supérieurs au solde, et « Tout » pour retirer tout le solde', async () => {
+    mockApi({ ...base, 'GET /wallet': { status: 200, body: { data: { currency: 'HTG', balance: htg(750_00), status: 'active', simulated: false } } } });
+    renderApp('/wallet');
+    await openWithdrawal('MonCash');
+
+    const quick = await screen.findByRole('group', { name: 'Montants rapides' });
+    expect(within(quick).getAllByRole('button').map((b) => clean(b))).toEqual(['500 HTG', 'Tout']);
+    await userEvent.click(within(quick).getByRole('button', { name: 'Tout' }));
+    expect(screen.getByLabelText('Montant du retrait')).toHaveValue('750');
+    expect(within(quick).getByRole('button', { name: 'Tout' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('refuse avant tout appel un montant supérieur au solde ou un numéro invalide', async () => {

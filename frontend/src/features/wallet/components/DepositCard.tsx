@@ -11,7 +11,8 @@ import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { parseStakeMinor, sanitizeStake } from '../../betting/slip/stake';
 import { KycRequiredAlert } from './KycRequiredAlert';
-import { MethodChosen, MethodPicker, useChosenMethod } from './MethodPicker';
+import { MethodChosen, MethodPicker, MethodPickerSkeleton, useChosenMethod } from './MethodPicker';
+import { QuickAmounts } from './QuickAmounts';
 import {
   DEPOSIT_STATUS_LABELS,
   providerNavigation,
@@ -31,6 +32,11 @@ const LIMIT_PERIODS: Record<string, string> = { day: 'sur 24 heures', week: 'sur
 
 /** Montants proposés en un clic (en gourdes), dans les bornes acceptées par le serveur. */
 const QUICK_AMOUNTS = [500, 1_000, 2_500, 5_000];
+
+/** Pastille de couleur du statut d'un dépôt dans l'historique. */
+const DEPOSIT_TONES: Record<Deposit['status'], 'ok' | 'ko' | 'wait'> = {
+  succeeded: 'ok', failed: 'ko', expired: 'ko', pending: 'wait', review: 'wait',
+};
 
 /** Dépôt refusé par une limite que le joueur s'est fixée (V2-B06) : montant encore possible et lien vers le réglage. */
 function DepositLimitRefusal({ error, currency }: { error: ApiError; currency: string }) {
@@ -95,7 +101,8 @@ function RecentDeposits() {
           <li key={d.reference}>
             <span>
               <strong>{d.provider_label}</strong>
-              <span className="muted small">{new Date(d.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })} · {DEPOSIT_STATUS_LABELS[d.status]}</span>
+              <span className="muted small">{new Date(d.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              <span className={`op-status op-status-${DEPOSIT_TONES[d.status]}`}>{DEPOSIT_STATUS_LABELS[d.status]}</span>
             </span>
             <MoneyText value={d.amount} />
           </li>
@@ -110,7 +117,9 @@ function RecentDeposits() {
  * confirme sur la page du prestataire. Sans moyen de
  * paiement activé, les instructions de dépôt auprès de l'opérateur restent affichées.
  */
-export function DepositCard({ accountId, currency, frozen }: { accountId?: string; currency: string; frozen: boolean }) {
+export function DepositCard({ accountId, currency, frozen, onClose }: {
+  accountId?: string; currency: string; frozen: boolean; onClose?: () => void;
+}) {
   const methods = useDepositMethods();
   const start = useStartDeposit();
   const [params, setParams] = useSearchParams();
@@ -152,15 +161,20 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
     <section className="money-card" aria-labelledby="deposit">
       <header className="money-card-head">
         <span className="money-card-icon" aria-hidden="true"><Icon name="deposit" size={22} /></span>
-        <div>
+        <div className="money-card-title">
           <h2 id="deposit">Dépôt</h2>
           <p className="muted small">Alimenter votre solde.</p>
         </div>
+        {onClose && (
+          <button type="button" className="money-card-close" aria-label="Fermer" onClick={onClose}>
+            <Icon name="close" size={18} />
+          </button>
+        )}
       </header>
       <div className="money-card-body">
         {followed && <DepositFollowUp reference={followed} onClose={() => setParams({ operation: 'depot' }, { replace: true })} />}
 
-        {methods.isPending && <Spinner />}
+        {methods.isPending && <MethodPickerSkeleton />}
         <ErrorAlert error={methods.error} onRetry={() => methods.refetch()} />
 
         {methods.data && available.length === 0 && (
@@ -177,6 +191,7 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
             title="Déposer avec"
             options={available.map((m) => ({ key: methodKey(m), label: m.label }))}
             onPick={setChoice}
+            describe={() => 'Payer depuis votre compte'}
           />
         ) : (
           <form className="deposit-form stack-sm" onSubmit={submit} noValidate>
@@ -192,6 +207,7 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
                 : error && error.code !== 'validation_failed' && <ErrorAlert error={error} />}
 
             <TextField
+              className="amount-field"
               label="Montant du dépôt"
               inputMode="decimal"
               name="deposit-amount"
@@ -203,17 +219,20 @@ export function DepositCard({ accountId, currency, frozen }: { accountId?: strin
               hint={min && max ? `De ${formatMoney(min)} à ${formatMoney(max)}` : undefined}
               error={error?.fieldErrors.amount_minor ?? (outOfBounds && min && max ? `Le montant doit être compris entre ${formatMoney(min)} et ${formatMoney(max)}.` : undefined)}
             />
-            <div className="quick-amounts" role="group" aria-label="Montants rapides">
-              {QUICK_AMOUNTS.map((v) => (
-                <button key={v} type="button" className="chip" onClick={() => setAmount(String(v))}>{formatMoney({ minor: v * 100, currency })}</button>
-              ))}
-            </div>
+            <QuickAmounts
+              amounts={QUICK_AMOUNTS.map((v) => ({ minor: v * 100 }))
+                .filter((a) => (!min || a.minor >= min.minor) && (!max || a.minor <= max.minor))}
+              currency={currency}
+              current={amountMinor}
+              onPick={setAmount}
+            />
 
-            <Button type="submit" block loading={start.isPending} disabled={amountMinor === null || amountMinor === 0n || outOfBounds}>
+            <Button type="submit" block className="money-submit" loading={start.isPending} disabled={amountMinor === null || amountMinor === 0n || outOfBounds}>
               Déposer avec {chosen.label}
             </Button>
-            <p className="muted small">
-              Vous confirmerez le paiement sur la page de {chosen.label}. Votre solde est crédité dès sa confirmation.
+            <p className="money-note">
+              <Icon name="lock" size={15} />
+              <span>Vous confirmerez le paiement sur la page de {chosen.label}. Votre solde est crédité dès sa confirmation.</span>
             </p>
           </form>
         ))}

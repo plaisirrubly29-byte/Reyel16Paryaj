@@ -7,7 +7,7 @@ import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { useMe } from '../../auth/api/auth';
 import { formatKickoff } from '../../catalogue/format';
-import { SUSPENDED_LABELS, useLiveOdds, type LiveSuspendedReason } from '../../catalogue/api/liveOdds';
+import { SUSPENDED_LABELS, isLiveClosed, useLiveOdds, type LiveSuspendedReason } from '../../catalogue/api/liveOdds';
 import { ApiError } from '../../../shared/api/client';
 import { MAX_SELECTIONS, useBetSlip, type BetMode, type SlipSelection } from './BetSlipContext';
 import { BetCodeShare } from '../tickets/BetCodeShare';
@@ -334,6 +334,7 @@ export function BetSlipPanel() {
                 const rowError = rowErrors[s.selectionId];
                 const liveInfo = live.get(s.selectionId);
                 const rowSuspended = liveInfo?.bettable === false;
+                const rowClosed = rowSuspended && isLiveClosed(liveInfo.reason);
                 return (
                   <li key={s.selectionId} className={conflicts.has(s.selectionId) || rowError || rowSuspended ? 'has-issue' : undefined}>
                     <div className="betslip-pick">
@@ -343,7 +344,7 @@ export function BetSlipPanel() {
                         {s.market ?? 'Résultat du match'} · {liveInfo ? <span className="live-indicator">En direct</span> : `${day} ${time}`}
                       </div>
                     </div>
-                    <span className="odds-value">{rowSuspended ? 'Suspendu' : s.odds}</span>
+                    <span className="odds-value">{rowClosed ? 'Fermé' : rowSuspended ? 'Suspendu' : s.odds}</span>
                     <button
                       type="button"
                       className="remove"
@@ -375,7 +376,10 @@ export function BetSlipPanel() {
                     )}
                     {rowError && <p className="betslip-issue">{rowError}</p>}
                     {rowSuspended && (
-                      <p className="betslip-issue">{liveInfo.reason ? SUSPENDED_LABELS[liveInfo.reason] : 'Suspendu'}. Le pari reprend dès sa réouverture.</p>
+                      <p className="betslip-issue">
+                        {liveInfo.reason ? SUSPENDED_LABELS[liveInfo.reason] : 'Suspendu'}
+                        {rowClosed ? ' : retirez-la du coupon.' : '. Le pari reprend dès sa réouverture.'}
+                      </p>
                     )}
                   </li>
                 );
@@ -434,7 +438,11 @@ export function BetSlipPanel() {
                 </button>
               )}
               {user && suspended.length > 0 && (
-                <p className="muted small place-hint">Une sélection en direct est suspendue : attendez sa réouverture ou retirez-la.</p>
+                <p className="muted small place-hint">
+                  {suspended.some((s) => isLiveClosed(live.get(s.selectionId)?.reason ?? null))
+                    ? 'Une sélection en direct est fermée : retirez-la du coupon.'
+                    : 'Une sélection en direct est suspendue : attendez sa réouverture ou retirez-la.'}
+                </p>
               )}
               {user && suspended.length === 0 && <PlaceHint singles={singles} allStaked={allSinglesStaked} stakeMissing={stakeMinor === null} conflicts={conflicts.size > 0} />}
             </div>
@@ -465,16 +473,24 @@ function useLiveSelections(selections: SlipSelection[]): Map<string, LiveSelecti
 
   return useMemo(() => {
     const map = new Map<string, LiveSelection>();
+    const liveEvents = new Set<string>();
     for (const event of data?.data ?? []) {
       if (event.status !== 'live') continue;
+      liveEvents.add(event.id);
       for (const market of event.markets) {
         for (const s of market.selections) {
           map.set(s.id, { odds: s.odds, oddsVersion: market.odds_version, bettable: market.bettable, reason: market.suspended_reason });
         }
       }
     }
+    // Match en cours sans cette issue : score exact déjà dépassé (« 1-0 » à 2-1) ou marché sans paris en direct.
+    for (const s of selections) {
+      if (liveEvents.has(s.eventId) && !map.has(s.selectionId)) {
+        map.set(s.selectionId, { odds: s.odds, oddsVersion: s.oddsVersion, bettable: false, reason: 'selection_closed' });
+      }
+    }
     return map;
-  }, [data]);
+  }, [data, selections]);
 }
 
 /** Ce qui manque pour pouvoir parier. */

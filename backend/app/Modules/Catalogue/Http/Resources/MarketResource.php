@@ -22,8 +22,10 @@ class MarketResource extends JsonResource
     public function toArray(Request $request): array
     {
         // Match en cours : cote du modèle en direct à cet instant (D-20), ou marché suspendu avec son motif.
-        $quote = $this->event !== null && app(LiveOddsService::class)->applies($this->resource)
-            ? app(LiveOddsService::class)->quote($this->resource) : null;
+        $live = app(LiveOddsService::class);
+        $quote = $this->event !== null && $live->applies($this->resource) ? $live->quote($this->resource) : null;
+        // Score exact en direct : seulement les scores encore possibles (à 2-1, pas de « 1-0 »).
+        $selections = $quote !== null ? $live->visibleSelections($this->resource, $quote, $this->selections) : $this->selections;
 
         return [
             'id' => (string) $this->id,
@@ -38,7 +40,7 @@ class MarketResource extends JsonResource
             'bettable' => $quote !== null ? (bool) config('betting.allow_live') && $quote->open : $this->isBettable(),
             // Direct : motif de la suspension (score_stale, score_changed, closing, decided, live_closed…), sinon null.
             'suspended_reason' => $quote !== null && ! $quote->open ? $quote->reason : null,
-            'selections' => $this->selections->map(fn ($s) => [
+            'selections' => $selections->map(fn ($s) => [
                 'id' => (string) $s->id,
                 'key' => $s->key,
                 'label' => self::selectionLabel($s->key, $this->line),

@@ -2499,62 +2499,290 @@ a.match-line-teams:hover { color: var(--brand); }
 .pay-choice-moncash:has(input:checked) { border-color: #d6202f; background: #fdecee; color: #a3121f; }
 .pay-choice-natcash:has(input:checked) { border-color: #f08c00; background: #fff4e5; color: #8a4b00; }
 
-/* Solde : boutons « Dépôt » et « Retrait » sous le solde, puis panneau de l'opération (choix MonCash / NatCash, formulaire). */
-.money-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-.money-action {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem; min-height: 3.4rem; padding: 0 1rem;
-  border: 2px solid transparent; border-radius: 14px; cursor: pointer; font: inherit; font-size: 1.05rem; font-weight: 700; color: #fff;
-  box-shadow: 0 6px 16px rgba(74, 0, 12, 0.18); transition: transform 0.12s, box-shadow 0.15s, filter 0.15s;
+/* PORTEFEUILLE (page Solde, dépôt et retrait) : façon application mobile, pensé d'abord pour le téléphone (375 px), dans
+   la charte bordeaux et or. En haut sur fond bordeaux : « Bonjour », solde en grand, boutons ronds, carte d'information ;
+   en dessous, une feuille claire arrondie : dernières opérations, ou dépôt / retrait ouvert (cartes MonCash / NatCash,
+   montants rapides, alertes avec pastille, historique repliable). Les règles sont limitées à .wallet-page quand la
+   classe sert ailleurs. */
+.wallet-page { width: 100%; max-width: 760px; }
+.wallet-app {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; border-radius: 28px; color: #fff;
+  background:
+    radial-gradient(90% 55% at 50% 18%, rgba(245, 179, 1, 0.16), transparent 70%),
+    linear-gradient(175deg, #3a0009 0%, var(--slate) 38%, var(--navy) 100%);
+  box-shadow: 0 16px 36px rgba(74, 0, 12, 0.28);
 }
-.money-action-deposit { background: linear-gradient(160deg, #22b05a, #138a43); }
-.money-action-withdraw { background: linear-gradient(160deg, #b3122a, var(--navy)); }
-.money-action:hover { filter: brightness(1.06); }
-.money-action:active { transform: scale(0.98); }
-.money-action:focus-visible { outline: 3px solid var(--accent-ring, rgba(242, 183, 5, 0.35)); outline-offset: 2px; }
-.money-action.active { border-color: #fff; box-shadow: 0 0 0 3px rgba(161, 14, 36, 0.25), 0 8px 20px rgba(74, 0, 12, 0.25); }
+/* Cercles fins derrière le solde, comme des ondes. */
+.wallet-app::before {
+  content: ''; position: absolute; left: 50%; top: 150px; width: 300px; height: 300px; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 1px solid rgba(245, 179, 1, 0.12);
+  box-shadow: 0 0 0 46px rgba(255, 255, 255, 0.025), 0 0 0 47px rgba(245, 179, 1, 0.08); pointer-events: none;
+}
+.wallet-top { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1.3rem; padding: 1rem 1.1rem 1.25rem; }
+
+.wallet-greet { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2.6rem; }
+.wallet-hello {
+  display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; padding: 0.25rem 1rem 0.25rem 0.25rem;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 0.95rem; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wallet-avatar {
+  flex: none; display: grid; place-items: center; width: 2.15rem; height: 2.15rem; border-radius: 50%;
+  background: linear-gradient(145deg, #ffd34d, var(--gold)); color: var(--accent-text); font-weight: 700;
+}
+.wallet-round-link {
+  flex: none; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.32); color: #fff; transition: background 0.15s;
+}
+.wallet-round-link:hover { background: rgba(255, 255, 255, 0.1); }
+.wallet-hello:focus-visible, .wallet-round-link:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+.wallet-balance { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-height: 4.6rem; text-align: center; }
+.wallet-balance-label { font-size: 0.9rem; color: rgba(255, 255, 255, 0.72); }
+.wallet-app .balance {
+  font-size: clamp(2.2rem, 11vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.wallet-balance .skeleton-amount { width: 60%; margin: 0.35rem auto 0; }
+
+/* Boutons ronds avec le libellé dessous ; « Déposer » en pilule or, plus large. */
+.wallet-actions { display: grid; grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.wallet-action {
+  display: flex; flex-direction: column; align-items: center; gap: 0.4rem; min-width: 0; padding: 0; border: 0;
+  background: none; color: #fff; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.wallet-action-icon {
+  display: grid; place-items: center; width: 3.15rem; height: 3.15rem; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.22); color: #fff;
+  transition: transform 0.12s, background 0.15s, box-shadow 0.15s;
+}
+.wallet-action-main .wallet-action-icon {
+  width: 100%; background: linear-gradient(145deg, #ffcf3a, var(--gold)); border-color: transparent; color: var(--accent-text);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+.wallet-action-label { font-size: 0.8rem; color: rgba(255, 255, 255, 0.85); white-space: nowrap; }
+.wallet-action:hover .wallet-action-icon { background: rgba(255, 255, 255, 0.18); }
+.wallet-action-main:hover .wallet-action-icon { background: linear-gradient(145deg, #ffd65c, var(--accent-hover)); }
+.wallet-action:active .wallet-action-icon { transform: scale(0.95); }
+.wallet-action:focus-visible { outline: 0; }
+.wallet-action:focus-visible .wallet-action-icon { outline: 3px solid #fff; outline-offset: 2px; }
+.wallet-action.active .wallet-action-icon { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7); }
+.wallet-action.active .wallet-action-label { color: var(--gold); font-weight: 600; }
+
+/* Carte d'information qu'on peut fermer. */
+.wallet-tip {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 0.7rem; padding: 0.85rem 0.6rem 0.85rem 0.9rem;
+  border-radius: 18px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.wallet-tip-icon { color: var(--gold); margin-top: 0.1rem; }
+.wallet-tip-text { display: flex; flex-direction: column; gap: 0.15rem; }
+.wallet-tip-text strong { font-size: 0.95rem; }
+.wallet-tip-text span { font-size: 0.84rem; line-height: 1.45; color: rgba(255, 255, 255, 0.78); }
+.wallet-tip-text a { color: var(--gold); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.wallet-tip-close {
+  display: grid; place-items: center; width: 2rem; height: 2rem; margin: -0.3rem 0 0; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: rgba(255, 255, 255, 0.75); cursor: pointer;
+}
+.wallet-tip-close:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.wallet-tip-close:focus-visible { outline: 2px solid var(--gold); }
+.wallet-top .alert { color: var(--text); }
+
+/* Feuille claire arrondie, avec sa poignée : liste des opérations ou panneau ouvert. */
+.wallet-sheet {
+  position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0.8rem; min-height: 14rem;
+  padding: 1.35rem 0.9rem 1.1rem; border-radius: 26px 26px 0 0; background: #f6f3ef; color: var(--text);
+}
+.wallet-sheet::before {
+  content: ''; position: absolute; top: 0.55rem; left: 50%; width: 2.6rem; height: 4px; transform: translateX(-50%);
+  border-radius: 999px; background: #d6d0c8;
+}
+.wallet-ops-block { display: flex; flex-direction: column; gap: 0.7rem; }
+.wallet-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0 0.2rem; }
+.wallet-sheet-head h2 { margin: 0; font-size: 1.05rem; }
+.wallet-sheet-head a { color: var(--muted); font-size: 0.88rem; font-weight: 500; }
+.wallet-sheet-head a:hover { color: var(--brand); }
+.wallet-ops-list { display: flex; flex-direction: column; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.wallet-op {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.8rem 0.85rem; border-radius: 16px; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
+}
+.wallet-op-icon { flex: none; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 50%; }
+.wallet-op-icon.is-in { background: var(--success-soft); color: var(--success); }
+.wallet-op-icon.is-out { background: #fdf1ef; color: var(--brand); }
+.wallet-op-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.wallet-op-text strong { font-size: 0.95rem; }
+.wallet-op-text span, .wallet-op-balance { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+.wallet-op-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; }
+.wallet-op-pill { padding: 0.12rem 0.55rem; border-radius: 999px; font-size: 0.82rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; color: #fff; }
+.wallet-op-pill.is-in { background: #16a34a; }
+.wallet-op-pill.is-out { background: #dc2626; }
+.wallet-op-pill .money { color: inherit; }
+
+/* Panneau de l'opération ouverte, dans la feuille. */
 .money-panel { animation: money-panel-in 0.18s ease-out; }
 .money-panel > .money-card { width: 100%; }
 @keyframes money-panel-in { from { opacity: 0; transform: translateY(-6px); } }
-@media (prefers-reduced-motion: reduce) { .money-panel, .money-action { animation: none; transition: none; } }
+/* Le panneau est posé à même la feuille : pas de seconde carte, les lignes MonCash / NatCash en tiennent lieu. */
+.wallet-page .money-card { gap: 1rem; padding: 0 0.2rem; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.wallet-page .money-card-head { align-items: center; }
+.wallet-page .money-card-title { flex: 1; min-width: 0; }
+.wallet-page .money-card-icon { border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); }
+.money-card-close {
+  flex: none; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; padding: 0; border: 0; border-radius: 50%;
+  background: var(--surface); color: var(--muted); cursor: pointer; box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+}
+.money-card-close:hover { background: var(--surface-3); color: var(--text); }
+.wallet-page .money-card-body { gap: 0.9rem; }
 
+/* Choix du moyen : une carte par portefeuille (logo officiel, nom, ligne d'aide, flèche), liseré à sa couleur. */
 .method-picker { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; }
-.method-picker-title { margin: 0; font-weight: 600; font-size: 0.95rem; }
-.method-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.method-picker-title { margin: 0; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.method-tiles { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.65rem; width: 100%; }
 .method-tile {
-  --pay: 19, 64, 216;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem; min-height: 6.2rem; padding: 0.8rem;
-  border: 2px solid rgba(var(--pay), 0.35); border-radius: 16px; cursor: pointer; font: inherit; color: rgb(var(--pay));
-  background: linear-gradient(180deg, rgba(var(--pay), 0.08), rgba(var(--pay), 0.02)); transition: border-color 0.15s, transform 0.12s, background 0.15s;
+  --pay: 161, 14, 36;
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 0.85rem; width: 100%; min-height: 4.7rem;
+  padding: 0.8rem 0.9rem 0.8rem 1.05rem; border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
 }
-.method-tile:hover { border-color: rgb(var(--pay)); background: rgba(var(--pay), 0.12); }
-.method-tile:active { transform: scale(0.98); }
-.method-tile:focus-visible { outline: 3px solid rgba(var(--pay), 0.45); outline-offset: 2px; }
+.method-tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: rgb(var(--pay)); }
+.method-tile:hover { border-color: rgba(var(--pay), 0.45); box-shadow: 0 6px 18px rgba(var(--pay), 0.14); }
+.method-tile:active { transform: scale(0.985); }
+.method-tile:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(var(--pay), 0.45); }
+.method-tile-media {
+  flex: none; display: grid; place-items: center; width: 3rem; height: 3rem; overflow: hidden; border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(17, 24, 39, 0.14);
+}
+.method-logo { display: block; width: 100%; height: 100%; object-fit: cover; }
 .method-tile-logo {
-  display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 12px; flex: none;
-  background: rgb(var(--pay, 19, 64, 216)); color: #fff; font-weight: 700; font-size: 1.15rem;
+  display: grid; place-items: center; width: 100%; height: 100%; border-radius: inherit; flex: none;
+  background: rgb(var(--pay, 161, 14, 36)); color: #fff; font-weight: 600; font-size: 1.2rem;
 }
-.method-tile-label { font-size: 1.05rem; font-weight: 700; }
+.method-tile-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.method-tile-label { font-size: 1rem; font-weight: 600; }
+.method-tile-hint { font-size: 0.82rem; color: var(--muted); }
+.method-tile-arrow {
+  flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%;
+  background: var(--surface-2); color: var(--muted); transition: background 0.15s, color 0.15s;
+}
+.method-tile:hover .method-tile-arrow { background: rgba(var(--pay), 0.12); color: rgb(var(--pay)); }
+.method-tile-skeleton { cursor: default; }
+.method-tile-skeleton::before { background: var(--surface-3); }
+
+/* Rappel du moyen choisi, avec « Changer » en pilule. */
 .method-chosen {
-  --pay: 19, 64, 216;
-  display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.55rem 0.75rem; border-radius: 12px;
-  background: rgba(var(--pay), 0.08); border: 1px solid rgba(var(--pay), 0.25);
+  --pay: 161, 14, 36;
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.6rem 0.7rem; border-radius: 14px;
+  background: rgba(var(--pay), 0.06); border: 1px solid rgba(var(--pay), 0.22);
 }
-.method-chosen .method-tile-logo { width: 2rem; height: 2rem; border-radius: 9px; font-size: 0.9rem; }
-.method-chosen > span:nth-child(2) { flex: 1; min-width: 0; }
-.method-chosen strong { color: rgb(var(--pay)); }
-/* Couleurs des services, après les règles de base des tuiles et du rappel du moyen choisi. */
+.method-chosen .method-logo, .method-chosen .method-tile-logo { width: 2.4rem; height: 2.4rem; flex: none; border-radius: 10px; font-size: 0.95rem; }
+.method-chosen-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.method-chosen strong { color: rgb(var(--pay)); font-size: 1rem; }
+.method-chosen-change {
+  flex: none; min-height: 2.2rem; padding: 0.3rem 0.9rem; border: 1px solid rgba(var(--pay), 0.35); border-radius: 999px;
+  background: var(--surface); color: rgb(var(--pay)); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.method-chosen-change:hover { background: rgba(var(--pay), 0.08); }
+.method-chosen-change:focus-visible { outline: 3px solid rgba(var(--pay), 0.45); outline-offset: 2px; }
+/* Couleurs des services, après les règles de base des cartes et du rappel du moyen choisi. */
 .method-tile-moncash { --pay: 214, 32, 47; }
 .method-tile-natcash { --pay: 224, 120, 0; }
 
-/* Logos officiels MonCash / NatCash : la tuile est le logo (carré arrondi), anneau de couleur au survol et au focus. */
-.method-tile.has-logo {
-  padding: 0; min-height: 0; aspect-ratio: 1 / 1; width: 100%; max-width: 9.5rem; justify-self: center;
-  overflow: hidden; border: 0; border-radius: 22px; background: none; box-shadow: 0 8px 20px rgba(74, 0, 12, 0.18);
+/* Champs du formulaire : montant en grand, montants rapides, bouton principal, note de confirmation. */
+.wallet-page .field input { min-height: 3.1rem; border-radius: 12px; }
+.wallet-page .amount-field input { min-height: 3.5rem; border-radius: 14px; font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.wallet-page .field-icon-badge-text { height: 2.2rem; border-radius: 10px; }
+/* Badge « +509 » ou « HTG » : le texte saisi commence après lui (le badge « +509 » est plus large qu'une icône). */
+.wallet-page .field-control > input { padding-left: 4.6rem; }
+.amount-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; width: 100%; }
+.amount-chip {
+  min-height: 2.6rem; padding: 0.3rem 0.35rem; border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 0.86rem; font-weight: 600; white-space: nowrap;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
-.method-tile.has-logo:hover { background: none; box-shadow: 0 0 0 3px rgba(var(--pay), 0.45), 0 10px 22px rgba(74, 0, 12, 0.22); }
-.method-tile.has-logo:focus-visible { outline: 0; box-shadow: 0 0 0 4px rgba(var(--pay), 0.6); }
-.method-logo { display: block; width: 100%; height: 100%; object-fit: cover; }
-.method-chosen .method-logo { width: 2.2rem; height: 2.2rem; flex: none; border-radius: 9px; }
+.amount-chip small { font-size: 0.7rem; font-weight: 500; color: var(--muted); }
+.amount-chip:hover { border-color: var(--brand); color: var(--brand); }
+.amount-chip:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 1px; }
+.amount-chip[aria-pressed='true'], .amount-chip[aria-pressed='true']:hover { background: var(--brand); border-color: var(--brand); color: #fff; }
+.amount-chip[aria-pressed='true'] small { color: rgba(255, 255, 255, 0.8); }
+.money-submit { min-height: 3.3rem; border-radius: 14px; font-size: 1rem; font-weight: 600; }
+.money-note {
+  display: flex; align-items: flex-start; gap: 0.5rem; margin: 0; padding: 0.7rem 0.8rem; border-radius: 12px;
+  background: var(--surface-2); color: var(--muted); font-size: 0.82rem; line-height: 1.45;
+}
+.money-note svg { flex: none; margin-top: 0.1rem; color: var(--success); }
+
+/* Alertes du portefeuille : fond teinté, pastille ronde (i, ✓, !) devant le titre. */
+.wallet-page .alert {
+  --tone: var(--brand);
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.7rem; align-items: start; width: 100%;
+  padding: 0.85rem 0.95rem; border: 1px solid #f3d3d8; border-radius: 14px; background: #fdf4f5; box-shadow: none;
+}
+.wallet-page .alert::before {
+  content: 'i'; grid-row: 1 / span 2; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: var(--tone); color: #fff; font-size: 0.85rem; font-weight: 700; line-height: 1;
+}
+.wallet-page .alert > * { grid-column: 2; }
+.wallet-page .alert-title { margin-bottom: 0.15rem; font-size: 0.95rem; }
+.wallet-page .alert > div { font-size: 0.88rem; line-height: 1.5; }
+.wallet-page .alert .btn { margin-top: 0.5rem; }
+.wallet-page .alert-success { --tone: var(--success); border-color: #bfe5cc; background: var(--success-soft); }
+.wallet-page .alert-success::before { content: '✓'; }
+.wallet-page .alert-warning { --tone: #d97706; border-color: #f6dcaa; background: #fff8eb; }
+.wallet-page .alert-warning::before, .wallet-page .alert-error::before { content: '!'; }
+.wallet-page .alert-error { --tone: var(--danger); border-color: #f6c9c5; background: #fff5f4; }
+
+/* Chargement : formes grisées qui brillent (cartes des moyens, solde). */
+.skeleton {
+  display: block; border-radius: 8px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%; animation: skeleton-shine 1.2s ease-in-out infinite;
+}
+.skeleton-on-dark { background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 25%, rgba(255, 255, 255, 0.22) 50%, rgba(255, 255, 255, 0.1) 75%); background-size: 200% 100%; }
+.skeleton-logo { flex: none; width: 3rem; height: 3rem; border-radius: 12px; }
+.skeleton-line { width: 60%; height: 0.8rem; }
+.skeleton-line.short { width: 40%; }
+.skeleton-line + .skeleton-line { margin-top: 0.4rem; }
+.skeleton-amount { width: 65%; height: 2.4rem; margin-top: 0.35rem; border-radius: 10px; }
+@keyframes skeleton-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* Historiques : liste en carte, pastille ronde (entrée en vert, sortie en bordeaux), statut en pastille de couleur. */
+.wallet-page .recent-ops { border-radius: 16px; box-shadow: var(--shadow-sm); }
+.wallet-page .recent-ops li { gap: 0.75rem; padding: 0.8rem 1rem; }
+.wallet-page .recent-ops .money { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.op-status { align-self: flex-start; margin-top: 0.25rem; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.74rem; font-weight: 600; }
+.op-status-ok { background: var(--success-soft); color: var(--success); }
+.op-status-ko { background: #fdecea; color: var(--danger); }
+.op-status-wait { background: #fff4dc; color: #9a5b00; }
+.op-status-off { background: var(--surface-2); color: var(--muted); }
+.wallet-page .withdrawal-side .btn { min-height: 2rem; padding: 0.2rem 0.75rem; border-radius: 999px; color: var(--danger); font-size: 0.85rem; }
+.wallet-page .withdrawal-side .btn:hover:not(:disabled) { background: #fdecea; }
+.ops-empty { margin: 0; padding: 1.25rem; text-align: center; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 16px; }
+.wallet-page .deposit-history { overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.wallet-page .deposit-history summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0; padding: 0.8rem 1rem;
+  list-style: none; font-size: 0.9rem; font-weight: 600;
+}
+.wallet-page .deposit-history summary::-webkit-details-marker { display: none; }
+.wallet-page .deposit-history summary::after {
+  content: ''; flex: none; width: 0.5rem; height: 0.5rem; margin-right: 0.25rem;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform 0.15s;
+}
+.wallet-page .deposit-history[open] summary::after { transform: rotate(-135deg); }
+.wallet-page .deposit-history .recent-ops { border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+
+/* Ordinateur : les deux moyens côte à côte. Petit téléphone : montants rapides sur deux lignes. */
+@media (min-width: 640px) { .method-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .wallet-app { border-radius: 24px; }
+  .wallet-top { padding: 0.85rem 0.9rem 1.1rem; }
+  .wallet-sheet { padding: 1.3rem 0.7rem 1rem; border-radius: 24px 24px 0 0; }
+  .wallet-page .money-card-head h2 { font-size: 1.05rem; }
+}
+@media (max-width: 359px) { .amount-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) {
+  .money-panel, .wallet-action-icon, .method-tile, .skeleton { animation: none; transition: none; }
+}
 
 /* FIDÉLITÉ ET PARRAINAGE (V2-E07) : bandeau du palier ou du code, cartes, conditions de mise, filleuls. */
 .rewards { max-width: 860px; }

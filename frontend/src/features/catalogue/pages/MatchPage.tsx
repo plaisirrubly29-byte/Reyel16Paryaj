@@ -7,6 +7,7 @@ import { Icon } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
 import { sportIcon } from '../../../shared/components/sportIcon';
 import { useEventMarkets, type CatalogueEvent } from '../api/catalogue';
+import { SUSPENDED_LABELS } from '../api/liveOdds';
 import { formatKickoff, isLiveStatus, liveLabel } from '../format';
 import { MarketOdds } from '../components/OddsButtons';
 import { MARKET_CATEGORIES, marketCategory, marketMatchesSearch, type MarketCategory } from '../markets';
@@ -99,7 +100,10 @@ function MatchContent({ query }: { query: ReturnType<typeof useEventMarkets> }) 
                   <header className="market-head">
                     <h2 id={`market-${market.id}`}><span className="market-help" aria-hidden="true"><Icon name="help" size={24} /></span>{market.name}</h2>
                     {market.bettable === false && (
-                      <span className="market-note">{isLiveStatus(event.status) ? 'Paris fermés pendant le match' : 'Cotes en cours de mise à jour'}</span>
+                      <span className="market-note">
+                        {!isLiveStatus(event.status) ? 'Cotes en cours de mise à jour'
+                          : market.suspended_reason ? SUSPENDED_LABELS[market.suspended_reason] : 'Paris fermés pendant le match'}
+                      </span>
                     )}
                   </header>
                   <MarketOdds event={event} market={market} variant="wide" selectionSearch={search} />

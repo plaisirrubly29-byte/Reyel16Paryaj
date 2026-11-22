@@ -188,14 +188,22 @@ return [
         'scores_interval_seconds' => (int) env('SPORTS_DATA_LIVE_SCORES_SECONDS', 30),
         // Score plus ancien : marchés du match suspendus (un but a pu être marqué sans qu'on le sache).
         'max_score_age_seconds' => (int) env('SPORTS_DATA_LIVE_MAX_SCORE_AGE', 90),
-        // Après un changement de score, marchés suspendus ce temps (but refusé par la VAR, score corrigé).
-        'score_change_cooldown_seconds' => (int) env('SPORTS_DATA_LIVE_SCORE_COOLDOWN', 30),
+        // Suspension après une action (but, but refusé par la VAR, score corrigé) : levée d'elle-même après ce temps,
+        // 10 s par défaut, même si aucun nouveau score n'arrive. Remplace SPORTS_DATA_LIVE_SCORE_COOLDOWN (30 s).
+        'action_suspension_seconds' => (int) env('SPORTS_DATA_LIVE_ACTION_SUSPENSION_SECONDS', 10),
+        // Plus aucun score reçu depuis ce temps (match arrêté, ou pas suivi en direct par le fournisseur) : direct du
+        // match fermé au lieu de rester suspendu ; rouvert de lui-même si le score revient avant la fin.
+        'score_unavailable_close_seconds' => (int) env('SPORTS_DATA_LIVE_SCORE_UNAVAILABLE_CLOSE_SECONDS', 300),
         // Plus de paris en direct après cette minute de jeu estimée (fin de match, cotes trop sensibles au retard).
         'cutoff_minute' => (int) env('SPORTS_DATA_LIVE_CUTOFF_MINUTE', 85),
         // Une issue plus probable que ça (cote sous ~1,05) : marché suspendu, il n'y a plus rien à parier.
         'max_probability' => (float) env('SPORTS_DATA_LIVE_MAX_PROBABILITY', 0.95),
         // Buts attendus sur un match quand les bookmakers n'ont pas de plus/moins pour ce match.
         'default_total_goals' => (float) env('SPORTS_DATA_LIVE_DEFAULT_GOALS', 2.6),
+        // Score exact final en direct : scores proposés jusqu'à ce nombre de buts de plus par équipe que le score du
+        // moment (3 : à 2-1, de 2-1 à 5-4), et jamais au-delà de cette cote (issue trop improbable, risque de la maison).
+        'correct_score_extra_goals' => (int) env('SPORTS_DATA_LIVE_CORRECT_SCORE_EXTRA_GOALS', 3),
+        'max_correct_score_odds' => (float) env('SPORTS_DATA_LIVE_CORRECT_SCORE_MAX_ODDS', 100),
     ],
 
     // Cache des réponses du catalogue public (P8-03), en secondes ; 0 = désactivé (développement, tests). Le pari

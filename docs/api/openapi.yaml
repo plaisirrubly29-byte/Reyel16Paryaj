@@ -619,9 +619,11 @@ paths:
       x-task: V2-D06
       description: |
         Public, jamais en cache : relu toutes les quelques secondes par l'onglet Live, la page du match et le coupon
-        (décision D-20, option « Modèle + The Odds »). Cotes du 1X2 et du plus/moins calculées à chaque appel par le
-        modèle en direct (force des équipes, score, temps restant), jamais mieux payées que la dernière cote en direct
-        du fournisseur. Un match qui n'est plus en cours est renvoyé avec son statut et sans marché.
+        (décision D-20, option « Modèle + The Odds »). Cotes du 1X2, du plus/moins et du score exact final calculées à
+        chaque appel par le modèle en direct (force des équipes, score, temps restant) ; 1X2 et plus/moins jamais mieux
+        payés que la dernière cote en direct du fournisseur. Le score exact ne contient que les scores encore possibles
+        (à 2-1 : « 3-1 » oui, « 1-0 » jamais), dans l'ordre à afficher : cette liste remplace celle du catalogue.
+        Un match qui n'est plus en cours est renvoyé avec son statut et sans marché.
       parameters:
         - { name: event_ids, in: query, required: true, description: "Identifiants des matchs, séparés par des virgules (50 au plus)", schema: { type: string, example: "12,15" } }
       responses:
@@ -647,14 +649,21 @@ paths:
                             type: object
                             properties:
                               id: { type: string }
-                              key: { type: string, enum: [h2h, totals] }
+                              key: { type: string, enum: [h2h, totals, correct_score] }
                               line: { type: [string, "null"] }
                               odds_version: { type: integer }
                               bettable: { type: boolean }
                               suspended_reason: { $ref: "#/components/schemas/LiveSuspendedReason" }
                               selections:
                                 type: array
-                                items: { type: object, properties: { id: { type: string }, key: { type: string }, odds: { type: string, example: "2.05" } } }
+                                items:
+                                  type: object
+                                  properties:
+                                    id: { type: string }
+                                    key: { type: string, example: "3-1" }
+                                    label: { type: string, description: "Libellé court du bouton de cote (1, X, 2, > 2.5, 3-1)" }
+                                    name: { type: string, example: "3 - 1" }
+                                    odds: { type: string, example: "2.05" }
                   live_betting:
                     type: object
                     properties:
@@ -4172,12 +4181,15 @@ components:
                     adjusted: { type: boolean, description: "V2-D03 (D-18) : true quand la cote est fixée à la main par l'administration, au lieu de la cote calculée" }
     LiveSuspendedReason:
       type: [string, "null"]
-      enum: [live_closed, not_available, suspended, score_stale, score_changed, closing, decided, null]
+      enum: [live_closed, not_available, suspended, score_stale, score_changed, closing, decided, score_unavailable, null]
       description: |
-        Motif d'un marché en direct suspendu (D-20) ; null s'il est ouvert ou hors direct. live_closed : paris en direct
-        coupés ; not_available : pas proposé en direct (seulement football 1X2 et plus/moins) ; suspended : par un
-        administrateur ; score_stale : score trop ancien ; score_changed : but en cours de vérification ; closing : fin de
-        match ; decided : issue acquise ou trop probable.
+        Motif d'un marché en direct suspendu ou fermé (D-20) ; null s'il est ouvert ou hors direct. live_closed : paris
+        en direct coupés ; not_available : pas proposé en direct (seulement football 1X2, plus/moins et score exact) ;
+        suspended : par un administrateur ; score_stale : score en retard (suspendu jusqu'au prochain score) ;
+        score_changed : but en cours de vérification (levé de lui-même après
+        live_model.action_suspension_seconds, 10 s) ; closing : fin de match (fermé) ; decided : issue acquise ou trop
+        probable ; score_unavailable : plus de score depuis live_model.score_unavailable_close_seconds (match arrêté ou
+        pas suivi en direct, fermé ; rouvert si le score revient).
     BetTicket:
       type: object
       description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
