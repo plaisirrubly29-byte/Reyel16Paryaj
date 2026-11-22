@@ -56,6 +56,17 @@ class AuthApiTest extends TestCase
         $this->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.phone', '34123456');
     }
 
+    public function test_register_without_a_country_records_haiti(): void
+    {
+        // Le formulaire ne demande plus le pays : le site est conçu pour Haïti.
+        $data = $this->registrationData();
+        unset($data['country']);
+
+        $this->postJson('/api/v1/auth/register', $data)
+            ->assertCreated()
+            ->assertJsonPath('data.profile.country', 'HT');
+    }
+
     public function test_closed_beta_requires_a_valid_invite_code_case_insensitive(): void
     {
         config(['identity.invite_codes' => ['BETA2026', 'AMIS']]);

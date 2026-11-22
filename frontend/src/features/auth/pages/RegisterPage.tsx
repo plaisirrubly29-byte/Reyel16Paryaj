@@ -3,15 +3,12 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../shared/api/client';
 import { Button } from '../../../shared/components/Button';
 import { ErrorAlert } from '../../../shared/components/ErrorAlert';
-import { SelectField } from '../../../shared/components/SelectField';
 import { TextField } from '../../../shared/components/TextField';
 import { useRegister, type RegisterInput } from '../api/auth';
 import { LEGAL_VERSION } from '../../legal/legal';
 import { AuthShell } from '../components/AuthShell';
-import { countryOptions, DEFAULT_COUNTRY } from '../countries';
+import { DEFAULT_COUNTRY } from '../countries';
 import { digitsOnly } from '../phone';
-
-const COUNTRIES = countryOptions().map((c) => ({ value: c.code, label: c.name }));
 
 type Form = Omit<RegisterInput, 'terms_accepted' | 'terms_version' | 'referral_code'>;
 
@@ -25,7 +22,7 @@ const empty: Form = {
   password: '',
   password_confirmation: '',
   birth_date: '',
-  country: DEFAULT_COUNTRY,
+  country: DEFAULT_COUNTRY, // site conçu pour Haïti : pas de choix du pays à l'inscription
 };
 
 export function RegisterPage() {
@@ -120,16 +117,6 @@ export function RegisterPage() {
           error={fieldErrors.birth_date}
           hint="Vous devez être majeur pour ouvrir un compte."
         />
-        <SelectField
-          label="Pays"
-          name="country"
-          autoComplete="country"
-          icon="flag"
-          options={COUNTRIES}
-          value={form.country ?? DEFAULT_COUNTRY}
-          onChange={set('country')}
-          error={fieldErrors.country}
-        />
         <TextField
           label="Mot de passe"
           labelHidden
@@ -213,7 +200,7 @@ function TermsCheckbox({ id, checked, onChange, error }: TermsProps) {
         aria-describedby={error ? `${id}-error` : undefined}
       />
       <label htmlFor={id}>
-        J'ai 18 ans ou plus. J'accepte les <Link to="/conditions" {...newTab}>conditions d'utilisation</Link> et
+        J'accepte les <Link to="/conditions" {...newTab}>conditions d'utilisation</Link> et
         le <Link to="/reglement" {...newTab}>règlement des paris</Link>, et j'ai lu
         la <Link to="/confidentialite" {...newTab}>politique de confidentialité</Link>.
       </label>
