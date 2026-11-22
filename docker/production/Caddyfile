@@ -1,6 +1,8 @@
 # Serveur web de Staging / Production (P1-06) : HTTPS automatique (Let's Encrypt), frontend et API sur la même origine.
 #   SITE_ADDRESS : nom de domaine (ex. staging.reyel16.ht) ; « localhost » pour un essai local (certificat interne).
 #   ACME_EMAIL   : adresse de contact Let's Encrypt (expiration, incidents).
+#   SITE_REDIRECT_FROM : facultatif, autre nom renvoyé vers SITE_ADDRESS (ex. www.reyel16paryaj.com), avec son propre
+#                        certificat. Absent : un nom réservé qui ne correspond à aucune visite, sans certificat demandé.
 {
 	email {$ACME_EMAIL}
 }
@@ -46,4 +48,9 @@
 	}
 
 	log
+}
+
+# www.<domaine> → <domaine> (redirection permanente, chemin et paramètres gardés).
+{$SITE_REDIRECT_FROM:http://redirect.invalid} {
+	redir https://{$SITE_ADDRESS}{uri} permanent
 }
