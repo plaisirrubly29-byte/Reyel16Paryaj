@@ -84,6 +84,22 @@ describe('dépôt en ligne', () => {
     expect(screen.getByRole('group', { name: 'Déposer avec' })).toBeInTheDocument();
   });
 
+  it('chaque moyen est une carte avec sa ligne d’aide, et un montant rapide remplit le champ', async () => {
+    mockApi(base);
+    renderApp('/wallet');
+    await openDeposit();
+
+    const moncash = within(await screen.findByRole('group', { name: 'Déposer avec' })).getByRole('button', { name: 'MonCash' });
+    expect(moncash).toHaveAccessibleDescription('Payer depuis votre compte');
+    await userEvent.click(moncash);
+
+    const quick = screen.getByRole('group', { name: 'Montants rapides' });
+    const chip = within(quick).getByRole('button', { name: /^2.500 HTG$/ });
+    await userEvent.click(chip);
+    expect(screen.getByLabelText('Montant du dépôt')).toHaveValue('2500');
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('refuse un montant hors des bornes du serveur avant tout appel', async () => {
     const fetchMock = mockApi(base);
     renderApp('/wallet');

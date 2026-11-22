@@ -35,42 +35,53 @@ export function WalletPage() {
   }
 
   return (
-    <section className="stack">
+    <section className="stack wallet-page">
       <h1>Solde</h1>
 
-      {wallet.isPending && <Spinner />}
       <ErrorAlert error={wallet.error} onRetry={() => wallet.refetch()} />
-      {wallet.data && (
-        <div className="balance-card">
-          <span className="muted">Solde disponible</span>
-          <strong className="balance"><MoneyText value={wallet.data.balance} /></strong>
+
+      {/* Carte du solde (bordeaux, chiffre en grand) avec, en bas, les deux boutons « Dépôt » et « Retrait » : chacun
+          ouvre son panneau (choix MonCash / NatCash, puis formulaire). */}
+      <div className="wallet-hero">
+        {wallet.isPending && (
+          <div className="wallet-balance" role="status" aria-label="Chargement du solde…">
+            <span className="skeleton skeleton-on-dark skeleton-line short" />
+            <span className="skeleton skeleton-on-dark skeleton-amount" />
+          </div>
+        )}
+        {wallet.data && (
+          <div className="wallet-balance">
+            <span className="wallet-balance-label"><Icon name="wallet" size={16} />Solde disponible</span>
+            <strong className="balance"><MoneyText value={wallet.data.balance} /></strong>
+          </div>
+        )}
+        {wallet.error && <div className="wallet-balance"><span className="wallet-balance-label"><Icon name="wallet" size={16} />Solde indisponible</span></div>}
+
+        <div className="money-actions">
+          <button
+            type="button"
+            className={`money-action money-action-deposit${operation === 'depot' ? ' active' : ''}`}
+            aria-expanded={operation === 'depot'}
+            aria-controls="money-panel"
+            onClick={() => open('depot')}
+          >
+            <Icon name="deposit" size={20} />Dépôt
+          </button>
+          <button
+            type="button"
+            className={`money-action money-action-withdraw${operation === 'retrait' ? ' active' : ''}`}
+            aria-expanded={operation === 'retrait'}
+            aria-controls="money-panel"
+            onClick={() => open('retrait')}
+          >
+            <Icon name="withdraw" size={20} />Retrait
+          </button>
         </div>
-      )}
+      </div>
+
       {frozen && (
         <Alert tone="warning" title="Solde gelé">Aucune mise n'est possible pour le moment. Contactez le support.</Alert>
       )}
-
-      {/* Deux boutons sous le solde : chacun ouvre son panneau (choix MonCash / NatCash, puis formulaire). */}
-      <div className="money-actions">
-        <button
-          type="button"
-          className={`money-action money-action-deposit${operation === 'depot' ? ' active' : ''}`}
-          aria-expanded={operation === 'depot'}
-          aria-controls="money-panel"
-          onClick={() => open('depot')}
-        >
-          <Icon name="deposit" size={22} />Dépôt
-        </button>
-        <button
-          type="button"
-          className={`money-action money-action-withdraw${operation === 'retrait' ? ' active' : ''}`}
-          aria-expanded={operation === 'retrait'}
-          aria-controls="money-panel"
-          onClick={() => open('retrait')}
-        >
-          <Icon name="withdraw" size={22} />Retrait
-        </button>
-      </div>
 
       {operation && (
         <div id="money-panel" className="money-panel">
@@ -87,12 +98,15 @@ export function WalletPage() {
         </div>
         <ErrorAlert error={recent.error} onRetry={() => recent.refetch()} />
         {recent.isPending && <Spinner />}
-        {recent.data?.data.length === 0 && <p className="muted">Aucune opération pour le moment.</p>}
+        {recent.data?.data.length === 0 && <p className="muted ops-empty">Aucune opération pour le moment.</p>}
         {!!recent.data?.data.length && (
-          <ul className="recent-ops">
+          <ul className="recent-ops wallet-ops">
             {recent.data.data.slice(0, 5).map((e) => (
               <li key={e.id}>
-                <span>
+                <span className={`op-icon ${e.amount.minor > 0 ? 'op-icon-in' : 'op-icon-out'}`} aria-hidden="true">
+                  <Icon name={e.amount.minor > 0 ? 'deposit' : 'withdraw'} size={17} />
+                </span>
+                <span className="op-text">
                   <strong>{ENTRY_LABELS[e.type]}</strong>
                   <span className="muted small">{new Date(e.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
                 </span>
