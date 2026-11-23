@@ -197,10 +197,17 @@ return [
         // Plus aucun score reçu depuis ce temps (match arrêté, ou pas suivi en direct par le fournisseur) : direct du
         // match fermé au lieu de rester suspendu ; rouvert de lui-même si le score revient avant la fin.
         'score_unavailable_close_seconds' => (int) env('SPORTS_DATA_LIVE_SCORE_UNAVAILABLE_CLOSE_SECONDS', 300),
-        // Plus de paris en direct après cette minute de jeu estimée (fin de match, cotes trop sensibles au retard).
-        'cutoff_minute' => (int) env('SPORTS_DATA_LIVE_CUTOFF_MINUTE', 85),
-        // Une issue plus probable que ça (cote sous ~1,05) : marché suspendu, il n'y a plus rien à parier.
-        'max_probability' => (float) env('SPORTS_DATA_LIVE_MAX_PROBABILITY', 0.95),
+        // Pas de minute limite : les paris restent ouverts jusqu'au coup de sifflet final (temps additionnel compris),
+        // tant que le fournisseur donne le match en cours. Filet de sécurité seulement : direct fermé ce nombre de minutes
+        // après l'heure de début prévue (coup d'envoi retardé + mi-temps longue + temps additionnel). Remplace
+        // SPORTS_DATA_LIVE_CUTOFF_MINUTE (85e minute estimée : les paris fermaient trop tôt et ne rouvraient jamais).
+        'close_after_minutes' => (int) env('SPORTS_DATA_LIVE_CLOSE_AFTER_MINUTES', 150),
+        // Temps de jeu encore compté par le modèle quand l'horloge estimée dépasse la fin du match (temps additionnel,
+        // coup d'envoi en retard) : les cotes continuent de bouger avec le score au lieu de se figer.
+        'min_remaining_minutes' => (float) env('SPORTS_DATA_LIVE_MIN_REMAINING_MINUTES', 2),
+        // Une issue plus probable que ça (cote à 1,01) : marché suspendu, il n'y a plus rien à parier ; rouvert dès que
+        // le match bascule (but).
+        'max_probability' => (float) env('SPORTS_DATA_LIVE_MAX_PROBABILITY', 0.98),
         // Buts attendus sur un match quand les bookmakers n'ont pas de plus/moins pour ce match.
         'default_total_goals' => (float) env('SPORTS_DATA_LIVE_DEFAULT_GOALS', 2.6),
         // Score exact final en direct : scores proposés jusqu'à ce nombre de buts de plus par équipe que le score du

@@ -158,7 +158,7 @@ Super Admin ne l'active pas (conditions du §7).
 | Correction par The Odds API | À chaque synchro en direct (`sports-data:live`, `SPORTS_DATA_LIVE_CRON`), le modèle est recalé sur les cotes en direct reçues ; notre cote n'est **jamais mieux payée** que la dernière cote The Odds (marge comprise) prise après le dernier changement de score. |
 | Marge | `OddsMargin` + `live_extra` (2 points), toujours appliquée aux cotes du modèle. |
 | Score | `sports-data:live-scores` toutes les 30 s (`SPORTS_DATA_LIVE_SCORES_SECONDS` : 10 à 60 s), 1 crédit par compétition en direct, **seulement quand le direct est ouvert**, sous le même plafond de crédits du jour. |
-| Suspension automatique | Score de plus de 90 s, changement de score depuis moins de 10 s (VAR, §10.2), issue acquise ou probabilité > 95 %, suspension par un administrateur. Affiché « Suspendu » côté joueur. Fermé (« Fermé », pas « Suspendu ») : après la 85e minute, plus de score depuis 5 min (§10.2), direct coupé. |
+| Suspension automatique | Score de plus de 90 s, changement de score depuis moins de 10 s (VAR, §10.2), issue acquise ou probabilité > 98 % (§10.4), suspension par un administrateur. Affiché « Suspendu » côté joueur. Fermé (« Fermé », pas « Suspendu ») : 150 min après l’heure prévue (§10.4), plus de score depuis 5 min (§10.2), direct coupé. |
 | Délai d'acceptation | Option 3.2 C : ticket `awaiting` (202), mise réservée, revérifié après 8 s (5 à 15 s, réglable par le Super Admin) : score identique, aucun changement de score depuis le pari, marché ouvert, cote pas plus basse de plus de 3 %. Sinon `rejected`, mise rendue (écriture `bet:{id}:rejected`). Jamais vérifié en 60 s : refusé. |
 | Cote qui bouge | La cote vue reste acceptée si celle du moment n'est pas plus basse de plus de 3 % (`BETTING_LIVE_ODDS_TOLERANCE`) ; le ticket prend la plus basse des deux. |
 | Mise maximale | 10 000 HTG par ticket en direct (`BETTING_LIVE_MAX_STAKE_MINOR`, réglable par le Super Admin). Paris simples seulement (`BETTING_LIVE_ALLOW_MULTIPLE=false`). |
@@ -172,13 +172,13 @@ je peux parier que le match peut terminer 3-1. »
 
 | Constat en Production | Correction |
 |---|---|
-| Tous les matchs de football en cours affichaient « Suspendu : score en cours de vérification » (`score_stale`) : le score n'était plus relu depuis plus de 90 s. `sports-data:live-scores` relisait toutes les compétitions qui ont un match commencé depuis moins de 3 h, **tous sports confondus** (NFL, NBA, tennis, matchs déjà finis) : 1 crédit par compétition toutes les 30 s, le plafond du jour (`SPORTS_DATA_LIVE_DAILY_CREDITS`) partait en quelques dizaines de minutes. | Les scores toutes les 30 s ne concernent plus que les compétitions de **football** dont un match peut encore être parié (commencé depuis moins de 85 min + mi-temps + 5 min). La fin des matchs reste suivie par `sports-data:live` (15 min). |
+| Tous les matchs de football en cours affichaient « Suspendu : score en cours de vérification » (`score_stale`) : le score n'était plus relu depuis plus de 90 s. `sports-data:live-scores` relisait toutes les compétitions qui ont un match commencé depuis moins de 3 h, **tous sports confondus** (NFL, NBA, tennis, matchs déjà finis) : 1 crédit par compétition toutes les 30 s, le plafond du jour (`SPORTS_DATA_LIVE_DAILY_CREDITS`) partait en quelques dizaines de minutes. | Les scores toutes les 30 s ne concernent plus que les compétitions de **football** dont un match peut encore être parié (commencé depuis moins de 150 min, §10.4). La fin des matchs reste suivie par `sports-data:live` (15 min). |
 | Pas de score exact en direct (D-20 §4.1). | Marché **score exact final** (`correct_score`) coté par le modèle à partir du score du moment : seuls les scores encore possibles, jusqu'à 3 buts de plus par équipe (`SPORTS_DATA_LIVE_CORRECT_SCORE_EXTRA_GOALS`), cote au plus 100 (`SPORTS_DATA_LIVE_CORRECT_SCORE_MAX_ODDS`). Sélections créées à chaque relecture du score (`LiveCorrectScoreMarket`) ; un score dépassé n'est plus affiché ni pariable (`selection_unavailable`). Marge « secondaire » + 2 points ; mise maximale des paris spéciaux (1 000 HTG) : aucun bookmaker ne borne cette cote. Même délai d'acceptation, mêmes suspensions, même règlement sur le score final. |
 
 **Risque restant** : nous ne connaissons un but qu'au rythme des scores de The Odds API (30 s + leur propre retard). Un
 pari pris juste après un but que nous n'avons pas encore vu n'est refusé que si le nouveau score arrive avant la fin du
 délai d'acceptation. Réduire ce risque : scores plus fréquents (15 s), délai plus long (10 à 15 s), mise maximale plus
-basse, ou fin des paris plus tôt (`SPORTS_DATA_LIVE_CUTOFF_MINUTE`).
+basse, ou fermeture de sécurité plus tôt (`SPORTS_DATA_LIVE_CLOSE_AFTER_MINUTES`, §10.4).
 
 ### 10.2 Suspensions levées en 10 s, matchs arrêtés fermés (2026-11-22, retour de Rubly)
 
@@ -208,3 +208,19 @@ bloqué ».
 
 Offre The Odds API : 100 000 crédits par mois. Un soir chargé coûte plusieurs milliers de crédits ; Rubly prendra une
 offre plus grande si le mois ne suffit pas, et le plafond du jour sera relevé en conséquence.
+
+### 10.4 Paris ouverts jusqu'au coup de sifflet final (2026-11-23, retour de Rubly)
+
+Rubly : « on devrait pouvoir parier à tout moment, même dans les minutes additionnelles ; les cotes doivent varier en
+fonction de la tendance du match. Sur le site, les paris se ferment à un certain moment et ne se rouvrent jamais. »
+
+| Constat en Production | Correction |
+|---|---|
+| Tous les marchés fermaient à la **85e minute estimée** (`SPORTS_DATA_LIVE_CUTOFF_MINUTE=85`), motif `closing`, sans jamais rouvrir. La minute est estimée depuis l'heure de début **prévue** (The Odds API ne donne pas la minute de jeu) : avec un coup d'envoi retardé ou une mi-temps longue, la fermeture tombait bien avant la vraie 85e minute. | Plus de minute limite : les marchés restent ouverts, **temps additionnel compris**, jusqu'au résultat final (le match passe en « terminé »). Seul filet de sécurité : fermé **150 min** après l'heure prévue (`SPORTS_DATA_LIVE_CLOSE_AFTER_MINUTES`). L'ancienne variable n'est plus lue. |
+| Passé la fin estimée, le modèle comptait 0 minute restante : cotes figées. | Le modèle compte toujours au moins **2 minutes** restantes (`SPORTS_DATA_LIVE_MIN_REMAINING_MINUTES`) : les cotes continuent de suivre le score (un but dans le temps additionnel suspend 10 s puis rouvre avec les nouvelles cotes). |
+| Le score cessait d'être relu toutes les 30 s après 85 + 15 + 5 min : marchés ensuite fermés faute de score (`score_unavailable`). | Score relu toutes les 30 s jusqu'à la fermeture de sécurité (150 min). Coût : environ 45 min de plus de lecture par compétition et par soirée. |
+| Marché suspendu dès qu'une issue dépassait 95 % (cote vers 1,05) : 1X2 fermé en fin de match dès qu'une équipe mène. | Seuil relevé à **98 %** (`SPORTS_DATA_LIVE_MAX_PROBABILITY`, cote 1,01) ; le marché rouvre dès que le match bascule. |
+
+**Risque accepté** : en fin de match, un pari pris juste après un but que The Odds API n'a pas encore signalé n'est
+refusé que si le score arrive avant la fin du délai d'acceptation (8 s). Le fournisseur peut aussi annoncer la fin du
+match avec quelques minutes de retard ; les cotes sont alors déjà très proches de 1,01 pour l'issue acquise.
