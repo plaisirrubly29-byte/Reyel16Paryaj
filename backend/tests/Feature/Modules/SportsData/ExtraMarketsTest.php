@@ -3,6 +3,7 @@
 namespace Tests\Feature\Modules\SportsData;
 
 use App\Modules\SportsData\Contracts\SportsDataProvider;
+use App\Modules\SportsData\Data\EventData;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Models\ProviderApiCall;
@@ -59,6 +60,44 @@ class ExtraMarketsTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame(0, Market::where('key', 'correct_score')->count());
+    }
+
+    public function test_statistics_markets_are_neither_requested_nor_paid_without_a_statistics_provider(): void
+    {
+        // Audit K3 : la synchro les ignore sans STATISTICS_PROVIDER, les demander coûtait des crédits pour rien.
+        config(['sports_data.statistics.provider' => '', 'sports_data.extra_markets' => 'btts,totals_h1,halftime_fulltime,alternate_totals_corners,alternate_totals_cards']);
+        $provider = new class extends FakeSportsDataProvider
+        {
+            /** @var list<string> */
+            public array $requested = [];
+
+            public function eventMarkets(string $sportKey, string $eventId, string $markets): EventData
+            {
+                $this->requested[] = $markets;
+
+                return parent::eventMarkets($sportKey, $eventId, $markets);
+            }
+        };
+        $this->app->instance(SportsDataProvider::class, $provider);
+
+        $this->artisan('sports-data:extra-markets', ['--dry-run' => true])
+            ->expectsOutputToContain('marchés non demandés : totals_h1,halftime_fulltime,alternate_totals_corners,alternate_totals_cards')
+            ->expectsOutputToContain('2 match(s), au plus 1 crédit(s) par match, coût estimé : 2 crédit(s)')
+            ->assertSuccessful();
+        $this->artisan('sports-data:extra-markets')->assertSuccessful();
+        $this->assertSame(['btts', 'btts'], $provider->requested);
+
+        // Seulement des marchés statistiques : aucun appel.
+        $this->artisan('sports-data:extra-markets', ['--markets' => 'totals_h1,alternate_totals_cards'])
+            ->expectsOutputToContain('Aucun marché à charger.')
+            ->assertSuccessful();
+        $this->assertCount(2, $provider->requested);
+
+        // Avec un fournisseur de statistiques, ils sont demandés.
+        config(['sports_data.statistics.provider' => 'fake']);
+        $this->artisan('sports-data:extra-markets', ['--dry-run' => true])
+            ->expectsOutputToContain('au plus 5 crédit(s) par match')
+            ->assertSuccessful();
     }
 
     public function test_correct_score_is_loaded_match_by_match_and_shown_in_the_catalogue(): void

@@ -8,6 +8,7 @@ use App\Modules\SportsData\Exceptions\SportsDataException;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\ProviderApiCall;
 use App\Modules\SportsData\Services\CatalogueSyncService;
+use App\Modules\SportsData\Services\MarketKeys;
 use Illuminate\Console\Command;
 
 /**
@@ -35,9 +36,25 @@ class ExtraMarketsCommand extends Command
 
     public function handle(CatalogueSyncService $sync, SportsDataProvider $provider): int
     {
-        $markets = implode(',', array_filter(array_map('trim', explode(',', (string) ($this->option('markets') ?: config('sports_data.extra_markets'))))));
+        $requested = array_values(array_filter(array_map('trim', explode(',', (string) ($this->option('markets') ?: config('sports_data.extra_markets'))))));
+        // Sans fournisseur de statistiques, la synchro ignore 1re mi-temps, mi-temps / fin, corners et cartons
+        // (CatalogueSyncService) : ne pas les payer (audit K3).
+        $dropped = (string) config('sports_data.statistics.provider') === ''
+            ? array_values(array_filter($requested, fn (string $key) => MarketKeys::needsStatistics($key)))
+            : [];
+        $keys = array_values(array_diff($requested, $dropped));
+        if ($dropped !== []) {
+            $this->line('Sans fournisseur de statistiques (STATISTICS_PROVIDER), marchés non demandés : '.implode(',', $dropped).'.');
+        }
+        if ($keys === []) {
+            $this->warn('Aucun marché à charger.');
+
+            return self::SUCCESS;
+        }
+
+        $markets = implode(',', $keys);
         $regions = count(array_filter(explode(',', (string) config('sports_data.theodds.regions'))));
-        $perEvent = count(explode(',', $markets)) * max(1, $regions);
+        $perEvent = count($keys) * max(1, $regions);
         $hours = (int) ($this->option('hours') ?: config('sports_data.extra_markets_hours', 72));
         $competitions = $this->option('competition') ?: config('sports_data.extra_markets_competitions', []);
         $cap = (int) config('sports_data.extra_markets_daily_credits', 0);
