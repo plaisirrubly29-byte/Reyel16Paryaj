@@ -451,6 +451,65 @@ class SettlementService
         ];
     }
 
+    /**
+     * Annulation d'un ticket entier par l'administration, après double validation (TicketVoidService) : toutes ses
+     * sélections passent à la cote 1 (D-05), la mise est rendue. Ticket déjà réglé : écriture compensatoire du gain ou
+     * du remboursement versé (le solde peut devenir négatif), puis remboursement, dans une nouvelle révision.
+     * Les sélections annulées n'ont pas de result_id : une correction de score ne les touche plus.
+     *
+     * À appeler dans une transaction, ticket verrouillé.
+     *
+     * @param  bool  $apply  false : aperçu, rien n'est écrit
+     * @return array{ticket_id: string, reference: string, user_id: string, from: array{status: string, payout_minor: int}, to: array{status: string, payout_minor: int}, ledger_delta_minor: int}
+     */
+    public function voidTicket(BetTicket $ticket, bool $apply, ?User $actor = null, string $reason = ''): array
+    {
+        $from = $ticket->status;
+        $fromPayout = $from->isSettled() ? (int) $ticket->payout_minor : 0;
+        $stake = $ticket->stake();
+
+        if ($apply) {
+            BetSelection::where('bet_ticket_id', $ticket->id)->update([
+                'status' => BetSelectionStatus::Void,
+                'result_id' => null,
+                'settled_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $last = Settlement::where('bet_ticket_id', $ticket->id)->orderByDesc('revision')->first();
+            $revision = ($last->revision ?? 0) + 1;
+
+            if ($from->isSettled() && $last?->ledger_entry_id !== null) {
+                $this->ledger->reverse(LedgerEntry::findOrFail($last->ledger_entry_id), $this->reference($ticket, 'reversal', $revision), $reason, $actor);
+            }
+
+            $entry = $this->ledger->refund($ticket->wallet, $stake, $this->reference($ticket, 'refund', $revision), (string) $ticket->id);
+
+            Settlement::create([
+                'bet_ticket_id' => $ticket->id,
+                'revision' => $revision,
+                'status' => BetTicketStatus::Void,
+                'payout_minor' => $stake->minor,
+                'currency' => $ticket->currency,
+                'ledger_entry_id' => $entry->id,
+                'results' => $ticket->selections()->get()->mapWithKeys(fn (BetSelection $s) => [(string) $s->event_id => null])->all(),
+            ]);
+
+            $ticket->update(['status' => BetTicketStatus::Void, 'payout_minor' => $stake->minor, 'settled_at' => now()]);
+
+            Log::warning('settlement.ticket_voided', ['ticket' => $ticket->reference, 'from' => $from->value, 'payout_minor' => $stake->minor]);
+        }
+
+        return [
+            'ticket_id' => (string) $ticket->id,
+            'reference' => $ticket->reference,
+            'user_id' => (string) $ticket->user_id,
+            'from' => ['status' => $from->value, 'payout_minor' => $fromPayout],
+            'to' => ['status' => BetTicketStatus::Void->value, 'payout_minor' => $stake->minor],
+            'ledger_delta_minor' => $stake->minor - $fromPayout,
+        ];
+    }
+
     /** Issue des sélections du catalogue d'un match déjà réglé, recalculée avec la version corrigée. */
     private function resettleCatalogue(Event $event, Result $result): void
     {

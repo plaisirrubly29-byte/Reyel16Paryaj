@@ -52,7 +52,10 @@ class ResultCorrectionService
         return DB::transaction(function () use ($requester, $event, $status, $homeScore, $awayScore, $reason, $regulationTime) {
             [$current, $home, $away] = $this->proposal($event, $status, $homeScore, $awayScore);
 
-            if ($current === null && now()->lt($availableAt = $this->manualResultAvailableAt($event))) {
+            // Le délai laisse au fournisseur le temps de publier le score. Une annulation (match abandonné) est connue de
+            // l'administration : elle peut être demandée dès le début du match (gestion d'un match, audit du 2026-11-22).
+            $tooEarly = $status === ResultStatus::Final || $event->starts_at->isFuture();
+            if ($current === null && $tooEarly && now()->lt($availableAt = $this->manualResultAvailableAt($event))) {
                 throw new ApiException('result_too_early', __('Trop tôt pour saisir le résultat de ce match à la main.'), 409, ['available_at' => $availableAt->toIso8601String()]);
             }
 

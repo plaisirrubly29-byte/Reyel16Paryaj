@@ -30,6 +30,7 @@ class ResultRecorder
     private const SCORE_PATTERN = '/^\d{1,3}$/';
 
     /**
+     * @param  bool  $cancelBeforeStart  annulation d'un match pas encore commencé par un administrateur (EventManagementService)
      * @return Result|null la nouvelle version, ou null si l'issue était déjà enregistrée
      *
      * @throws InvalidArgumentException résultat invalide (score, match pas encore commencé)
@@ -44,10 +45,11 @@ class ResultRecorder
         ?CarbonImmutable $providerUpdatedAt = null,
         ?string $reason = null,
         ?User $enteredBy = null,
+        bool $cancelBeforeStart = false,
     ): ?Result {
         [$homeScore, $awayScore] = $this->validate($status, $homeScore, $awayScore);
 
-        if ($event->starts_at->isFuture()) {
+        if ($event->starts_at->isFuture() && ! ($cancelBeforeStart && $status === ResultStatus::Cancelled)) {
             throw new InvalidArgumentException('Résultat reçu pour un match qui n\'a pas commencé.');
         }
 

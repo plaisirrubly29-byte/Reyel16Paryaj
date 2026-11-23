@@ -128,7 +128,7 @@ class LiveAcceptanceService
             if ($selection->live_score === null) {
                 continue; // sélection d'un match pas encore commencé
             }
-            if ($event->status !== EventStatus::Live) {
+            if ($event->status !== EventStatus::Live || $event->hidden_at !== null) {
                 return self::MARKET_SUSPENDED;
             }
             if ("{$event->home_score}-{$event->away_score}" !== $selection->live_score
