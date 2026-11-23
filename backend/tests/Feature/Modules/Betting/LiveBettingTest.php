@@ -255,6 +255,43 @@ class LiveBettingTest extends TestCase
         $this->assertSame(LiveOddsService::CLOSING, app(LiveOddsService::class)->quote($this->market())->reason);
     }
 
+    public function test_a_football_match_that_is_most_likely_over_leaves_the_live_tab_before_its_result(): void
+    {
+        // Rubly, 2026-11-23 : plus de 15 matchs « Fermé » dans l'onglet Live, dont des matchs déjà finis.
+        $listed = fn () => collect($this->getJson('/api/v1/events')->assertOk()->json('data'))->contains('home_team', 'Arsenal');
+
+        $this->travel(85)->minutes(); // 115 min après l'heure prévue : temps additionnel, score toujours reçu
+        $this->score('1', '0');
+        $this->assertTrue($listed());
+
+        $this->travel(4)->minutes(); // score en retard, mais pas encore 5 min : toujours affiché
+        $this->assertTrue($listed());
+
+        $this->travel(2)->minutes(); // plus de score depuis 6 min après la fin normale : match fini
+        $this->assertFalse($listed());
+
+        // Le score revient (le match n'était pas fini) : de nouveau affiché.
+        $this->score('1', '0');
+        $this->assertTrue($listed());
+
+        // Fermeture de sécurité passée : retiré, même si le fournisseur envoie encore le score.
+        $this->travel(30)->minutes();
+        $this->score('1', '0');
+        $this->assertFalse($listed());
+
+        // Direct coupé : le score n'est plus relu toutes les 30 s, on ne devine rien, la fenêtre du direct décide.
+        config(['betting.allow_live' => false]);
+        $this->assertTrue($listed());
+    }
+
+    public function test_a_football_match_stopped_before_its_normal_end_stays_in_the_live_tab(): void
+    {
+        $listed = fn () => collect($this->getJson('/api/v1/events')->assertOk()->json('data'))->contains('home_team', 'Arsenal');
+
+        $this->travel(20)->minutes(); // ~35e minute, plus de score depuis 20 min (match interrompu)
+        $this->assertTrue($listed());
+    }
+
     public function test_the_live_markets_stay_open_in_added_time_with_odds_that_follow_the_match(): void
     {
         // Rubly, 2026-11-23 : « parier à tout moment, même dans les minutes additionnelles ». Avant, tout fermait à la
