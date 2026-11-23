@@ -233,4 +233,27 @@ describe('paris en direct', () => {
     expect(within(slip).getByRole('button', { name: 'Placer mon pari' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^3-1 3 - 1/ })).not.toBeInTheDocument();
   });
+
+  /** Rubly, 2026-11-23 : « Pas de pari en direct sur ce marché » sur le nombre exact de buts. */
+  it('cote en direct le nombre exact de buts, sans les issues déjà dépassées', async () => {
+    const goals = (key: string, id: string, label: string, odds: string) => ({ id, key, label, name: `${label} buts`, odds });
+    const event = {
+      ...LIVE_EVENT, score: { home: '2', away: '0' }, minute: 60,
+      markets: [...LIVE_EVENT.markets, {
+        id: 'm3', key: 'r16_exact_goals', name: 'Nombre exact de buts', odds_version: 2, odds_updated_at: minutesAgo(1),
+        bettable: true, suspended_reason: null,
+        selections: [goals('goals_0', '31', '0', '6.81'), goals('goals_2', '32', '2', '3.24'), goals('goals_3', '33', '3', '4.86')],
+      }],
+    };
+    const live = liveOdds('1.40', null, { home: '2', away: '0' });
+    live.data[0].markets.push({
+      id: 'm3', key: 'r16_exact_goals', line: null, odds_version: 3, bettable: true, suspended_reason: null,
+      selections: [goals('goals_2', '32', '2', '2.10'), goals('goals_3', '33', '3', '3.40')],
+    });
+    api(() => live, { 'GET /events/1/markets': { status: 200, body: { data: event } } });
+    renderApp('/events/1');
+
+    expect(await screen.findByRole('button', { name: '2 2 buts à 2.10' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /^0 0 buts/ })).not.toBeInTheDocument();
+  });
 });
