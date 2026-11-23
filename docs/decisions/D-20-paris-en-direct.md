@@ -224,3 +224,17 @@ fonction de la tendance du match. Sur le site, les paris se ferment à un certai
 **Risque accepté** : en fin de match, un pari pris juste après un but que The Odds API n'a pas encore signalé n'est
 refusé que si le score arrive avant la fin du délai d'acceptation (8 s). Le fournisseur peut aussi annoncer la fin du
 match avec quelques minutes de retard ; les cotes sont alors déjà très proches de 1,01 pour l'issue acquise.
+
+### 10.5 Marchés maison R16 en direct (2026-11-23, retour de Rubly)
+
+Rubly : sur un match en cours, « Pas de pari en direct sur ce marché » sur le nombre exact de buts, la tranche de buts,
+la victoire sans encaisser…
+
+Les 5 marchés maison (nombre exact de buts, tranche de buts, victoire sans encaisser, écart de buts, résultat et
+plus/moins 2,5) sont cotés en direct par le même modèle que le score exact : probabilité de chaque score final encore
+possible à partir du score du moment et du temps restant, additionnée sur les scores où la sélection gagne
+(`HouseMarkets::won`, la règle même du règlement). Marge des marchés maison (`SPORTS_DATA_HOUSE_MARKETS_MARGIN`) plus
+`live_extra` ; cote au plus `SPORTS_DATA_HOUSE_MARKETS_MAX_ODDS` ; une issue impossible ou sous 0,5 % n'est ni affichée
+ni pariable (à 2-0 : plus de « 0 but »). Mêmes suspensions, même délai d'acceptation, même mise maximale des marchés
+maison (1 000 HTG). Les marchés des bookmakers autres que le 1X2 et le plus/moins (double chance, les deux marquent…)
+restent sans pari en direct : The Odds API les donne rarement pour ces championnats.
