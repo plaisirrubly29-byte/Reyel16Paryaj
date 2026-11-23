@@ -35,6 +35,21 @@ describe("pages d'information", () => {
     expect(screen.getByText('48 heures')).toBeInTheDocument();
   });
 
+  it('le règlement décrit les paris en direct et les marchés Spécial R16 ouverts (D-20 §10)', async () => {
+    renderApp('/reglement');
+
+    expect(await screen.findByRole('heading', { name: '6. Paris en direct' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '5. Marchés Spécial R16' })).toBeInTheDocument();
+    expect(screen.queryByText(/pas de paris en direct|paris en direct.*ne sont pas proposés/i)).toBeNull();
+    expect(screen.queryByText(/match commencé n'est plus pariable/i)).toBeNull();
+    expect(screen.getByText('10 000,00 HTG')).toBeInTheDocument();
+    expect(screen.getAllByText('1 000,00 HTG').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('8 secondes')).toBeInTheDocument();
+    expect(screen.getByText('10 secondes')).toBeInTheDocument();
+    expect(screen.getByText('150 minutes')).toBeInTheDocument();
+    expect(screen.getByText('Paris simples seulement')).toBeInTheDocument();
+  });
+
   it('le pied de page mène aux quatre textes', async () => {
     renderApp('/');
 

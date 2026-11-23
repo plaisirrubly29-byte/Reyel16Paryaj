@@ -37,6 +37,11 @@ SPORTS_DATA_SPORTS=soccer_uefa_champs_league,soccer_uefa_europa_league,soccer_ue
 Paris en direct : **hors V1** (`BETTING_ALLOW_LIVE=false`). Un match commencé reste affiché avec son score,
 mais n'est plus pariable.
 
+> **Remplacé depuis la V2 par [D-20](D-20-paris-en-direct.md) §10** : paris en direct ouverts au football (1X2,
+> plus/moins, score exact final et marchés maison R16), paris simples seulement, délai d'acceptation de 8 s. Les
+> marchés maison R16 (`r16_*`, V2-D10) s'ajoutent aussi au tableau ci-dessus. Le texte de la V1 est gardé pour
+> l'historique.
+
 ## 3. D-04 — Types de paris
 
 | Règle | Valeur V1 | Config |
@@ -46,6 +51,7 @@ mais n'est plus pariable.
 | Sélections par combiné | 20 au plus | `BETTING_MAX_SELECTIONS=20` |
 | Plusieurs sélections du même match | ❌ Interdit (issues liées) | contrôle serveur |
 | Système, pari à handicap, cash-out | ❌ Hors V1 | — |
+| Pari en direct | ❌ Hors V1 ; ✅ depuis la V2, **simple seulement** ([D-20](D-20-paris-en-direct.md) §10) | `BETTING_LIVE_ALLOW_MULTIPLE=false` |
 
 Exemple : combiné de 3 sélections (Arsenal 2,10 · Real Madrid 1,85 · Inter 1,50), mise 100 HTG
 → cote totale 5,828 → gain potentiel **582,75 HTG**.

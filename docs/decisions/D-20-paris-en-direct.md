@@ -3,14 +3,16 @@
 | | |
 |---|---|
 | **Tâche** | V2-D06 (#173 backend, #174 écrans) ; prépare V2-D07 (cash-out, #175 et #176) |
-| **Statut** | 🟡 À valider — proposition |
+| **Statut** | ✅ Validé et en service — option « Modèle + The Odds » choisie par Rubly PLAISIR le 2026-11-22 (§10) ; paris en direct du football ouverts en Production |
 | **Décideur** | Rubly PLAISIR (chef de projet) |
-| **Préparé le** | 2026-11-18 par Benginio |
-| **Dépend de** | D-02 et V2-A01 (#137 : plan payant de The Odds API), D-03 et D-04 (« pas de paris en direct » en V1), D-05 (changement de cote), D-06 (plafonds), D-18 (marge en direct + 2 points), V2-D05 (plafonds de risque) |
+| **Préparé le** | 2026-11-18 par Benginio ; mise en œuvre et retours de Rubly du 2026-11-22 au 2026-11-23 (§10 à §10.5) |
+| **Dépend de** | D-02 et V2-A01 (#137 : plan payant de The Odds API), D-03 et D-04 (remplace leur « pas de paris en direct »), D-05 (changement de cote), D-06 (plafonds), D-18 (marge en direct + 2 points), V2-D05 (plafonds de risque) |
 | **Lève** | Point élevé **E1** de la revue de sécurité P8-02 |
+| **Dit au joueur** | Page Règlement (`/reglement`, `BettingRulesPage.tsx`), sections 5 « Marchés Spécial R16 » et 6 « Paris en direct » |
 
-> Aucun code de V2-D06 n'est écrit tant que D-20 n'est pas validée. Même une fois le code livré, `betting.allow_live`
-> reste **désactivé** jusqu'aux conditions d'activation du §7.
+> **Ce qui est en vigueur, c'est le §10 et ses sous-sections.** Les §1 à §9 sont la proposition du 2026-11-18, gardée
+> pour l'historique ; là où ils diffèrent du §10 (périmètre du §4.1, combinés, fermeture à la 85e minute, suspension
+> de 30 s…), le §10 l'emporte. `betting.allow_live` reste un coupe-circuit : le couper ferme tout le direct.
 
 ## 1. Besoin
 
