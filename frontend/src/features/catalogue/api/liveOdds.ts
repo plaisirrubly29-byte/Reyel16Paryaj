@@ -83,13 +83,18 @@ export function useLiveOdds(eventIds: string[]) {
 /**
  * Marché dont la liste des issues change avec le score : le score exact final en direct ne propose que les scores
  * encore possibles. La liste du serveur remplace donc celle du catalogue (un but à 2-1 retire « 2-1 » et ajoute « 5-1 »).
+ * Même chose pour les marchés maison R16 (« r16_… ») : à 2-0, plus de « 0 but » ni de « 1 but ».
  */
 export const LIVE_CORRECT_SCORE = 'correct_score';
+
+function liveSelectionList(key: string): boolean {
+  return key === LIVE_CORRECT_SCORE || key.startsWith('r16_');
+}
 
 function mergeMarket(market: CatalogueMarket, live: LiveMarket | undefined): CatalogueMarket {
   if (!live) return market;
   const odds = new Map(live.selections.map((s) => [s.id, s.odds]));
-  const selections = market.key === LIVE_CORRECT_SCORE
+  const selections = liveSelectionList(market.key)
     ? live.selections.map(({ id, key, label, name, odds: value }) => ({ id, key, label, name, odds: value }))
     : market.selections.map((s) => (odds.has(s.id) ? { ...s, odds: odds.get(s.id)! } : s));
   return {

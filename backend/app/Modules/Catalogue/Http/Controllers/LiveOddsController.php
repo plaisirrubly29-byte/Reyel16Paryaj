@@ -31,7 +31,7 @@ class LiveOddsController extends Controller
             ->whereKey($ids)
             ->with([
                 'competition.sport',
-                'markets' => fn ($q) => $q->displayable()->whereIn('key', LiveOddsService::MARKETS)->orderBy('id')
+                'markets' => fn ($q) => $q->displayable()->whereIn('key', LiveOddsService::marketKeys())->orderBy('id')
                     ->with(['selections' => fn ($s) => $s->orderBy('id')]),
             ])
             ->get();

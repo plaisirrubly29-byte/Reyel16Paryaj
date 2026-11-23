@@ -16,6 +16,7 @@ use App\Modules\SportsData\Models\Selection;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\SportsData\Services\CreditBudget;
+use App\Modules\SportsData\Services\HouseMarkets;
 use App\Modules\SportsData\Services\LiveOddsService;
 use App\Modules\SportsData\Services\LiveUpdateService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
@@ -52,6 +53,7 @@ class LiveBettingTest extends TestCase
             'sports_data.live_window_minutes' => 180,
             'sports_data.live_daily_credits' => 1000,
             'sports_data.theodds.markets' => 'h2h,totals',
+            'sports_data.house_markets.min_bookmakers' => 1, // marchés maison R16 (un seul bookmaker fictif)
         ]);
         $this->fake = new FakeSportsDataProvider;
         $this->app->instance(SportsDataProvider::class, $this->fake);
@@ -318,6 +320,39 @@ class LiveBettingTest extends TestCase
         $this->travel(20)->minutes();
         $this->score('0', '1');
         $this->assertSame(LiveOddsService::CLOSING, app(LiveOddsService::class)->quote($this->market())->reason);
+    }
+
+    public function test_the_r16_house_markets_are_priced_live_from_the_score(): void
+    {
+        // Rubly, 2026-11-23 : « Pas de pari en direct sur ce marché » sur le nombre exact de buts, la tranche de buts…
+        foreach (HouseMarkets::KEYS as $key) {
+            $this->assertTrue(app(LiveOddsService::class)->quote($this->market($key))->open, $key);
+        }
+        $this->assertNotNull($this->liveOdds(HouseMarkets::EXACT_GOALS, 'goals_0'));
+
+        // But : les issues déjà dépassées disparaissent, les autres suivent le nouveau score.
+        $before = (float) $this->liveOdds(HouseMarkets::GOAL_RANGE, 'range_4plus');
+        $this->score('1', '0');
+        $this->assertSame(LiveOddsService::SCORE_CHANGED, app(LiveOddsService::class)->quote($this->market(HouseMarkets::EXACT_GOALS))->reason);
+        $this->travel(11)->seconds();
+        $this->score('2', '0');
+        $this->travel(11)->seconds();
+
+        $this->assertNull($this->liveOdds(HouseMarkets::EXACT_GOALS, 'goals_0'));
+        $this->assertNull($this->liveOdds(HouseMarkets::EXACT_GOALS, 'goals_1'));
+        $this->assertNotNull($this->liveOdds(HouseMarkets::EXACT_GOALS, 'goals_2'));
+        $this->assertNull($this->liveOdds(HouseMarkets::WIN_TO_NIL, 'away_clean'));
+        $this->assertLessThan($before, (float) $this->liveOdds(HouseMarkets::GOAL_RANGE, 'range_4plus'), '4 buts ou plus : plus probable à 2-0');
+
+        // Même chose dans GET /live/odds (relu toutes les 3 s par l'écran) : seules les issues encore possibles.
+        $markets = collect($this->getJson('/api/v1/live/odds?event_ids='.$this->event()->id)->assertOk()->json('data.0.markets'));
+        $exact = $markets->firstWhere('key', HouseMarkets::EXACT_GOALS);
+        $this->assertTrue($exact['bettable']);
+        $this->assertNotContains('goals_0', array_column($exact['selections'], 'key'));
+
+        // Pari accepté sur la cote du moment ; une issue impossible est refusée.
+        $this->bet($this->selection(HouseMarkets::GOAL_RANGE, 'range_2_3'))->assertAccepted();
+        $this->bet($this->selection(HouseMarkets::EXACT_GOALS, 'goals_1'), '5.000')->assertUnprocessable();
     }
 
     public function test_a_totals_line_already_passed_is_suspended(): void

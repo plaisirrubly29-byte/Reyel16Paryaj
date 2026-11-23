@@ -17,7 +17,7 @@ use Illuminate\Support\Collection;
  *
  * Un marché d'un match en cours n'est ouvert que si TOUT est vrai (sinon « suspendu », avec le motif) :
  *  - paris en direct autorisés (betting.allow_live, le coupe-circuit) ;
- *  - football, 1X2, plus/moins ou score exact final, marché ouvert (pas suspendu par un administrateur) ;
+ *  - football, 1X2, plus/moins, score exact final ou marché maison R16, marché ouvert (pas suspendu par un administrateur) ;
  *  - match pas fini : pas de minute limite, les paris restent ouverts temps additionnel compris jusqu'au résultat
  *    final ; fermé seulement close_after_minutes après l'heure de début prévue (filet de sécurité) ;
  *  - score reçu il y a moins de max_score_age_seconds (sans score depuis score_unavailable_close_seconds : fermé), et
@@ -91,6 +91,16 @@ class LiveOddsService
             max(0.0, (float) config('sports_data.live_model.min_remaining_minutes', 2)));
     }
 
+    /**
+     * Marchés cotés en direct : 1X2, plus/moins, score exact, et les marchés maison R16 quand ils sont activés.
+     *
+     * @return list<string>
+     */
+    public static function marketKeys(): array
+    {
+        return HouseMarkets::enabled() ? [...self::MARKETS, ...HouseMarkets::KEYS] : self::MARKETS;
+    }
+
     /** Match en cours : ses cotes viennent du modèle, pas de la base. */
     public function applies(Market $market): bool
     {
@@ -106,7 +116,8 @@ class LiveOddsService
             return LiveQuote::closed(self::LIVE_CLOSED);
         }
         $sportKey = (string) $event->competition?->external_key;
-        if (! str_starts_with($sportKey, 'soccer') || ! in_array($market->key, self::MARKETS, true)) {
+        $house = HouseMarkets::isHouse($market->key) && HouseMarkets::enabled();
+        if (! str_starts_with($sportKey, 'soccer') || (! $house && ! in_array($market->key, self::MARKETS, true))) {
             return LiveQuote::closed(self::NOT_AVAILABLE);
         }
         if ($market->status !== MarketStatus::Open) {
@@ -122,6 +133,9 @@ class LiveOddsService
         $away = (int) $event->away_score;
         if ($market->key === self::CORRECT_SCORE) {
             return $this->correctScoreQuote($market, $event, $sportKey, $home, $away, $now);
+        }
+        if ($house) {
+            return $this->houseQuote($market, $event, $home, $away, $now);
         }
 
         $line = $market->line === null ? null : (float) $market->line;
@@ -176,6 +190,10 @@ class LiveOddsService
      */
     public function visibleSelections(Market $market, LiveQuote $quote, Collection $selections): Collection
     {
+        if (HouseMarkets::isHouse($market->key)) {
+            // Marché maison ouvert : seulement les issues encore possibles et cotées (à 2-0 : plus de « 0 but »).
+            return $quote->open ? $selections->filter(fn (Selection $s) => isset($quote->odds[$s->key]))->values() : $selections;
+        }
         if ($market->key !== self::CORRECT_SCORE) {
             return $selections;
         }
@@ -195,6 +213,57 @@ class LiveOddsService
     public static function goals(string $key): ?array
     {
         return preg_match('/^(\d{1,2})-(\d{1,2})$/', $key, $m) === 1 ? [(int) $m[1], (int) $m[2]] : null;
+    }
+
+    /**
+     * Marchés maison R16 en direct (nombre exact de buts, tranche de buts, victoire sans encaisser, écart de buts,
+     * résultat et plus/moins) : probabilité de chaque score final encore possible (même modèle que le score exact, à
+     * partir du score du moment et du temps restant), additionnée sur les scores où la sélection gagne d'après
+     * HouseMarkets::won(), la règle même du règlement. Marge et cote maximale des marchés maison, plus live_extra.
+     * Une issue impossible ou trop improbable (< 0,5 %) n'a pas de cote ; une issue presque acquise suspend le marché.
+     */
+    private function houseQuote(Market $market, Event $event, int $home, int $away, CarbonInterface $now): LiveQuote
+    {
+        $scores = LiveOddsModel::correctScores(
+            (float) $event->live_home_rate,
+            (float) $event->live_away_rate,
+            (float) ($event->live_draw_boost ?? 1.0),
+            $home,
+            $away,
+            self::remainingMinutes($event, $now),
+            10,
+        );
+        $selections = $market->relationLoaded('selections') ? $market->selections : $market->selections()->get();
+
+        $p = [];
+        foreach ($selections as $selection) {
+            $sum = 0.0;
+            foreach ($scores as $score => $probability) {
+                [$h, $a] = self::goals($score) ?? [0, 0];
+                if (HouseMarkets::won($market->key, $selection->key, $h, $a) === true) {
+                    $sum += $probability;
+                }
+            }
+            $p[$selection->key] = $sum;
+        }
+        if ($p === [] || max($p) > (float) config('sports_data.live_model.max_probability', 0.98)) {
+            return LiveQuote::closed(self::DECIDED);
+        }
+
+        $margin = (float) config('sports_data.house_markets.margin', 0.12) + (float) config('sports_data.margin.live_extra', 0.0);
+        $maxOdds = (float) config('sports_data.house_markets.max_odds', 100);
+        $odds = [];
+        foreach ($p as $key => $probability) {
+            if ($probability < 0.005) {
+                continue; // issue impossible (score déjà dépassé) ou trop improbable
+            }
+            $value = LiveOddsModel::odds($probability, $margin);
+            if ((float) $value <= $maxOdds) {
+                $odds[$key] = $value;
+            }
+        }
+
+        return $odds === [] ? LiveQuote::closed(self::NOT_AVAILABLE) : new LiveQuote(true, null, $odds);
     }
 
     /**
