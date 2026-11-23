@@ -94,6 +94,8 @@ class LiveOddsModelTest extends TestCase
         $this->assertSame(46, LiveOddsModel::minute($kickoff, $kickoff->addMinutes(62)->addSeconds(30)));
         $this->assertSame(90, LiveOddsModel::minute($kickoff, $kickoff->addMinutes(110)));
         $this->assertSame(0.0, LiveOddsModel::remainingMinutes($kickoff, $kickoff->addMinutes(130)));
+        $this->assertSame(2.0, LiveOddsModel::remainingMinutes($kickoff, $kickoff->addMinutes(130), 2.0), 'Temps additionnel');
+        $this->assertSame(49.0, LiveOddsModel::remainingMinutes($kickoff, $kickoff->addMinutes(55), 2.0));
     }
 
     public function test_odds_include_the_margin_and_are_rounded_down(): void

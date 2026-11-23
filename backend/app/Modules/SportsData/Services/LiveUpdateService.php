@@ -30,8 +30,9 @@ class LiveUpdateService
     ) {}
 
     /**
-     * Compétitions de football dont un match peut encore être parié en direct : commencé depuis moins que la fin des paris
-     * (live_model.cutoff_minute + mi-temps + 5 min de marge). Seules celles-là ont besoin du score toutes les 30 s ;
+     * Compétitions de football dont un match peut encore être parié en direct : commencé depuis moins que la fermeture de
+     * sécurité (live_model.close_after_minutes), temps additionnel compris. Seules celles-là ont besoin du score toutes
+     * les 30 s ;
      * les autres sports (pas de paris en direct) et les matchs en fin de partie restent sur run() (toutes les 15 min).
      * Sans ce tri, le plafond de crédits du jour partait en quelques dizaines de minutes et tous les marchés en direct
      * restaient suspendus (« score en cours de vérification », motif score_stale).
@@ -40,7 +41,7 @@ class LiveUpdateService
      */
     public function liveBettingCompetitions(): array
     {
-        $window = (int) config('sports_data.live_model.cutoff_minute') + LiveOddsModel::BREAK_MINUTES + 5;
+        $window = LiveOddsService::closeAfterMinutes();
         $since = now()->subMinutes(min($window, (int) config('sports_data.live_window_minutes')));
 
         return Event::query()

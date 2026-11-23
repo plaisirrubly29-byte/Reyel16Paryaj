@@ -18,7 +18,8 @@ use Illuminate\Support\Collection;
  * Un marché d'un match en cours n'est ouvert que si TOUT est vrai (sinon « suspendu », avec le motif) :
  *  - paris en direct autorisés (betting.allow_live, le coupe-circuit) ;
  *  - football, 1X2, plus/moins ou score exact final, marché ouvert (pas suspendu par un administrateur) ;
- *  - avant la minute cutoff_minute (sinon fermé : fin de match) ;
+ *  - match pas fini : pas de minute limite, les paris restent ouverts temps additionnel compris jusqu'au résultat
+ *    final ; fermé seulement close_after_minutes après l'heure de début prévue (filet de sécurité) ;
  *  - score reçu il y a moins de max_score_age_seconds (sans score depuis score_unavailable_close_seconds : fermé), et
  *    pas de changement de score depuis moins de action_suspension_seconds (10 s, levée d'elle-même ensuite) ;
  *  - issue pas déjà acquise ni trop probable (max_probability) ;
@@ -74,6 +75,22 @@ class LiveOddsService
         );
     }
 
+    /** Fermeture de sécurité du direct, en minutes après l'heure de début prévue (jamais avant la fin normale du match). */
+    public static function closeAfterMinutes(): int
+    {
+        return max(
+            LiveOddsModel::PLAYING_MINUTES + LiveOddsModel::BREAK_MINUTES,
+            (int) config('sports_data.live_model.close_after_minutes', 150),
+        );
+    }
+
+    /** Temps de jeu restant compté par le modèle, au moins live_model.min_remaining_minutes tant que le match dure. */
+    public static function remainingMinutes(Event $event, CarbonInterface $now): float
+    {
+        return LiveOddsModel::remainingMinutes($event->starts_at, $now,
+            max(0.0, (float) config('sports_data.live_model.min_remaining_minutes', 2)));
+    }
+
     /** Match en cours : ses cotes viennent du modèle, pas de la base. */
     public function applies(Market $market): bool
     {
@@ -118,7 +135,7 @@ class LiveOddsService
             (float) ($event->live_draw_boost ?? 1.0),
             $home,
             $away,
-            LiveOddsModel::remainingMinutes($event->starts_at, $now),
+            self::remainingMinutes($event, $now),
             $market->key === 'totals' ? $line : null,
         );
 
@@ -195,7 +212,7 @@ class LiveOddsService
             (float) ($event->live_draw_boost ?? 1.0),
             $home,
             $away,
-            LiveOddsModel::remainingMinutes($event->starts_at, $now),
+            self::remainingMinutes($event, $now),
             (int) ($config['correct_score_extra_goals'] ?? 3),
         );
         if ($p === [] || max($p) > (float) ($config['max_probability'] ?? 0.95)) {
@@ -227,10 +244,9 @@ class LiveOddsService
     {
         $config = config('sports_data.live_model');
 
-        // Fin de match d'abord : passé la minute limite, le direct est fermé, que le score soit encore relu ou non (un
-        // match fini ou arrêté n'est plus relu toutes les 30 s et restait « suspendu : score en cours de vérification »).
-        $minute = LiveOddsModel::minute($event->starts_at, $now);
-        if ($minute !== null && $minute >= (int) $config['cutoff_minute']) {
+        // Pas de minute limite : temps additionnel compris, on parie jusqu'au résultat final (le match passe alors en
+        // « terminé »). Seul filet : bien après l'heure de fin possible, le direct est fermé, score relu ou non.
+        if (LiveOddsModel::elapsedMinutes($event->starts_at, $now) >= self::closeAfterMinutes()) {
             return self::CLOSING;
         }
 

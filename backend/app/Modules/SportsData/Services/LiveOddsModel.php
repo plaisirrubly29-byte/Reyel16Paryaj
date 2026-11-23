@@ -37,16 +37,27 @@ final class LiveOddsModel
 
     private const MAX_DRAW_BOOST = 1.6;
 
-    /** Minutes de jeu effectif restantes (0 à 96) d'après l'heure de début prévue. */
-    public static function remainingMinutes(CarbonInterface $startsAt, CarbonInterface $now): float
+    /**
+     * Minutes de jeu effectif restantes (0 à 96) d'après l'heure de début prévue, jamais moins que $minimum : passé la fin
+     * estimée, le match peut durer encore (temps additionnel, coup d'envoi retardé) et les cotes doivent encore bouger.
+     */
+    public static function remainingMinutes(CarbonInterface $startsAt, CarbonInterface $now, float $minimum = 0.0): float
     {
         $elapsed = max(0.0, ($now->getTimestamp() - $startsAt->getTimestamp()) / 60);
 
-        return match (true) {
+        $remaining = match (true) {
             $elapsed <= self::FIRST_HALF_MINUTES => self::FIRST_HALF_MINUTES - $elapsed + self::SECOND_HALF_MINUTES,
             $elapsed <= self::FIRST_HALF_MINUTES + self::BREAK_MINUTES => (float) self::SECOND_HALF_MINUTES,
             default => max(0.0, self::PLAYING_MINUTES + self::BREAK_MINUTES - $elapsed),
         };
+
+        return max($minimum, $remaining);
+    }
+
+    /** Minutes écoulées depuis l'heure de début prévue (pause comprise). */
+    public static function elapsedMinutes(CarbonInterface $startsAt, CarbonInterface $now): float
+    {
+        return max(0.0, ($now->getTimestamp() - $startsAt->getTimestamp()) / 60);
     }
 
     /** Minute de jeu estimée affichée (1 à 90), null pendant la pause. */
