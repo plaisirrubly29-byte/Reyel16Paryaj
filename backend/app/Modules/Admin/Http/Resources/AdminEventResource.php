@@ -44,6 +44,10 @@ class AdminEventResource extends JsonResource
             'origin' => ['provider' => $this->provider, 'external_id' => $this->external_id],
             'last_synced_at' => $this->last_synced_at?->toIso8601String(),
             'result_received_at' => $this->result_received_at?->toIso8601String(),
+            // Masqué par l'administration : retiré du site, plus pariable.
+            'hidden' => $this->hidden_at === null ? null : ['at' => $this->hidden_at->toIso8601String(), 'reason' => $this->hidden_reason],
+            // Heure ou statut fixés par l'administration : la synchronisation ne les remplace plus.
+            'admin_locked_at' => $this->admin_locked_at?->toIso8601String(),
             'markets_count' => collect(MarketStatus::cases())
                 ->mapWithKeys(fn (MarketStatus $s) => [$s->value => $this->markets->where('status', $s)->count()]),
             'markets' => $this->when(

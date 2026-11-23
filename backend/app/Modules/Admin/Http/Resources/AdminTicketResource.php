@@ -38,6 +38,8 @@ class AdminTicketResource extends JsonResource
                 'selections' => BetSelectionResource::collection($this->selections),
             ]),
             'ledger_entries' => AdminLedgerEntryResource::collection($this->whenLoaded('ledgerEntries')),
+            // Demandes d'annulation du ticket (double validation), de la plus ancienne à la plus récente.
+            'voids' => $this->whenLoaded('voids', fn () => TicketVoidResource::collection($this->voids->each->setRelation('ticket', $this->resource))),
         ];
     }
 }

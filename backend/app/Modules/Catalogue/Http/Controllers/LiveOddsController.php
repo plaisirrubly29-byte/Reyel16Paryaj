@@ -29,6 +29,7 @@ class LiveOddsController extends Controller
 
         $events = Event::query()
             ->whereKey($ids)
+            ->whereNull('hidden_at')
             ->with([
                 'competition.sport',
                 'markets' => fn ($q) => $q->displayable()->whereIn('key', LiveOddsService::marketKeys())->orderBy('id')

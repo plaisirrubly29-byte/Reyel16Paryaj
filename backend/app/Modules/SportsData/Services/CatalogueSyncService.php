@@ -222,12 +222,16 @@ class CatalogueSyncService
             return;
         }
 
+        // Heure ou statut fixés par un administrateur (report, nouvelle heure) : la synchro ne les remplace plus. Le
+        // match passe quand même « en direct » quand la synchro en direct le voit joué.
+        $locked = $event->admin_locked_at !== null;
+
         $event->fill([
             'competition_id' => $competition->id,
             'home_team_id' => Team::firstOrCreate(['sport_id' => $sportId, 'name' => trim($data->homeTeam)])->id,
             'away_team_id' => Team::firstOrCreate(['sport_id' => $sportId, 'name' => trim($data->awayTeam)])->id,
-            'starts_at' => $data->startsAt,
-            'status' => $live ? EventStatus::Live : EventStatus::Scheduled,
+            'starts_at' => $locked ? $event->starts_at : $data->startsAt,
+            'status' => $live ? EventStatus::Live : ($locked ? $event->status : EventStatus::Scheduled),
             'last_synced_at' => now(),
         ])->save();
 
