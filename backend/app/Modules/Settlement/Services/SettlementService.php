@@ -13,6 +13,7 @@ use App\Modules\Settlement\Models\Settlement;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Money;
@@ -77,9 +78,17 @@ class SettlementService
         $this->settleCatalogue($event, $result);
 
         $ticketIds = [];
-        $pending = BetSelection::where('event_id', $event->id)->where('status', BetSelectionStatus::Pending)->get();
+        $pending = BetSelection::where('event_id', $event->id)->where('status', BetSelectionStatus::Pending)->with('ticket')->get();
 
         foreach ($pending as $selection) {
+            // Pari d'avant-match placé après le vrai coup d'envoi (match avancé par le fournisseur) : annulé, cote 1 (D-05).
+            if ($this->placedAfterKickoff($selection, $event)) {
+                $report->selections += $this->voidSelection($selection, 'settlement.selection_after_kickoff');
+                $ticketIds[$selection->bet_ticket_id] = true;
+
+                continue;
+            }
+
             // Match joué plus de postponed_void_hours après l'heure du pari : annulé, quel que soit le score (D-05).
             if ($event->starts_at->gt($this->postponedDeadline($selection))) {
                 $report->selections += $this->voidPostponed($selection);
@@ -270,6 +279,25 @@ class SettlementService
      */
     private function voidPostponed(BetSelection $selection): int
     {
+        return $this->voidSelection($selection, 'settlement.selection_postponed');
+    }
+
+    /**
+     * Sélection d'avant-match (sans score figé en direct) d'un ticket placé à l'heure de début réelle du match ou
+     * après : le fournisseur a avancé le match après la prise du pari dans notre catalogue (audit B1).
+     * Sauf matchs du faux fournisseur (jamais en production) : sports-data:fake-match finish simule le temps qui passe
+     * en reculant le coup d'envoi, les tickets du parcours E2E seraient sinon tous annulés.
+     */
+    private function placedAfterKickoff(BetSelection $selection, Event $event): bool
+    {
+        return $event->provider !== FakeSportsDataProvider::NAME
+            && $selection->live_score === null
+            && $selection->ticket->placed_at->gte($event->starts_at);
+    }
+
+    /** Annule une sélection sans result_id (indépendante du score) ; $log : événement journalisé. */
+    private function voidSelection(BetSelection $selection, string $log): int
+    {
         $updated = BetSelection::whereKey($selection->id)->where('status', BetSelectionStatus::Pending)->update([
             'status' => BetSelectionStatus::Void,
             'result_id' => null,
@@ -278,7 +306,7 @@ class SettlementService
         ]);
 
         if ($updated > 0) {
-            Log::info('settlement.selection_postponed', ['bet_selection_id' => $selection->id, 'event_id' => $selection->event_id]);
+            Log::info($log, ['bet_selection_id' => $selection->id, 'event_id' => $selection->event_id]);
         }
 
         return $updated;

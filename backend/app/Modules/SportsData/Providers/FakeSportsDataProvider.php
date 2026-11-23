@@ -35,6 +35,9 @@ use LogicException;
  */
 class FakeSportsDataProvider implements SportsDataProvider
 {
+    /** Nom du fournisseur (events.provider). */
+    public const NAME = 'fake';
+
     /** Ligne par défaut du marché totals. */
     private const TOTALS_LINE = '2.5';
 
@@ -89,7 +92,7 @@ class FakeSportsDataProvider implements SportsDataProvider
 
     public function name(): string
     {
-        return 'fake';
+        return self::NAME;
     }
 
     public function failWith(?string $reason): static

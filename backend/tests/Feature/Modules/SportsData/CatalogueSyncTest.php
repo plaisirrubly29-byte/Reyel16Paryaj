@@ -166,6 +166,27 @@ class CatalogueSyncTest extends TestCase
         $this->assertSame(1, $this->h2h('fake-1')->odds_version);
     }
 
+    public function test_a_match_advanced_to_a_past_time_gets_its_new_start_time_only(): void
+    {
+        $this->sync();
+        $kickOff = CarbonImmutable::now()->subMinutes(30)->startOfSecond();
+        $this->fake->setStartsAt('fake-1', $kickOff)
+            ->setOdds('fake-1', 'h2h', ['Arsenal' => '1.50', 'Chelsea' => '5.00', 'Draw' => '4.00'])
+            ->setOddsUpdatedAt(CarbonImmutable::now());
+
+        $this->sync();
+
+        $event = Event::where('external_id', 'fake-1')->firstOrFail();
+        $this->assertTrue($event->starts_at->equalTo($kickOff));
+        $this->assertSame(EventStatus::Scheduled, $event->status);
+        $this->assertSame(1, $this->h2h('fake-1')->odds_version); // cotes d'avant-match non mises à jour
+
+        // Un match terminé n'est plus touché.
+        $event->update(['starts_at' => now()->addHour(), 'status' => EventStatus::Finished]);
+        $this->sync();
+        $this->assertTrue($event->fresh()->starts_at->isFuture());
+    }
+
     public function test_fresh_odds_lift_an_automatic_suspension_but_not_an_admin_one(): void
     {
         $this->sync();

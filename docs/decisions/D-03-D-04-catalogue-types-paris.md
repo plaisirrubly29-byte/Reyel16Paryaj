@@ -34,6 +34,17 @@ SPORTS_DATA_SPORTS=soccer_uefa_champs_league,soccer_uefa_europa_league,soccer_ue
 | Double chance | `double_chance` | Pris en charge par le code, ouvert seulement si le fournisseur le publie | 2 issues sur 3 |
 | Les deux équipes marquent | `btts` | Pris en charge par le code, ouvert seulement si le fournisseur le publie | Oui / Non |
 
+**Prolongations dans le score de The Odds API — vérification du 2026-11-22 (audit B3) : non tranchée.**
+- Documentation v4 (guide `/scores` et page des marchés) : rien ne dit si le score `completed` d'un match de football
+  inclut la prolongation ou les tirs au but. Seul le score exact est décrit « at Regulation Time » ; le 1X2 compte le nul
+  et la qualification est un marché à part (`to_qualify`), ce qui laisse penser au temps réglementaire sans le prouver.
+- Résultat réel déjà importé : pas encore regardé (accès au serveur non obtenu pendant cette vérification).
+- Code actuel : `ResultImportService` enregistre le score de The Odds tel quel ; la règle « 90 min » n'est imposée qu'à
+  la saisie manuelle. Rien n'est changé tant que la question n'est pas tranchée.
+- À faire : comparer, dans la table `results` du Staging ou de la Production, le score d'un match de coupe allé en
+  prolongation (FA Cup, Coupe de France, Coupe du Roi, phases finales UEFA) au score officiel à 90 min. Si la
+  prolongation est incluse, Rubly décide de la correction avant tout code.
+
 Paris en direct : **hors V1** (`BETTING_ALLOW_LIVE=false`). Un match commencé reste affiché avec son score,
 mais n'est plus pariable.
 
