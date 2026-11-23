@@ -1,7 +1,9 @@
-import { useId, type InputHTMLAttributes } from 'react';
+import { useId, type InputHTMLAttributes, type Ref } from 'react';
 import { Icon, type IconName } from './Icon';
 
 type Props = InputHTMLAttributes<HTMLInputElement> & {
+  /** Transmis au champ (React 19 : `ref` est une prop), ex. pour y remettre le curseur après une erreur. */
+  ref?: Ref<HTMLInputElement>;
   label: string;
   /** Message d'erreur (ex. ApiError.fieldErrors[name]). */
   error?: string;

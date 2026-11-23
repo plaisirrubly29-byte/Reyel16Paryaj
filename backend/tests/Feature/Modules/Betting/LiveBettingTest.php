@@ -245,23 +245,41 @@ class LiveBettingTest extends TestCase
         $this->assertSame(LiveOddsService::SCORE_UNAVAILABLE, $live->quote($this->market())->reason);
     }
 
-    public function test_a_match_past_the_cutoff_minute_is_closed_even_when_its_score_is_no_longer_read(): void
+    public function test_a_match_whose_score_is_no_longer_read_is_closed_then_closed_for_good_long_after_its_end(): void
     {
-        // Fin de match : le score n'est plus relu toutes les 30 s. Avant, le motif restait « score en cours de
-        // vérification » (suspendu) jusqu'au résultat final.
+        // Plus aucun score : fermé (pas « suspendu » pour toujours) ; bien après la fin possible : fin de match.
         $this->travel(80)->minutes();
+        $this->assertSame(LiveOddsService::SCORE_UNAVAILABLE, app(LiveOddsService::class)->quote($this->market())->reason);
+
+        $this->travel(40)->minutes(); // 150 min après l'heure de début prévue
         $this->assertSame(LiveOddsService::CLOSING, app(LiveOddsService::class)->quote($this->market())->reason);
     }
 
-    public function test_the_live_markets_close_after_the_cutoff_minute(): void
+    public function test_the_live_markets_stay_open_in_added_time_with_odds_that_follow_the_match(): void
     {
-        $this->assertTrue(app(LiveOddsService::class)->quote($this->market('totals'))->open);
-
-        $this->travel(65)->minutes(); // 95 min après le coup d'envoi : environ la 79e minute
+        // Rubly, 2026-11-23 : « parier à tout moment, même dans les minutes additionnelles ». Avant, tout fermait à la
+        // 85e minute estimée (d'après l'heure prévue : bien plus tôt quand le coup d'envoi est retardé) sans rouvrir.
+        $this->travel(72)->minutes(); // ~86e minute
         $this->score('0', '0');
         $this->assertTrue(app(LiveOddsService::class)->quote($this->market())->open);
-        $this->travel(7)->minutes(); // ~86e minute
+        $draw86 = (float) $this->liveOdds('h2h', 'draw');
+
+        $this->travel(28)->minutes(); // 130 min après l'heure prévue : temps additionnel, ou coup d'envoi retardé
         $this->score('0', '0');
+        $this->assertTrue(app(LiveOddsService::class)->quote($this->market())->open);
+        $this->assertLessThan($draw86, (float) $this->liveOdds('h2h', 'draw'), 'Le nul se rapproche : cote plus basse');
+        $this->bet($this->selection('h2h', 'away'))->assertAccepted();
+
+        // But dans le temps additionnel : suspendu 10 s, puis rouvert avec des cotes qui suivent le nouveau score.
+        $this->score('0', '1');
+        $this->assertSame(LiveOddsService::SCORE_CHANGED, app(LiveOddsService::class)->quote($this->market())->reason);
+        $this->travel(11)->seconds();
+        $this->assertTrue(app(LiveOddsService::class)->quote($this->market('correct_score'))->open);
+        $this->assertNotNull($this->liveOdds('correct_score', '1-1'));
+
+        // Filet de sécurité seulement : 150 min après l'heure prévue, fin de match.
+        $this->travel(20)->minutes();
+        $this->score('0', '1');
         $this->assertSame(LiveOddsService::CLOSING, app(LiveOddsService::class)->quote($this->market())->reason);
     }
 
@@ -540,12 +558,15 @@ class LiveBettingTest extends TestCase
 
     public function test_live_scores_are_only_read_while_the_match_can_still_be_bet_on(): void
     {
-        // Plafond de crédits gardé pour les matchs pariables : après la fin des paris (85e minute + mi-temps + marge),
-        // le score n'est plus relu toutes les 30 s ; la synchro en direct (toutes les 15 min) s'occupe de la fin du match.
+        // Plafond de crédits gardé pour les matchs pariables : temps additionnel compris, le score est relu toutes les
+        // 30 s ; après la fermeture de sécurité (150 min), la synchro en direct s'occupe de la fin du match.
         $live = app(LiveUpdateService::class);
         $this->assertSame(['soccer_epl'], $live->liveBettingCompetitions());
 
-        $this->travel(80)->minutes(); // 110 minutes après le coup d'envoi
+        $this->travel(90)->minutes(); // 120 minutes après l'heure prévue : temps additionnel, toujours relu
+        $this->assertSame(['soccer_epl'], $live->liveBettingCompetitions());
+
+        $this->travel(31)->minutes(); // 151 minutes
         $this->assertSame([], $live->liveBettingCompetitions());
         $this->assertSame([], $live->runScores()['updated']);
         $this->assertContains('soccer_epl', $live->liveCompetitions());

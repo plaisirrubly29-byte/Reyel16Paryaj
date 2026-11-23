@@ -115,7 +115,7 @@ describe('inscription', { timeout: 15_000 }, () => {
     expect(screen.queryByLabelText("Code d'invitation")).toBeNull();
     await userEvent.type(await screen.findByLabelText('Nom'), 'Ana Joueuse');
     await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
-    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '21051995');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
@@ -147,17 +147,19 @@ describe('inscription', { timeout: 15_000 }, () => {
           error: {
             code: 'validation_failed',
             message: 'Les données envoyées sont invalides.',
-            details: { birth_date: ['Vous devez avoir au moins 18 ans pour ouvrir un compte.'], phone: ['Ce numéro est déjà utilisé.'] },
+            // Le serveur reste l'autorité sur l'âge minimum (IDENTITY_MINIMUM_AGE peut dépasser 18).
+            details: { birth_date: ['Vous devez avoir au moins 21 ans pour ouvrir un compte.'], phone: ['Ce numéro est déjà utilisé.'] },
           },
         },
       },
     });
     renderApp('/register');
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: /J'accepte les conditions/ }));
+    await userEvent.type(await screen.findByLabelText('Date de naissance'), '21051995');
+    await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
 
-    expect(await screen.findByText('Vous devez avoir au moins 18 ans pour ouvrir un compte.')).toBeInTheDocument();
+    expect(await screen.findByText('Vous devez avoir au moins 21 ans pour ouvrir un compte.')).toBeInTheDocument();
     expect(screen.getByLabelText('Numéro de téléphone')).toHaveAccessibleDescription('Ce numéro est déjà utilisé.');
   });
 
@@ -170,7 +172,7 @@ describe('inscription', { timeout: 15_000 }, () => {
 
     await userEvent.type(await screen.findByLabelText('Nom'), 'Ana Joueuse');
     await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
-    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '21051995');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
@@ -181,6 +183,56 @@ describe('inscription', { timeout: 15_000 }, () => {
     expect(body.phone).toBe('34123456');
     expect(body).not.toHaveProperty('email');
     expect(body).not.toHaveProperty('referral_code'); // aucun code parrain : rien n'est envoyé
+  });
+
+  it('date de naissance tapée en JJ/MM/AAAA : « / » ajoutés tout seuls, clavier numérique, envoi en AAAA-MM-JJ', async () => {
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/register': { status: 201, body: { data: player } },
+    });
+    renderApp('/register');
+
+    const birth = await screen.findByLabelText('Date de naissance');
+    expect(birth).toHaveAttribute('type', 'text');
+    expect(birth).toHaveAttribute('inputmode', 'numeric');
+    expect(birth).toHaveAttribute('placeholder', 'JJ/MM/AAAA');
+    await userEvent.type(birth, '2105');
+    expect(birth).toHaveValue('21/05/');
+    await userEvent.type(birth, '1998');
+    expect(birth).toHaveValue('21/05/1998');
+
+    await userEvent.type(screen.getByLabelText('Nom'), 'Ana Joueuse');
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
+    await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/auth/register'))).toBe(true));
+    const registerCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/register'));
+    expect(JSON.parse(String(registerCall?.[1]?.body)).birth_date).toBe('1998-05-21');
+  });
+
+  it('refuse une date qui n\'existe pas ou un âge sous le minimum, sans rien envoyer', async () => {
+    const fetchMock = mockApi({ 'GET /me': guest, 'POST /auth/register': { status: 201, body: { data: player } } });
+    renderApp('/register');
+
+    const birth = await screen.findByLabelText('Date de naissance');
+    await userEvent.type(birth, '31022000');
+    await userEvent.click(screen.getByLabelText('Mot de passe')); // quitter le champ suffit pour voir l'erreur
+    expect(birth).toHaveAccessibleDescription("Le 31/02/2000 n'existe pas : vérifiez le jour et le mois.");
+
+    // Corriger efface le message ; un joueur trop jeune est arrêté avant l'envoi.
+    await userEvent.clear(birth);
+    expect(birth).not.toHaveAccessibleDescription(/n'existe pas/);
+    const year = new Date().getFullYear() - 10;
+    await userEvent.type(birth, `0101${year}`);
+    await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Créer mon compte' }));
+
+    expect(birth).toHaveAccessibleDescription('Vous devez avoir au moins 18 ans pour ouvrir un compte.');
+    expect(birth).toHaveFocus();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/auth/register'))).toBe(false);
   });
 
   it('ne demande ni le pays (Haïti) ni « 18 ans ou plus » : l\'âge vient de la date de naissance', async () => {
@@ -196,7 +248,7 @@ describe('inscription', { timeout: 15_000 }, () => {
 
     await userEvent.type(screen.getByLabelText('Nom'), 'Ana Joueuse');
     await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '34123456');
-    await userEvent.type(screen.getByLabelText('Date de naissance'), '1995-05-21');
+    await userEvent.type(screen.getByLabelText('Date de naissance'), '21051995');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.type(screen.getByLabelText('Confirmer le mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('checkbox', { name: /J'accepte les conditions/ }));
@@ -222,6 +274,11 @@ describe('inscription', { timeout: 15_000 }, () => {
     // Les textes s'ouvrent dans un nouvel onglet : le formulaire reste rempli.
     expect(screen.getByRole('link', { name: "conditions d'utilisation" })).toHaveAttribute('target', '_blank');
     expect(screen.getByRole('link', { name: 'règlement des paris' })).toHaveAttribute('href', '/reglement');
+
+    // La date vide est signalée en même temps que la case.
+    const birth = screen.getByLabelText('Date de naissance');
+    expect(birth).toHaveAccessibleDescription('Saisissez votre date de naissance (JJ/MM/AAAA).');
+    await userEvent.type(birth, '21051995');
 
     await userEvent.click(terms);
     expect(screen.queryByText('Cochez la case pour accepter les conditions et créer votre compte.')).toBeNull();

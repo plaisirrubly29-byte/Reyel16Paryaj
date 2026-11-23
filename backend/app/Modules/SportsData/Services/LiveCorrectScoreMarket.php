@@ -59,7 +59,7 @@ class LiveCorrectScoreMarket
                 (float) ($event->live_draw_boost ?? 1.0),
                 (int) $event->home_score,
                 (int) $event->away_score,
-                LiveOddsModel::remainingMinutes($event->starts_at, now()),
+                LiveOddsService::remainingMinutes($event, now()),
                 (int) config('sports_data.live_model.correct_score_extra_goals', 3),
             );
             if ($probabilities === []) {
