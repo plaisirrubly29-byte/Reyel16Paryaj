@@ -1237,15 +1237,16 @@ a.match-card-teams:hover .team-name { text-decoration: underline; text-underline
 .sport-section .match-groups { padding: 0.25rem; }
 .sport-section-more { display: flex; justify-content: center; margin: 0; padding: 0 0.75rem 0.85rem; }
 .match-lines { list-style: none; margin: 0; padding: 0; }
-.match-line { padding: 1rem 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; border-radius: 8px; transition: background-color 0.15s; }
-.match-line:nth-child(even) { background: #f6f7f9; }
-.match-line-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.match-line-info { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-.match-line-teams { display: flex; flex-wrap: wrap; min-width: 0; font-size: 1.35rem; font-weight: 600; color: var(--text); line-height: 1.2; }
+.match-line { padding: 0.7rem 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; border-bottom: 1px solid var(--border); transition: background-color 0.15s; }
+.match-line:last-child { border-bottom: 0; }
+.match-line:hover { background: var(--surface-2); }
+.match-line-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.match-line-info { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.match-line-teams { display: flex; flex-wrap: wrap; min-width: 0; font-size: 1rem; font-weight: 600; color: var(--text); line-height: 1.25; }
 .match-line-teams .team-name { white-space: normal; overflow: visible; }
 .match-line-sep { white-space: pre; }
 a.match-line-teams:hover { color: var(--brand); }
-.match-line-competition { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; font-size: 1.05rem; color: var(--text); }
+.match-line-competition { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; font-size: 0.8rem; color: var(--muted); }
 .live-badge {
   display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.45rem; border-radius: 3px;
   background: #111; color: #fff; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; font-style: italic;
@@ -1257,14 +1258,14 @@ a.match-line-teams:hover { color: var(--brand); }
 }
 .special-badge:hover { background: #ffc61a; color: #111; }
 .match-line-time { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; line-height: 1.2; text-align: right; }
-.match-line-time strong { font-size: 1.2rem; color: var(--text); font-variant-numeric: tabular-nums; }
-.match-line-time > span { font-size: 1.02rem; color: var(--text); font-weight: 500; }
-.match-line-more { display: inline-flex; align-items: center; gap: 0.1rem; margin-top: 0.15rem; font-size: 0.95rem; font-weight: 600; color: var(--brand); }
+.match-line-time strong { font-size: 0.95rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.match-line-time > span { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+.match-line-more { display: inline-flex; align-items: center; gap: 0.05rem; margin-top: 0.1rem; font-size: 0.78rem; font-weight: 600; color: var(--brand); }
 .match-line-more:hover { color: var(--brand); }
 .live-indicator { color: var(--danger) !important; font-weight: 700 !important; }
 
-/* Cotes en barres : libellé à gauche sur fond blanc, cote dans un bloc bordeaux, barre de probabilité dessous */
-.match-odds-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; max-width: 860px; }
+/* Cotes en barres : boutons fins, libellé gris à gauche, cote dans un petit bloc bordeaux à droite */
+.match-odds-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; max-width: 640px; }
 .odds-btn {
   position: relative; display: flex; align-items: center; justify-content: center; font: inherit; cursor: pointer;
   transition: background-color 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s, transform 0.1s;
@@ -1279,28 +1280,35 @@ a.match-line-teams:hover { color: var(--brand); }
   font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
 }
 .odds-btn-bar, .odds-btn-wide {
-  flex-direction: row; justify-content: space-between; align-items: stretch; min-height: 3.4rem; padding: 0;
-  background: var(--surface); color: var(--text); border: 2px solid var(--odds); border-radius: 4px; overflow: visible;
+  flex-direction: row; justify-content: space-between; align-items: stretch; gap: 0.3rem; min-height: 2.5rem; padding: 0.2rem;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: visible;
 }
 .odds-btn-bar .odds-label, .odds-btn-wide .odds-name {
-  display: flex; align-items: center; flex: 1; min-width: 0; padding: 0 0.85rem; font-size: 1.2rem; font-weight: 600; text-align: left;
+  display: flex; align-items: center; flex: 1; min-width: 0; padding: 0 0.45rem; font-size: 0.88rem; font-weight: 600; color: var(--muted); text-align: left;
 }
 /* Libellés courts (1, X2, > 2.5) ; un nom long (buteur) revient à la ligne plutôt que d'être coupé. */
-.odds-btn-wide .odds-name { font-size: 1.15rem; line-height: 1.2; padding-top: 0.35rem; padding-bottom: 0.35rem; overflow-wrap: anywhere; }
+.odds-btn-wide .odds-name { line-height: 1.2; padding-top: 0.25rem; padding-bottom: 0.25rem; overflow-wrap: anywhere; }
 .market-odds.short-labels .odds-btn-wide .odds-name { white-space: nowrap; overflow-wrap: normal; }
 .odds-btn-bar .odds-value, .odds-btn-wide .odds-value {
-  display: flex; align-items: center; justify-content: center; min-width: 5.2rem; padding: 0 0.9rem;
-  background: var(--odds); color: #fff; font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; justify-content: center; min-width: 3.6rem; padding: 0 0.6rem; border-radius: 4px;
+  background: var(--odds); color: #fff; font-size: 0.9rem; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .odds-btn-bar:hover:not(:disabled), .odds-btn-wide:hover:not(:disabled) { border-color: var(--accent); }
 .odds-btn-bar:hover:not(:disabled) .odds-value, .odds-btn-wide:hover:not(:disabled) .odds-value { background: var(--accent); color: var(--accent-text); }
 .odds-btn-bar.selected, .odds-btn-wide.selected { border-color: var(--accent); background: var(--accent-soft); }
+.odds-btn-bar.selected .odds-label, .odds-btn-wide.selected .odds-name { color: var(--text); }
 .odds-btn-bar.selected .odds-value, .odds-btn-wide.selected .odds-value { background: var(--accent); color: var(--accent-text); }
 /* Barre de probabilité implicite, sous le bouton : bordeaux pour le favori, or sinon. */
 .odds-prob { position: absolute; left: -2px; right: -2px; bottom: -9px; height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
 .odds-prob > span { display: block; width: var(--share, 0%); height: 100%; background: var(--orange); }
 .odds-btn.favorite .odds-prob > span { background: var(--brand); }
-.match-line .match-odds-bar { margin-bottom: 0.55rem; }
+/* Liste des matchs : pas de barre de probabilité, pour une ligne plus légère. */
+.match-line .odds-prob { display: none; }
+/* Ordinateur : un match par ligne — équipes et heure à gauche, cotes à droite. */
+@media (min-width: 961px) {
+  .match-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); align-items: center; gap: 1.25rem; }
+  .match-line .match-odds-bar, .match-line .odds-unavailable { max-width: none; margin: 0; }
+}
 .odds-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .empty-state {
@@ -1526,9 +1534,9 @@ a.match-line-teams:hover { color: var(--brand); }
 
 /* Bandeau d'information sur les cookies, en bas de l'écran (au-dessus de la barre d'onglets sur mobile) */
 .cookie-banner {
-  position: fixed; left: 1rem; right: 1rem; bottom: 1rem; z-index: 50; max-width: 760px; margin: 0 auto;
-  display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; border-radius: var(--radius);
-  background: var(--navy); color: rgba(255, 255, 255, 0.9); box-shadow: var(--shadow-lg); font-size: 0.92rem;
+  position: fixed; left: 1rem; right: 1rem; bottom: 1rem; z-index: 50; max-width: 560px; margin: 0 auto;
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.6rem 0.55rem 0.9rem; border-radius: var(--radius);
+  background: var(--navy); color: rgba(255, 255, 255, 0.9); box-shadow: var(--shadow-lg); font-size: 0.8rem; line-height: 1.35;
 }
 .cookie-banner p { margin: 0; flex: 1; }
 .cookie-banner a { color: var(--gold); font-weight: 600; }
@@ -1652,7 +1660,6 @@ a.match-line-teams:hover { color: var(--brand); }
   .side-menu-top, .side-menu-title { padding-left: 1.25rem; margin-left: 0; }
   .side-menu-title { margin-left: 1.25rem; }
   .side-menu-country { margin-left: 1.25rem; }
-  .match-line-teams { font-size: 1.15rem; }
   .top-matches { grid-auto-columns: 320px; }
   .board-tabs button { padding: 0 2rem; font-size: 1.15rem; }
 }
@@ -1684,7 +1691,7 @@ a.match-line-teams:hover { color: var(--brand); }
   .legal-nav { position: static; flex-direction: row; overflow-x: auto; }
   .legal-nav a { white-space: nowrap; }
   .legal-text { padding: 1.25rem; }
-  .cookie-banner { bottom: calc(72px + env(safe-area-inset-bottom)); left: 0.75rem; right: 0.75rem; flex-direction: column; align-items: stretch; }
+  .cookie-banner { bottom: calc(72px + env(safe-area-inset-bottom)); left: 0.75rem; right: 0.75rem; }
 
   .tab-bar {
     display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
@@ -1884,21 +1891,21 @@ a.match-line-teams:hover { color: var(--brand); }
   .odds-btn-card.selected { border-color: rgba(255, 255, 255, 0.1); box-shadow: none; }
   .odds-btn-card.favorite::after { top: 4px; right: 4px; width: 4px; height: 4px; }
   .match-groups { padding: 0.25rem; }
-  .match-line { padding: 0.85rem 0.6rem 0.75rem; }
-  .match-line-teams { font-size: 1.05rem; }
-  .match-line-competition { font-size: 0.88rem; }
-  .match-line-time strong { font-size: 1rem; }
-  .match-line-time > span { font-size: 0.85rem; }
-  .match-line-more { font-size: 0.8rem; }
-  .match-odds-bar { gap: 0.35rem; }
-  .odds-btn-bar { min-height: 3rem; }
-  .odds-btn-bar .odds-label { padding: 0 0.5rem; font-size: 1rem; }
-  .odds-btn-bar .odds-value { min-width: 0; flex: 1 1 auto; padding: 0 0.4rem; font-size: 1rem; }
+  .match-line { padding: 0.6rem 0.65rem; gap: 0.45rem; }
+  .match-line-teams { font-size: 0.93rem; }
+  .match-line-competition { font-size: 0.74rem; }
+  .match-line-time strong { font-size: 0.9rem; }
+  .match-line-time > span { font-size: 0.72rem; }
+  .match-line-more { font-size: 0.72rem; }
+  .match-odds-bar { gap: 0.3rem; }
+  .odds-btn-bar { min-height: 2.35rem; }
+  .odds-btn-bar .odds-label { padding: 0 0.35rem; font-size: 0.82rem; }
+  .odds-btn-bar .odds-value { min-width: 0; flex: 0 1 3.3rem; padding: 0 0.3rem; font-size: 0.85rem; }
   /* Page d'un match : libellés courts (1, X, 2) sur une ligne ; noms longs (buteurs) sur une colonne. */
   .market-odds.cols-3.long-names { grid-template-columns: 1fr; }
   .market-odds.short-labels { gap: 0.35rem; }
-  .market-odds.short-labels .odds-btn-wide .odds-name { padding: 0 0.5rem; font-size: 1rem; }
-  .market-odds.short-labels .odds-btn-wide .odds-value { min-width: 3.4rem; flex: 0 0 auto; padding: 0 0.45rem; font-size: 1rem; }
+  .market-odds.short-labels .odds-btn-wide .odds-name { padding: 0 0.35rem; font-size: 0.82rem; }
+  .market-odds.short-labels .odds-btn-wide .odds-value { min-width: 3.2rem; flex: 0 0 auto; padding: 0 0.35rem; font-size: 0.85rem; }
   .match-header { padding: 1.1rem 0.9rem; }
   .match-header-teams { flex-direction: column; gap: 0.2rem; }
   .match-header-vs { display: none; }
@@ -2902,7 +2909,7 @@ a.match-line-teams:hover { color: var(--brand); }
 
 /* Site léger (V2-E05) : les lignes de match et le pied de page hors de l'écran ne sont mis en page qu'à l'approche du
    défilement ; hauteur estimée réservée (« auto » garde ensuite la hauteur réelle mesurée). */
-.match-line { content-visibility: auto; contain-intrinsic-size: auto 150px; }
+.match-line { content-visibility: auto; contain-intrinsic-size: auto 100px; }
 .site-footer { content-visibility: auto; contain-intrinsic-size: auto 640px; }
 /* Coquille de démarrage d'index.html : même logo que l'en-tête de React (adresse fixe, préchargée). */
 .boot-logo { background-image: url('/brand/reyel16-logo-officiel-sm.jpg'); }
