@@ -89,6 +89,26 @@ describe("page d'un match", () => {
     expect(within(goals).getByRole('button', { name: '< 2.5 Moins de 2.5 à 2.00' })).toBeInTheDocument();
   });
 
+  it('replie un marché aux nombreuses lignes derrière « + N autres »', async () => {
+    const scores = Array.from({ length: 12 }, (_, i) => ({
+      id: `sc${i}`, key: 'score', label: `${i}-0`, name: `Arsenal ${i}-0 Chelsea`, odds: `${10 + i}.00`,
+    }));
+    api({ ...MATCH, markets: [{ ...MATCH.markets[3], selections: scores }] });
+    renderApp('/events/11');
+
+    const market = await screen.findByRole('region', { name: 'Score exact' });
+    // 3 colonnes × 3 rangées montrées, le reste replié.
+    expect(within(market).getAllByRole('button', { name: /Arsenal \d+-0 Chelsea/ })).toHaveLength(9);
+    await userEvent.click(within(market).getByRole('button', { name: '+ 3 autres' }));
+    expect(within(market).getAllByRole('button', { name: /Arsenal \d+-0 Chelsea/ })).toHaveLength(12);
+    expect(within(market).getByRole('button', { name: 'Voir moins' })).toHaveAttribute('aria-expanded', 'true');
+
+    // Une ligne cachée qui est dans le coupon garde le marché déplié.
+    await userEvent.click(within(market).getByRole('button', { name: /Arsenal 11-0 Chelsea/ }));
+    expect(within(market).getAllByRole('button', { name: /Arsenal \d+-0 Chelsea/ })).toHaveLength(12);
+    expect(within(market).queryByRole('button', { name: 'Voir moins' })).toBeNull();
+  });
+
   it('ajoute un pari « Nombre de buts » au coupon avec le nom du marché', async () => {
     api();
     renderApp('/events/11');
@@ -132,6 +152,9 @@ describe("page d'un match", () => {
     expect(screen.getByRole('region', { name: 'Buteur' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Score exact' })).toBeNull();
 
+    // La recherche est cachée derrière la loupe.
+    expect(screen.queryByRole('searchbox', { name: 'Rechercher un marché ou un joueur' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Rechercher un marché ou un joueur' }));
     await userEvent.type(screen.getByRole('searchbox', { name: 'Rechercher un marché ou un joueur' }), 'Mbappé');
     expect(screen.getByRole('button', { name: 'Kylian Mbappé marque à 2.20' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Ousmane Dembélé marque à 2.75' })).toBeNull();
