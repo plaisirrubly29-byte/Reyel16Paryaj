@@ -57,8 +57,8 @@ test('limite, pause et auto-exclusion depuis l\'espace joueur', async ({ page })
     await expect(page.getByRole('heading', { level: 1, name: 'Votre auto-exclusion est enregistrée' })).toBeVisible();
 
     await page.goto('/login');
-    await page.getByLabel('Téléphone ou email').fill(phone);
-    await page.getByLabel('Mot de passe').fill(password);
+    await page.getByLabel('Numéro de téléphone').fill(phone);
+    await page.getByLabel('Mot de passe', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Se connecter' }).click();
     await expect(page.getByText(/auto-exclusion/)).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
