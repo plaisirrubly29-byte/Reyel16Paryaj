@@ -85,7 +85,7 @@ describe('coupon sur un appareil partagé', () => {
     expect(localStorage.getItem(OWNER)).toBeNull();
 
     await userEvent.click(within(await slip()).getByRole('link', { name: 'Se connecter pour parier' }));
-    await userEvent.type(await screen.findByLabelText('Téléphone ou email'), '34123456');
+    await userEvent.type(await screen.findByLabelText('Numéro de téléphone'), '34123456');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'secret-123');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
