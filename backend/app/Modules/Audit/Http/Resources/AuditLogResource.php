@@ -14,7 +14,9 @@ class AuditLogResource extends JsonResource
     {
         return [
             'id' => (string) $this->id,
-            'action' => $this->action->value,
+            // Valeur enregistrée, lue telle quelle : une action inconnue de cette version (retour arrière après un
+            // déploiement, ligne écrite par une autre branche) s'affiche en clair au lieu de faire tomber le journal.
+            'action' => (string) $this->getRawOriginal('action'),
             'actor' => $this->actor_id === null ? null : [
                 'id' => (string) $this->actor_id,
                 'email' => $this->actor_email,
