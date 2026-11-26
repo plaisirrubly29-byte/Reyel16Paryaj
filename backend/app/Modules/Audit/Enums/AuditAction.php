@@ -81,6 +81,10 @@ enum AuditAction: string
     // Admin — paramètres de la plateforme versionnés (P6-08)
     case SettingsUpdated = 'settings.updated';
 
+    // Borlette (V2-D09) : boules bloquées et débloquées.
+    case LotteryNumberBlocked = 'lottery.number_blocked';
+    case LotteryNumberUnblocked = 'lottery.number_unblocked';
+
     // Audit
     case AuditViewed = 'audit.viewed';
     case AuditExported = 'audit.exported';

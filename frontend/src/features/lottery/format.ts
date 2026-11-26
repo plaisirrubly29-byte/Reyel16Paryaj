@@ -31,3 +31,13 @@ export function formatResultDate(date: string): string {
   return new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })
     .format(new Date(Date.UTC(y, m - 1, d)));
 }
+
+/** Date locale du tirage ("YYYY-MM-DD") d'un instant, dans le fuseau du tirage : la `date` envoyée avec la fiche. */
+export function drawDate(iso: string, timeZone: string): string {
+  return dayKey(new Date(iso), timeZone);
+}
+
+/** Fin des ventes d'un tirage : heure du tirage − close_before_minutes. */
+export function salesCloseAt(drawAt: string, closeBeforeMinutes: number): string {
+  return new Date(Date.parse(drawAt) - closeBeforeMinutes * 60_000).toISOString();
+}

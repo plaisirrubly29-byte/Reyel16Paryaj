@@ -2284,7 +2284,12 @@ a.match-line-teams:hover { color: var(--brand); }
 .lottery-play-remove { display: grid; place-items: center; padding: 0.25rem; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
 .lottery-play-remove:hover { color: var(--danger); background: var(--accent-soft); }
 .lottery-total { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
-.lottery-soon { color: var(--muted); font-size: 0.85rem; text-align: center; }
+.lottery-play-wins { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; }
+.lottery-play-error { grid-column: 1 / -1; color: var(--danger); font-size: 0.82rem; font-weight: 600; }
+.lottery-plays li.has-error .lottery-play-numbers { color: var(--danger); }
+.lottery-confirm { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.8rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); }
+.lottery-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.lottery-ticket-result { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); margin: 0; }
 
 /* Jeux virtuels (V2-D08) : accueil (choix du jeu, épreuves, résultats) et page d'une épreuve */
 .virtual-hero {

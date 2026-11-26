@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Tâche** | V2-D09 (débloque les issues #234 backend et #235 écrans) |
-| **Statut** | 🟡 En attente d'un avis juridique — décision de Rubly PLAISIR du 2026-11-16 : la vente reste fermée ; le code peut être préparé derrière un interrupteur désactivé |
+| **Statut** | ✅ Validée par Rubly PLAISIR le 2026-11-26 : vente ouverte en Production, barème haïtien courant et limites proposées (sans avis juridique écrit : risque accepté par le chef de projet) |
 | **Décideur** | Rubly PLAISIR (chef de projet), sur avis écrit d'un conseil juridique du territoire visé |
 | **Préparé le** | 2026-11-08 |
 | **Dépend de** | D-01/D-09 (cadre juridique), D-06 (devise, mises, plafonds), D-05 (corrections), V2-D05 (plafonds de risque) |
@@ -16,6 +16,24 @@
 > code de la vente (V2-D09, contrat déjà écrit) derrière un interrupteur désactivé par défaut, sans le mettre en service,
 > même au Staging.
 
+> **Décision du 2026-11-26 (Rubly PLAISIR)** : la vente ouvre en Production sans attendre l'avis du juriste (BL-1 à BL-6
+> restent sans réponse écrite : risque accepté). Barème et limites ci-dessous, tous réglables dans `config/lottery.php`
+> et le `.env` (`LOTTERY_SALES_ENABLED=true` pour ouvrir) :
+>
+> | Jeu | Gagne si | Gain (× la mise) |
+> |---|---|---|
+> | Bolèt | la boule sort au 1er, 2e ou 3e lot | 50 / 20 / 10 ; un seul gain par ligne, au meilleur lot (R-3) |
+> | Maryaj | les deux boules sortent à deux lots différents, ordre indifférent (R-1) | 1 000 |
+> | Loto 3 | les 3 chiffres du premier numéro (pick 3) | 500 |
+> | Loto 4 | option 1 = lot 1 + lot 2, option 2 = lot 2 + lot 3, option 3 = lot 1 + lot 3 (R-2) | 5 000 |
+> | Loto 5 | pick 3 + lot 2 (option 1) ou pick 3 + lot 3 (option 2) (R-2) | 25 000 |
+>
+> Mise 5 à 5 000 HTG par ligne ; une fiche = un tirage, 20 lignes au plus (R-4) ; gain plafonné à 1 000 000 HTG par
+> fiche (R-5) ; fin des ventes 5 min avant le tirage (L-1) ; gain possible plafonné à 250 000 HTG par combinaison, tirage
+> et date (L-2) ; boules bloquées par un admin (`markets.suspend`, motif, audit) (L-3) ; pas d'annulation par le joueur
+> (L-4) ; remboursement si aucun résultat 48 h après le tirage (L-5) ; jeu responsable appliqué comme aux paris sportifs
+> (L-7). L-6 (correction d'un résultat) reste à faire : un résultat importé n'est jamais écrasé.
+
 ## 1. Besoin
 
 Vendre des tickets de borlette (Bolèt, Maryaj, Loto 3, Loto 4, Loto 5) sur les tirages déjà affichés par le site,
@@ -27,7 +45,7 @@ limiter l'engagement par boule et par tirage, et payer automatiquement les gains
   Détail : `backend/app/Modules/Lottery/README.md`.
 - Chaque résultat donne **trois lots de deux chiffres** (`lot1`, `lot2`, `lot3`), et, si le fournisseur les donne, un
   **pick 3** et un **pick 4** bruts. Un résultat importé n'est jamais écrasé ; un conflit est journalisé.
-- Tout est coupé tant que `LOTTERY_ENABLED=false` ; la vente reste désactivée côté site (`VITE_LOTTERY_SALES`).
+- Tout est coupé tant que `LOTTERY_ENABLED=false` ; la vente s'ouvre avec `LOTTERY_SALES_ENABLED=true` (le site lit `sales_open` sur `GET /lottery/games`).
 - La borlette figure dans les exclusions par défaut de `docs/architecture.md`.
 
 ## 3. Questions au conseil juridique

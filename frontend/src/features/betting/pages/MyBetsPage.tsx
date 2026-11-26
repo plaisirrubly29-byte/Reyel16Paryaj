@@ -13,6 +13,8 @@ import { BetCodeShare } from '../tickets/BetCodeShare';
 import { canRebet, rebetSelections } from '../tickets/rebet';
 import { virtualGamesEnabled } from '../../virtual/api/virtualGames';
 import { VirtualBets } from '../../virtual/components/VirtualBets';
+import { useLotteryAvailable, type LotteryTicketStatus } from '../../lottery/api/lottery';
+import { LotteryTickets } from '../../lottery/components/LotteryTickets';
 
 /** Statut d'un ticket vu par le joueur (« En cours » tant qu'il n'est pas réglé). */
 const STATUS_LABELS: Record<BetTicketStatus, string> = {
@@ -54,7 +56,10 @@ function isStatus(value: string | null): value is BetTicketStatus {
 export function MyBetsPage() {
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Number(params.get('page')) || 1);
-  const product = params.get('produit') === 'virtuels' && virtualGamesEnabled() ? 'virtual' : 'sport';
+  const lotteryAvailable = useLotteryAvailable();
+  const rawProduct = params.get('produit');
+  // Borlette : l'onglet suit l'URL même avant le chargement des tirages (lien du reçu d'une fiche).
+  const product = rawProduct === 'virtuels' && virtualGamesEnabled() ? 'virtual' : rawProduct === 'borlette' ? 'lottery' : 'sport';
   const rawStatus = params.get('statut');
   const status = isStatus(rawStatus) ? rawStatus : undefined;
   const rawType = params.get('type');
@@ -90,9 +95,26 @@ export function MyBetsPage() {
             <Icon name="gamepad" size={20} /> Jeux virtuels
           </button>
         )}
+        {(lotteryAvailable || product === 'lottery') && (
+          <button type="button" className={product === 'lottery' ? 'active' : undefined} aria-pressed={product === 'lottery'} onClick={() => update({ produit: 'borlette', statut: null })}>
+            <Icon name="lottery" size={20} /> Borlette
+          </button>
+        )}
       </nav>
 
-      {product === 'virtual' ? <VirtualBets title="Jeux virtuels" /> : (
+      {product === 'virtual' ? <VirtualBets title="Jeux virtuels" /> : product === 'lottery' ? (
+        <LotteryTickets
+          page={page}
+          status={isStatus(rawStatus) ? (rawStatus as LotteryTicketStatus) : undefined}
+          onStatus={(next) => update({ statut: next ?? null })}
+          onPage={(next) => {
+            const p = new URLSearchParams(params);
+            p.set('page', String(next));
+            setParams(p);
+            window.scrollTo({ top: 0 });
+          }}
+        />
+      ) : (
         <>
           <div className="my-bets-filters" role="group" aria-label="Statut des paris">
             {STATUS_FILTERS.map((f) => {
