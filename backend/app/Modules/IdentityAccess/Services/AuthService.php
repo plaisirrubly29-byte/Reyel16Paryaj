@@ -18,6 +18,7 @@ class AuthService
     public function __construct(
         private readonly LedgerService $ledger,
         private readonly AuditLogger $audit,
+        private readonly LoginFailureCounter $failures,
     ) {}
 
     /**
@@ -40,7 +41,8 @@ class AuthService
 
             $user->profile()->create([
                 'birth_date' => $data['birth_date'],
-                'country' => $data['country'] ?? null,
+                // Site conçu pour Haïti : le formulaire ne demande plus le pays.
+                'country' => $data['country'] ?? 'HT',
             ]);
 
             // V2-E01 : preuve de l'acceptation des textes (version, date, IP), dans la même transaction que le compte.
@@ -125,6 +127,9 @@ class AuthService
      */
     private function recordFailure(?User $user, string $field, string $login, string $reason): void
     {
+        // Compté par identifiant saisi, que le compte existe ou non (D-17, PS-4 : vérification « humain » au-delà).
+        $this->failures->hit($field.':'.$login, request()->ip());
+
         $this->audit->record(AuditAction::LoginFailed, $user, metadata: [
             'reason' => $reason,
             'field' => $field,

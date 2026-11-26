@@ -18,13 +18,16 @@ Légende : ✅ autorisé · 👁 lecture seule · 2️⃣ double validation · �
 |---|---|---|---|---|---|---|---|
 | Vue d'ensemble | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 |
 | Événements & marchés — consulter | ✅ | ✅ | 👁 | 👁 | 👁 | 👁 | ❌ |
-| Marché — suspendre / masquer (motif) | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Marché — suspendre / masquer, ou tous ceux d'un match (motif) | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Match — changer l'heure, reporter, annuler, masquer (motif ; D-05) | ✅ (2️⃣ pour annuler un match commencé) | ✅ (2️⃣ pour annuler un match commencé) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Cotes — fixer à la main / valider (motif ; D-18) | ✅ (2️⃣ au-delà de ±20 %) | ✅ (2️⃣ au-delà de ±20 %) | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Résultats — saisir / valider | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Règlement — lancer / relancer | — | — | — | — | — | — | — |
 | Utilisateurs — rechercher / consulter | ✅ | ❌ | 👁 | 👁 (email et téléphone masqués) | 👁 | 👁 (email et téléphone masqués) | 👁 (email et téléphone masqués) |
 | Utilisateur — suspendre (motif) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
 | Utilisateur — limiter sa mise maximale (motif) | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ |
 | Tickets et exposition — consulter | ✅ | 👁 | 👁 | 👁 | 👁 | 👁 | ❌ |
+| Ticket — annuler (motif ; mise rendue, gain repris) | 2️⃣ | 2️⃣ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Ledger / rapprochement / transactions des prestataires de paiement — consulter | 👁 | ❌ | ✅ | ❌ | 👁 | ❌ | ❌ |
 | Correction financière | 2️⃣ | ❌ | 2️⃣ | ❌ | ❌ | ❌ | ❌ |
 | Solde joueur — dépôt / retrait reçu hors plateforme (motif) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -68,7 +71,10 @@ un test par ligne du tableau. Chaque route de la ligne est appelée par un admin
   complètes pour les rôles qui ont `users.view_personal_data`.
 - 2️⃣ : le demandeur ne valide jamais sa propre demande (`self_approval_forbidden`) ; « jamais les siens » pour les rôles
   (`cannot_modify_own_roles`). Détail des circuits et des limites d'action de D-07 (délai M3 `approver_role_too_recent`) :
-  `FinanceCorrectionsApiTest`, `ResultCorrectionApiTest`, `RbacTest`.
+  `FinanceCorrectionsApiTest`, `ResultCorrectionApiTest`, `TicketVoidApiTest`, `RbacTest`.
+- Gestion d'un match (audit du 2026-11-22, A1 et A3 ; permissions `events.update` et `markets.suspend`) :
+  `EventManagementApiTest`. Annuler un match pas encore joué est immédiat ; un match commencé passe par une demande de
+  résultat « annulé » validée par un second administrateur (`results.approve`).
 - **Règlement — lancer / relancer** (« — ») : le test vérifie que `settlement.run` / `settlement.approve` restent
   réservées au Super Admin et à la Finance et qu'**aucune route** ne les expose ; une route future devra être rattachée
   à cette ligne du test.

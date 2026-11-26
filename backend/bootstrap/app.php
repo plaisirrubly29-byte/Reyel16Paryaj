@@ -6,6 +6,7 @@ use App\Http\Middleware\SecurityHeaders;
 use App\Modules\IdentityAccess\Http\Middleware\EnforceSessionLifetime;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureAccountIsActive;
 use App\Modules\IdentityAccess\Http\Middleware\EnsureMfaVerified;
+use App\Modules\IdentityAccess\Http\Middleware\RequireHumanVerification;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
 use App\Modules\Monitoring\Http\Middleware\CountApiResponses;
 use App\Support\Http\ApiErrorRenderer;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
     // Commandes artisan des modules (ex. sports-data:check, settlement:import-results, identity:grant-role).
     ->withCommands([
         __DIR__.'/../app/Modules/SportsData/Console',
+        __DIR__.'/../app/Modules/Betting/Console',
         __DIR__.'/../app/Modules/Settlement/Console',
         __DIR__.'/../app/Modules/IdentityAccess/Console',
         __DIR__.'/../app/Modules/Monitoring/Console',
@@ -66,6 +68,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => RequirePermission::class,
             'active' => EnsureAccountIsActive::class,
             'mfa' => EnsureMfaVerified::class,
+            'human' => RequireHumanVerification::class,
         ]);
 
         // Permissions vérifiées AVANT la résolution des {modèles} de l'URL : sans permission, 403 que

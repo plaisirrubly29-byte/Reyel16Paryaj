@@ -4,10 +4,11 @@ import { sportIcon } from '../../../shared/components/sportIcon';
 import { useLotteryDraws } from '../../lottery/api/lottery';
 import { virtualGamesEnabled } from '../../virtual/api/virtualGames';
 import { useSports } from '../api/catalogue';
+import { groupByCountry, tierLabel } from '../competitionGroups';
 
 /**
  * Colonne gauche (ordinateur), en deux bandes : à gauche les sports (icône + nom),
- * à droite « Top paris » puis les compétitions ouvertes, chacune avec sa flèche.
+ * à droite « Top paris » puis les compétitions ouvertes regroupées par pays (D1 → D2 → D3 → coupes), chacune avec sa flèche.
  */
 export function SportsSidebar() {
   const sports = useSports();
@@ -59,22 +60,27 @@ export function SportsSidebar() {
         {competitions.length > 0 && (
           <>
             <p className="side-menu-title">Top compétitions</p>
-            <ul className="side-menu-list">
-              {competitions.map((c) => (
-                <li key={c.id}>
-                  <Link
-                    to={`/sports?competition=${encodeURIComponent(c.id)}`}
-                    className={activeCompetition === c.id ? 'active' : undefined}
-                  >
-                    <span className="side-menu-label">
-                      {c.name}
-                      {c.country && <span className="side-sub">{c.country}</span>}
-                    </span>
-                    <Icon name="arrowRight" size={22} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {groupByCountry(competitions).map((group) => (
+              <div key={group.country} className="side-menu-group">
+                <p className="side-menu-country" aria-hidden="true">{group.country}</p>
+                <ul className="side-menu-list" aria-label={group.country}>
+                  {group.competitions.map((c) => (
+                    <li key={c.id}>
+                      <Link
+                        to={`/sports?competition=${encodeURIComponent(c.id)}`}
+                        className={activeCompetition === c.id ? 'active' : undefined}
+                      >
+                        <span className="side-menu-label">
+                          {c.name}
+                          {tierLabel(c.tier) && <span className="side-sub">{tierLabel(c.tier)}</span>}
+                        </span>
+                        <Icon name="arrowRight" size={22} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </>
         )}
       </nav>

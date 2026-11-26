@@ -45,14 +45,3 @@ test('l\'onglet Live n\'est jamais vide', async ({ page }) => {
     await expect(upcoming.locator('.match-line').first()).toBeVisible();
   }
 });
-
-test('le pays se choisit dans une liste, Haïti par défaut', async ({ page }) => {
-  await page.goto('/register');
-
-  const country = page.getByRole('combobox', { name: 'Pays' });
-  await expect(country).toHaveValue('HT');
-  await expect(country.locator('option').first()).toHaveText('Haïti');
-
-  await country.selectOption({ label: 'République dominicaine' });
-  await expect(country).toHaveValue('DO');
-});

@@ -37,6 +37,10 @@ class AdminMarketController extends Controller
 
     private function withRelations(Market $market): Market
     {
-        return $market->load(['event.competition.sport', 'selections' => fn ($q) => $q->orderBy('id')]);
+        return $market->load([
+            'event.competition.sport', 'event.homeTeam', 'event.awayTeam',
+            'selections' => fn ($q) => $q->orderBy('id'),
+            'selections.openOverride.requester:id,name', 'selections.openOverride.decider:id,name', 'selections.openOverride.ender:id,name',
+        ]);
     }
 }

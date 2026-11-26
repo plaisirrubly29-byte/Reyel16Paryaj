@@ -1,8 +1,10 @@
-import type { CSSProperties } from 'react';
+import { useState } from 'react';
+import { Icon } from '../../../shared/components/Icon';
 import { useBetSlip } from '../../betting/slip/BetSlipContext';
 import type { CatalogueEvent, CatalogueMarket } from '../api/catalogue';
+import { SUSPENDED_LABELS, isLiveClosed } from '../api/liveOdds';
 import { isLiveStatus } from '../format';
-import { favoriteSelection, impliedShares, marketColumns, marketTitle, matchingSelections } from '../markets';
+import { favoriteSelection, marketColumns, marketTitle, matchingSelections } from '../markets';
 
 type Props = {
   event: CatalogueEvent;
@@ -10,42 +12,76 @@ type Props = {
   selectionSearch?: string;
   /**
    * card : libellé au-dessus de la cote (cartes « Top matchs ») ; bar : libellé à gauche, cote à droite dans un bloc
-   * foncé, barre de probabilité dessous (liste des matchs) ; wide : libellé court à gauche, cote à droite (page du match).
+   * foncé (liste des matchs) ; wide : libellé court à gauche, cote à droite (page du match).
    */
   variant?: 'card' | 'bar' | 'wide';
+  /**
+   * Page du match : un marché aux nombreuses lignes (buteurs, scores exacts, autres lignes de buts) n'en montre que
+   * les premières, avec « + N autres » pour déplier. Tout reste visible pendant une recherche ou si une ligne cachée
+   * est dans le coupon.
+   */
+  collapsible?: boolean;
 };
 
-/** Raison affichée sur une cote non pariable : match en cours (paris en direct fermés) ou cote trop ancienne. */
-function lockedReason(event: CatalogueEvent): string {
+/** Nombre de cotes montrées d'un marché replié : 3 rangées (5 lignes pour une colonne de noms). */
+function collapsedLimit(columns: number): number {
+  return columns === 1 ? 5 : columns * 3;
+}
+
+/**
+ * Raison affichée sur une cote non pariable : marché en direct suspendu (score à vérifier, fin de match…), paris en
+ * direct fermés, ou cote trop ancienne.
+ */
+function lockedReason(event: CatalogueEvent, market: CatalogueMarket): string {
+  if (market.suspended_reason) return SUSPENDED_LABELS[market.suspended_reason] ?? 'Suspendu';
   return isLiveStatus(event.status) ? 'Paris fermés pendant le match' : 'Cote en cours de mise à jour';
+}
+
+/**
+ * Marché en direct non pariable avec un motif (D-20) : « Suspendu » à la place des cotes pour un moment (but à vérifier),
+ * « Fermé » pour la suite du match (fin de match, score plus suivi).
+ */
+function isSuspended(event: CatalogueEvent, market: CatalogueMarket): boolean {
+  return isLiveStatus(event.status) && market.bettable === false
+    && !!market.suspended_reason && !['live_closed', 'not_available'].includes(market.suspended_reason);
 }
 
 /**
  * Cotes d'un marché : chaque bouton ajoute ou retire la sélection du coupon (un choix par marché et par match).
  * Une cote non pariable (trop ancienne, ou match en direct) reste affichée mais ne peut pas être ajoutée au coupon.
  */
-export function MarketOdds({ event, market, variant = 'card', selectionSearch = '' }: Props) {
+export function MarketOdds({ event, market, variant = 'card', selectionSearch = '', collapsible = false }: Props) {
   const slip = useBetSlip();
+  const [expanded, setExpanded] = useState(false);
   const match = `${event.home_team} – ${event.away_team}`;
   const locked = market.bettable === false;
-  const reason = lockedReason(event);
+  const reason = lockedReason(event, market);
+  const suspended = isSuspended(event, market);
   const favoriteId = favoriteSelection(market.selections);
-  const shares = impliedShares(market.selections);
   const visibleSelections = matchingSelections(market, selectionSearch);
   const wide = variant === 'wide';
-  const withBar = variant !== 'card';
   // Libellés courts seulement s'ils distinguent chaque sélection (sinon, ex. « Oui » pour chaque buteur : le nom).
   const shortLabels = new Set(market.selections.map((s) => s.label)).size === market.selections.length;
+  const columns = marketColumns(market, visibleSelections.length);
+  const limit = collapsedLimit(columns);
+  const canCollapse = collapsible && selectionSearch.trim() === '' && visibleSelections.length > limit
+    && !visibleSelections.slice(limit).some((s) => slip.has(s.id));
+  const shownSelections = canCollapse && !expanded ? visibleSelections.slice(0, limit) : visibleSelections;
+  const hiddenCount = visibleSelections.length - limit;
 
   return (
+    <>
     <div
-      className={wide
-        ? `market-odds cols-${marketColumns(market, visibleSelections.length)} ${shortLabels ? 'short-labels' : 'long-names'}`
-        : `match-odds match-odds-${variant}`}
+      className={(wide
+        ? `market-odds cols-${columns} ${shortLabels ? 'short-labels' : 'long-names'}`
+        : `match-odds match-odds-${variant}`) + (suspended ? ' odds-suspended' : '')}
       role="group"
       aria-label={wide ? `${marketTitle(market)} : ${match}` : `Cotes ${match}`}
     >
-      {visibleSelections.map((s) => {
+      {suspended && (
+        <span className="odds-suspended-badge" title={reason}>{isLiveClosed(market.suspended_reason ?? null) ? 'Fermé' : 'Suspendu'}</span>
+      )}
+      {shownSelections.map((s) => {
         const selected = slip.has(s.id);
         const favorite = s.id === favoriteId;
         // Le bouton n'affiche que le libellé court (1, X, 2, 1X, > 2.5…) ; le nom complet reste dans le nom accessible
@@ -75,16 +111,23 @@ export function MarketOdds({ event, market, variant = 'card', selectionSearch = 
             })}
           >
             <span className={wide ? 'odds-name' : 'odds-label'}>{text}</span>
-            <span className="odds-value">{s.odds}</span>
-            {withBar && (
-              <span className="odds-prob" aria-hidden="true">
-                <span style={{ '--share': `${shares[s.id] ?? 0}%` } as CSSProperties} />
-              </span>
-            )}
+            <span className="odds-value">{suspended ? '—' : s.odds}</span>
           </button>
         );
       })}
     </div>
+    {canCollapse && (
+      <button
+        type="button"
+        className={`market-more${expanded ? ' expanded' : ''}`}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded ? 'Voir moins' : `+ ${hiddenCount} autre${hiddenCount > 1 ? 's' : ''}`}
+        <Icon name="chevron" size={14} />
+      </button>
+    )}
+    </>
   );
 }
 

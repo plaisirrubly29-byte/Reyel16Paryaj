@@ -37,6 +37,7 @@ const columns: Column<AdminEvent>[] = [
         <EventStatusBadge status={e.status} />
         {e.score && <span className="small">{e.score.home} – {e.score.away}</span>}
         {/* V2-D04 : le fournisseur n'a rien publié, le résultat se saisit à la main sur la fiche du match. */}
+        {e.hidden && <span className="badge" title={e.hidden.reason ?? undefined}>Masqué</span>}
         {awaitsManualResult(e) && <Link to={`/admin/events/${e.id}#resultat`} className="badge status-suspended">Résultat manquant</Link>}
       </div>
     ),
@@ -74,9 +75,11 @@ export function EventsPage() {
   const marketStatus = MARKET_STATUSES.includes(params.get('market_status') as MarketStatus) ? (params.get('market_status') as MarketStatus) : undefined;
   const date = DATE.test(params.get('date') ?? '') ? params.get('date')! : undefined;
   const page = Math.max(1, Number(params.get('page')) || 1);
+  // Lien de l'alerte « sélections bloquées » : matchs sans résultat, sélections en attente plus de 6 h après le début.
+  const stuck = params.get('stuck') === '1';
 
   const [draft, setDraft] = useState(search);
-  const events = useAdminEvents({ search: search || undefined, status, market_status: marketStatus, date, page });
+  const events = useAdminEvents({ search: search || undefined, status, market_status: marketStatus, date, stuck: stuck ? 1 : undefined, page });
 
   function update(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(params);
@@ -92,7 +95,7 @@ export function EventsPage() {
     update({ search: draft.trim() || undefined });
   }
 
-  const filtered = Boolean(search || status || marketStatus || date);
+  const filtered = Boolean(search || status || marketStatus || date || stuck);
   const total = events.data?.meta.total;
 
   return (
@@ -131,6 +134,11 @@ export function EventsPage() {
 
         {filtered && (
           <div className="filter-chips">
+            {stuck && (
+              <button type="button" className="chip" onClick={() => update({ stuck: undefined })}>
+                Sélections bloquées (plus de 6 h sans résultat) <span aria-hidden="true">×</span><span className="sr-only">(retirer ce filtre)</span>
+              </button>
+            )}
             <button type="button" className="link-button" onClick={() => { setDraft(''); setParams(new URLSearchParams()); }}>
               Effacer les filtres
             </button>

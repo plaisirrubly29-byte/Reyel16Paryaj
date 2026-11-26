@@ -115,6 +115,12 @@ Coût : **0 $** avec Cloudflare gratuit et Turnstile ; ~20–25 $/mois si Pro de
 - **Recette** : test de la limite des visiteurs (critère 1) ; inscription refusée sans jeton Turnstile valide
   (critère 2) ; vérification que l'IP réelle du joueur apparaît bien dans l'audit derrière Cloudflare.
 
+**Avancement (2026-11-19, V2-F04 #192, partie serveur)** : limite globale des visiteurs, vérification Turnstile
+avant la validation des formulaires, contrat `captcha_failed`, alerte d'exploitation ; désactivée tant que la clé
+n'est pas configurée. Décisions de mise en œuvre (Benginio, 2026-11-19) : Cloudflare injoignable → inscription et mot
+de passe oublié refusés, **connexion laissée passer** (PS-7 ne visait que l'inscription) ; en Production sans clé,
+avertissement dans les logs, sans blocage. Reste : widget (#193), Cloudflare devant le site (après V2-F01).
+
 ## 10. Conditions pour passer à « Validée »
 
 1. PS-1 à PS-8 tranchés par écrit.

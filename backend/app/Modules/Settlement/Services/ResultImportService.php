@@ -97,9 +97,20 @@ class ResultImportService
         if (! $data->completed) {
             $report->inProgress++;
             // Match commencé : en direct, avec le score du moment (un score illisible n'efface pas le précédent).
+            // Paris en direct (D-20) : heure du dernier score reçu (au-delà de max_score_age_seconds, marchés suspendus)
+            // et du dernier changement de score (marchés suspendus un moment, paris en attente d'acceptation refusés).
             if (in_array($event->status, [EventStatus::Scheduled, EventStatus::Live], true) && $event->starts_at->isPast()) {
                 $scores = $this->liveScore($data);
-                $event->update(['status' => EventStatus::Live] + ($scores === null ? [] : ['home_score' => $scores[0], 'away_score' => $scores[1]]));
+                $changes = ['status' => EventStatus::Live];
+                if ($scores !== null) {
+                    $previous = $event->home_score === null || $event->away_score === null
+                        ? ['0', '0'] : [(string) $event->home_score, (string) $event->away_score];
+                    $changes += ['home_score' => $scores[0], 'away_score' => $scores[1], 'score_checked_at' => now()];
+                    if ($previous !== $scores) {
+                        $changes['score_changed_at'] = now();
+                    }
+                }
+                $event->update($changes);
             }
 
             return;

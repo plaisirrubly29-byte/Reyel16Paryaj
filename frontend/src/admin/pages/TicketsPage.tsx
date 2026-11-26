@@ -53,10 +53,16 @@ export function TicketsPage() {
   const userId = /^\d+$/.test(params.get('user_id') ?? '') ? params.get('user_id')! : undefined;
   const from = DATE.test(params.get('placed_from') ?? '') ? params.get('placed_from')! : undefined;
   const to = DATE.test(params.get('placed_to') ?? '') ? params.get('placed_to')! : undefined;
+  const eventId = /^\d+$/.test(params.get('event_id') ?? '') ? params.get('event_id')! : undefined;
+  // Lien de l'alerte « annulations de ticket à valider ».
+  const voidPending = params.get('void_status') === 'pending';
   const page = Math.max(1, Number(params.get('page')) || 1);
 
   const [draft, setDraft] = useState(reference);
-  const tickets = useAdminTickets({ reference: reference || undefined, status, user_id: userId, placed_from: from, placed_to: to, page });
+  const tickets = useAdminTickets({
+    reference: reference || undefined, status, user_id: userId, event_id: eventId, void_status: voidPending ? 'pending' : undefined,
+    placed_from: from, placed_to: to, page,
+  });
 
   function update(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(params);
@@ -72,7 +78,7 @@ export function TicketsPage() {
     update({ reference: draft.trim() || undefined });
   }
 
-  const filtered = Boolean(reference || status || userId || from || to);
+  const filtered = Boolean(reference || status || userId || eventId || voidPending || from || to);
   const total = tickets.data?.meta.total;
 
   return (
@@ -119,6 +125,16 @@ export function TicketsPage() {
             {userId && (
               <button type="button" className="chip" onClick={() => update({ user_id: undefined })}>
                 Joueur n° {userId} <span aria-hidden="true">×</span><span className="sr-only">(retirer ce filtre)</span>
+              </button>
+            )}
+            {eventId && (
+              <button type="button" className="chip" onClick={() => update({ event_id: undefined })}>
+                Match n° {eventId} <span aria-hidden="true">×</span><span className="sr-only">(retirer ce filtre)</span>
+              </button>
+            )}
+            {voidPending && (
+              <button type="button" className="chip" onClick={() => update({ void_status: undefined })}>
+                Annulation à valider <span aria-hidden="true">×</span><span className="sr-only">(retirer ce filtre)</span>
               </button>
             )}
             {filtered && (

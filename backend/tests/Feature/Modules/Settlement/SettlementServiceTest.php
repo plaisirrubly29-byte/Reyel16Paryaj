@@ -387,6 +387,35 @@ class SettlementServiceTest extends TestCase
         $this->assertSame(BetTicketStatus::Won, $ticket->fresh()->status);
     }
 
+    public function test_a_pre_match_bet_placed_after_the_real_kick_off_of_an_advanced_match_is_void(): void
+    {
+        $first = $this->market('m1');
+        $second = $this->market('m2');
+        // Pari pris 1 h après le vrai coup d'envoi : le fournisseur a avancé le match de 3 h, notre catalogue ne le savait pas.
+        $ticket = $this->bet([[$first, 'home'], [$second, 'home']], attributes: ['placed_at' => $second->event->starts_at->copy()->subHours(2)]);
+        Event::whereKey($second->event_id)->update(['starts_at' => $second->event->starts_at->copy()->subHours(3)]);
+
+        $this->finish($first, '1', '0');
+        $this->finish($second->fresh(), '2', '0'); // gagnant sur le score : annulé quand même
+
+        $late = $ticket->selections()->where('market_id', $second->id)->first();
+        $this->assertSame(BetSelectionStatus::Void, $late->status);
+        $this->assertNull($late->result_id);
+        $this->assertSame(BetTicketStatus::Won, $ticket->fresh()->status);
+        $this->assertSame(205_00, $ticket->fresh()->payout_minor); // 100 × 2,05 × 1
+    }
+
+    public function test_a_pre_match_bet_placed_before_the_real_kick_off_of_an_advanced_match_is_settled_on_its_score(): void
+    {
+        $market = $this->market();
+        $ticket = $this->bet([[$market, 'home']], attributes: ['placed_at' => $market->event->starts_at->copy()->subHours(5)]);
+        Event::whereKey($market->event_id)->update(['starts_at' => $market->event->starts_at->copy()->subHours(3)]);
+
+        $this->finish($market->fresh(), '0', '1');
+
+        $this->assertSame(BetTicketStatus::Lost, $ticket->fresh()->status);
+    }
+
     public function test_a_match_played_late_beyond_48_hours_is_void_whatever_the_score(): void
     {
         $first = $this->market('m1');

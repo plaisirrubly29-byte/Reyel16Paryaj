@@ -19,6 +19,24 @@ export const MARKET_STATUS_LABELS: Record<MarketStatus, string> = {
   settled: 'Réglé',
 };
 
+/**
+ * Sélection vue par l'administration. Repères d'une cote fixée à la main (V2-D03) : cote calculée (marge de
+ * l'opérateur), bookmaker de référence, meilleure cote suivie (repère contre l'arbitrage) ; null pour un marché maison.
+ */
+export type AdminSelection = {
+  id: string;
+  key: string;
+  label: string;
+  name: string;
+  /** Cote proposée aux joueurs. */
+  odds: string;
+  computed_odds?: string | null;
+  provider_odds?: string | null;
+  best_odds?: string | null;
+  /** true : cote fixée à la main en vigueur. */
+  adjusted?: boolean;
+};
+
 /** Marché vu par l'administration (GET /admin/markets/{id}, P6-02) : tous statuts, origine et fraîcheur. */
 export type AdminMarket = {
   id: string;
@@ -33,7 +51,7 @@ export type AdminMarket = {
   origin: { provider: string | null; external_id: string | null; bookmaker: string | null };
   freshness: { odds_updated_at: string | null; age_seconds: number | null; max_age_minutes: number; stale: boolean };
   bettable: boolean;
-  selections?: { id: string; key: string; label: string; name: string; odds: string }[];
+  selections?: AdminSelection[];
   updated_at: string | null;
 };
 
@@ -50,11 +68,59 @@ export type AdminEvent = {
   origin: { provider: string; external_id: string };
   last_synced_at: string | null;
   result_received_at: string | null;
+  /** Masqué par l'administration : retiré du site, plus pariable. */
+  hidden?: { at: string; reason: string | null } | null;
+  /** Heure ou statut fixés par l'administration : la synchronisation ne les remplace plus. */
+  admin_locked_at?: string | null;
   markets_count: Record<MarketStatus, number>;
   markets?: AdminMarket[];
 };
 
-export type EventFilters = { search?: string; status?: EventStatus; date?: string; market_status?: MarketStatus; page: number };
+/** stuck : matchs sans résultat dont des sélections attendent depuis plus de 6 h après le début. */
+export type EventFilters = { search?: string; status?: EventStatus; date?: string; market_status?: MarketStatus; stuck?: 1; page: number };
+
+export type EventChange = {
+  starts_at?: string;
+  status?: 'scheduled' | 'postponed' | 'cancelled';
+  hidden?: boolean;
+  reason: string;
+  idempotencyKey: string;
+};
+
+/** Réponse d'une modification : l'annulation d'un match commencé renvoie la demande à faire valider. */
+export type EventChangeResult = { data: AdminEvent; meta: { result_correction_id: string | null } };
+
+/** Modifier un match (events.update) : heure, report, annulation (D-05), masquage ; motif obligatoire, audité. */
+export function useUpdateEvent(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ idempotencyKey, ...body }: EventChange) =>
+      api<EventChangeResult>(`/admin/events/${encodeURIComponent(eventId)}`, { method: 'PATCH', body, idempotencyKey }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'events'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'result-corrections'], exact: false });
+    },
+  });
+}
+
+export type EventMarketsAction = { action: 'suspend' | 'reopen'; reason: string; idempotencyKey: string };
+
+/** Suspendre ou rouvrir tous les marchés d'un match (markets.suspend), motif obligatoire. */
+export function useEventMarkets(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ action, reason, idempotencyKey }: EventMarketsAction) =>
+      api<{ data: AdminEvent; meta: { markets_changed: number } }>(`/admin/events/${encodeURIComponent(eventId)}/${action}`, {
+        method: 'POST',
+        body: { reason },
+        idempotencyKey,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'events'], exact: false }),
+  });
+}
 
 export function useAdminEvents(filters: EventFilters) {
   return useQuery({

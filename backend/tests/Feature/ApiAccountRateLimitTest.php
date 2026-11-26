@@ -67,7 +67,7 @@ class ApiAccountRateLimitTest extends TestCase
 
     public function test_guests_are_not_counted_by_this_limit(): void
     {
-        // Sans compte : seules les limites propres aux routes publiques s'appliquent (ici, aucune sur /me).
+        // Sans compte : pas de limite par compte ; le visiteur a sa propre limite par IP, large (ApiGuestRateLimitTest).
         for ($i = 0; $i < 6; $i++) {
             $this->getJson('/api/v1/me')->assertUnauthorized();
         }

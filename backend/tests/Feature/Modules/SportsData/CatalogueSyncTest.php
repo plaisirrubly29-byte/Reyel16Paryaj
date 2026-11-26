@@ -166,6 +166,27 @@ class CatalogueSyncTest extends TestCase
         $this->assertSame(1, $this->h2h('fake-1')->odds_version);
     }
 
+    public function test_a_match_advanced_to_a_past_time_gets_its_new_start_time_only(): void
+    {
+        $this->sync();
+        $kickOff = CarbonImmutable::now()->subMinutes(30)->startOfSecond();
+        $this->fake->setStartsAt('fake-1', $kickOff)
+            ->setOdds('fake-1', 'h2h', ['Arsenal' => '1.50', 'Chelsea' => '5.00', 'Draw' => '4.00'])
+            ->setOddsUpdatedAt(CarbonImmutable::now());
+
+        $this->sync();
+
+        $event = Event::where('external_id', 'fake-1')->firstOrFail();
+        $this->assertTrue($event->starts_at->equalTo($kickOff));
+        $this->assertSame(EventStatus::Scheduled, $event->status);
+        $this->assertSame(1, $this->h2h('fake-1')->odds_version); // cotes d'avant-match non mises à jour
+
+        // Un match terminé n'est plus touché.
+        $event->update(['starts_at' => now()->addHour(), 'status' => EventStatus::Finished]);
+        $this->sync();
+        $this->assertTrue($event->fresh()->starts_at->isFuture());
+    }
+
     public function test_fresh_odds_lift_an_automatic_suspension_but_not_an_admin_one(): void
     {
         $this->sync();
@@ -357,6 +378,43 @@ class CatalogueSyncTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame(3, Event::count());
+    }
+
+    public function test_without_the_competition_list_the_known_competitions_are_still_synced(): void
+    {
+        // Première synchro normale : les compétitions entrent au catalogue.
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->artisan('sports-data:sync')->assertSuccessful();
+
+        // Panne passagère de /sports (502 chez The Odds API) : les cotes des compétitions connues sont quand même
+        // rafraîchies, au lieu de vieillir jusqu'à la synchro suivante.
+        $this->fake = new class extends FakeSportsDataProvider
+        {
+            public function sports(): array
+            {
+                throw new SportsDataException(SportsDataException::UNAVAILABLE, 'The Odds API 502 sur /sports');
+            }
+        };
+        $this->app->instance(SportsDataProvider::class, $this->fake);
+        $this->fake->setOdds('fake-1', 'h2h', ['Arsenal' => '1.95', 'Chelsea' => '3.60', 'Draw' => '3.30'])
+            ->setOddsUpdatedAt(CarbonImmutable::now());
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('compétitions déjà au catalogue synchronisées')
+            ->expectsOutputToContain('compétitions : basketball_nba, soccer_epl')
+            ->assertSuccessful();
+
+        $this->assertSame(2, $this->h2h('fake-1')->odds_version);
+    }
+
+    public function test_without_the_competition_list_nor_known_competitions_the_sync_fails(): void
+    {
+        config(['sports_data.sports' => ['*'], 'sports_data.budget_enabled' => false]);
+        $this->fake->failWith(SportsDataException::UNAVAILABLE);
+
+        $this->artisan('sports-data:sync')
+            ->expectsOutputToContain('Liste des compétitions indisponible')
+            ->assertFailed();
     }
 
     public function test_a_competition_removed_from_the_list_leaves_the_catalogue_and_comes_back_when_listed_again(): void

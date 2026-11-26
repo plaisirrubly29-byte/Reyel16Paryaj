@@ -18,6 +18,10 @@ x-backend: &backend
   env_file: .env
   environment:
     REDIS_HOST: redis
+  # Documents KYC chiffrés (V2-C03) : hors de l'image, conservés entre deux déploiements et partagés avec queue ;
+  # à sauvegarder avec la base.
+  volumes:
+    - kyc_documents:/var/www/backend/storage/app/kyc
   restart: unless-stopped
   depends_on:
     redis:
@@ -58,6 +62,7 @@ services:
     image: ${REGISTRY_IMAGE}-web:${IMAGE_TAG}
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?SITE_ADDRESS manquant}
+      SITE_REDIRECT_FROM: ${SITE_REDIRECT_FROM:-http://redirect.invalid}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
     ports:
       - "${HTTP_PORT:-80}:80"
@@ -73,5 +78,6 @@ services:
 
 volumes:
   redisdata:
+  kyc_documents:
   caddy_data:
   caddy_config:

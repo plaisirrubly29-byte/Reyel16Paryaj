@@ -13,6 +13,7 @@ use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Selection;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
+use App\Modules\SportsData\Services\LiveOddsService;
 use App\Modules\Wallet\Enums\LedgerEntryType;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
@@ -157,6 +158,47 @@ class PlaceBetTest extends TestCase
         $this->bet([[$this->selection(), '1.95']])->assertCreated()->assertJsonPath('data.total_odds', '1.95');
     }
 
+    /** Audit 2026-11-18 : la ligne passe de 2.5 à 3.5 à cote égale ; la version vue est périmée, le pari est refusé. */
+    public function test_a_changed_line_with_the_same_odds_is_refused_when_the_seen_version_is_stale(): void
+    {
+        $over = $this->selection('fake-1', 'totals', 'over');
+        $seenOdds = (string) $over->odds;
+        $seenVersion = $over->market->odds_version;
+        $this->fake->setOdds('fake-1', 'totals', ['Over' => $seenOdds, 'Under' => (string) $this->selection('fake-1', 'totals', 'under')->odds], '3.5');
+        app(CatalogueSyncService::class)->sync('soccer_epl');
+
+        $this->assertSame('3.5', rtrim(rtrim((string) $over->market->fresh()->line, '0'), '.'));
+        $this->assertSame($seenOdds, (string) $over->fresh()->odds);
+
+        $this->betSeen($over, $seenOdds, $seenVersion)
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'odds_changed')
+            ->assertJsonPath('error.details.selections.0.odds_version', $seenVersion + 1)
+            ->assertJsonPath('error.details.selections.0.label', '> 3.5');
+
+        $this->assertSame(0, BetTicket::count());
+        $this->assertSame(1000_00, $this->balance());
+
+        // Le joueur confirme la nouvelle ligne : accepté.
+        $this->betSeen($over, $seenOdds, $seenVersion + 1)->assertCreated();
+    }
+
+    public function test_the_current_version_is_accepted_and_the_version_stays_optional(): void
+    {
+        $home = $this->selection();
+
+        $this->betSeen($home, (string) $home->odds, $home->market->odds_version)->assertCreated();
+        $this->bet([[$home]])->assertCreated(); // anciens clients : sans odds_version
+    }
+
+    private function betSeen(Selection $selection, string $odds, int $version): TestResponse
+    {
+        return $this->actingAs($this->player)->postJson('/api/v1/bets', [
+            'stake' => ['minor' => 100_00, 'currency' => 'HTG'],
+            'selections' => [['selection_id' => $selection->id, 'odds' => $odds, 'odds_version' => $version]],
+        ], ['Idempotency-Key' => (string) Str::uuid()]);
+    }
+
     public function test_the_client_odds_is_never_the_authority(): void
     {
         $this->bet([[$this->selection(), '50.00']])->assertStatus(409);
@@ -181,11 +223,33 @@ class PlaceBetTest extends TestCase
         $this->assertSame(0, BetTicket::count());
     }
 
+    public function test_a_match_advanced_by_the_provider_to_a_past_time_closes_pre_match_betting(): void
+    {
+        // Audit B1 : The Odds avance le coup d'envoi à une heure déjà passée ; notre catalogue l'attendait demain.
+        $selection = $this->selection();
+        $kickOff = now()->subMinutes(20)->startOfSecond()->toImmutable();
+        $this->fake->setStartsAt('fake-1', $kickOff);
+
+        app(CatalogueSyncService::class)->sync('soccer_epl');
+
+        $event = Event::where('external_id', 'fake-1')->firstOrFail();
+        $this->assertTrue($event->starts_at->equalTo($kickOff));
+        $this->assertSame(EventStatus::Scheduled, $event->status);
+        $this->bet([[$selection->fresh()]])->assertUnprocessable()->assertJsonPath('error.code', 'selection_unavailable');
+        $this->assertSame(0, BetTicket::count());
+
+        // L'autre match, toujours à venir, reste pariable.
+        $this->bet([[$this->selection('fake-2')]])->assertCreated();
+    }
+
     public function test_a_live_match_cannot_be_bet_unless_live_betting_is_allowed(): void
     {
         // Revue P8-02, E1 : un joueur qui voit un but parierait sur la cote d'avant le but.
         $selection = $this->selection();
-        Event::where('external_id', 'fake-1')->update(['status' => EventStatus::Live, 'starts_at' => now()->subMinutes(80)]);
+        Event::where('external_id', 'fake-1')->update([
+            'status' => EventStatus::Live, 'starts_at' => now()->subMinutes(80),
+            'home_score' => '0', 'away_score' => '0', 'score_checked_at' => now(),
+        ]);
         $selection->market->update(['odds_updated_at' => now()]);
 
         $this->assertFalse(config('betting.allow_live'));
@@ -195,8 +259,10 @@ class PlaceBetTest extends TestCase
         $this->assertSame(0, BetTicket::count());
         $this->assertSame(1000_00, $this->balance());
 
+        // Autorisé : cote du modèle en direct, ticket en attente d'acceptation (D-20, LiveBettingTest).
         config(['betting.allow_live' => true]);
-        $this->bet([[$selection]])->assertCreated();
+        $odds = app(LiveOddsService::class)->quote($selection->market->fresh())->odds['home'];
+        $this->bet([[$selection, $odds]])->assertStatus(202)->assertJsonPath('data.status', 'awaiting');
         $this->assertTrue(BetTicket::sole()->rules_snapshot['allow_live']);
     }
 

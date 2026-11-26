@@ -155,6 +155,10 @@ class CatalogueSyncService
 
         $report->skipped += count($events) - $selected->count();
 
+        if (! $live) {
+            $this->closeAdvanced($events, $report);
+        }
+
         foreach ($selected as $data) {
             try {
                 DB::transaction(fn () => $this->syncEvent($data, $report, $live));
@@ -167,6 +171,34 @@ class CatalogueSyncService
         Log::info('sports_data.sync_done', $report->toArray());
 
         return $report;
+    }
+
+    /**
+     * Match avancé par le fournisseur (audit B1) : son heure reçue est déjà passée alors que notre catalogue l'attend
+     * encore plus tard. Seule l'heure de début est mise à jour (pas les cotes) : l'avant-match se ferme aussitôt
+     * (BetPlacementService::isOpen() et le catalogue demandent une heure future) et le direct le reprend s'il est actif.
+     * Les paris placés entre-temps sont annulés au règlement (D-05, SettlementService).
+     *
+     * @param  list<EventData>  $events
+     */
+    private function closeAdvanced(array $events, SyncReport $report): void
+    {
+        foreach ($events as $data) {
+            if ($data->startsAt->isFuture()) {
+                continue;
+            }
+
+            $updated = Event::where('provider', $this->provider->name())
+                ->where('external_id', $data->externalId)
+                ->where('status', EventStatus::Scheduled)
+                ->where('starts_at', '>', $data->startsAt)
+                ->update(['starts_at' => $data->startsAt, 'last_synced_at' => now()]);
+
+            if ($updated > 0) {
+                $report->eventsUpdated += $updated;
+                Log::warning('sports_data.event_advanced', ['id' => $data->externalId, 'starts_at' => $data->startsAt->toIso8601String()]);
+            }
+        }
     }
 
     private function syncEvent(EventData $data, SyncReport $report, bool $live = false): void
@@ -190,12 +222,16 @@ class CatalogueSyncService
             return;
         }
 
+        // Heure ou statut fixés par un administrateur (report, nouvelle heure) : la synchro ne les remplace plus. Le
+        // match passe quand même « en direct » quand la synchro en direct le voit joué.
+        $locked = $event->admin_locked_at !== null;
+
         $event->fill([
             'competition_id' => $competition->id,
             'home_team_id' => Team::firstOrCreate(['sport_id' => $sportId, 'name' => trim($data->homeTeam)])->id,
             'away_team_id' => Team::firstOrCreate(['sport_id' => $sportId, 'name' => trim($data->awayTeam)])->id,
-            'starts_at' => $data->startsAt,
-            'status' => $live ? EventStatus::Live : EventStatus::Scheduled,
+            'starts_at' => $locked ? $event->starts_at : $data->startsAt,
+            'status' => $live ? EventStatus::Live : ($locked ? $event->status : EventStatus::Scheduled),
             'last_synced_at' => now(),
         ])->save();
 
@@ -219,16 +255,22 @@ class CatalogueSyncService
                 continue;
             }
 
+            // Cote du bookmaker de référence et meilleure cote suivie, gardées pour l'administration (V2-D03) : repères
+            // d'une cote fixée à la main. Aucun appel de plus au fournisseur.
+            $sources = $this->sourceOdds($data, $key, $line);
+            $provider = array_map(fn (array $s) => $s['odds'], $selections);
+            $best = $this->bestOdds($provider, $sources);
+
             // Argent réel : cote juste (moyenne des bookmakers) + marge de l'opérateur (V2-D03, D-18).
             if (OddsMargin::enabled()) {
                 $selections = OddsMargin::apply(
                     $selections,
-                    $this->sourceOdds($data, $key, $line),
+                    $sources,
                     OddsMargin::rate($data->sportKey, $key, $live),
                 );
             }
 
-            if ($this->syncMarket($event, $market, $selections, $line)) {
+            if ($this->syncMarket($event, $market, $selections, $line, $provider, $best)) {
                 $report->oddsChanged++;
             }
         }
@@ -236,6 +278,109 @@ class CatalogueSyncService
         if (! $live) {
             $this->syncHouseMarkets($event, $data, $report);
         }
+
+        if (str_starts_with($data->sportKey, 'soccer')) {
+            $this->calibrateLiveModel($event, $data, $live);
+        }
+    }
+
+    /**
+     * Modèle de cotes en direct (LiveOddsModel, D-20) : force offensive de chaque équipe tirée de la cote juste des
+     * bookmakers (1X2 et plus/moins, sans leur marge). Avant le match : point de départ, avec le coefficient des nuls.
+     * Pendant le match : recalage sur les cotes en direct de The Odds API, seulement si elles sont plus récentes que le
+     * dernier calage, prises après le dernier changement de score et pas plus récentes que le score connu (une cote qui
+     * intègre un but que nous ne connaissons pas encore fausserait la force des équipes). Une erreur de calcul ne touche
+     * pas au reste du match.
+     */
+    private function calibrateLiveModel(Event $event, EventData $data, bool $live): void
+    {
+        try {
+            [$h2h] = $this->pickMarket($data, 'h2h');
+            $results = array_values(array_filter(
+                $this->sourceOdds($data, 'h2h', null),
+                fn (array $odds) => isset($odds['home'], $odds['draw'], $odds['away']) && count($odds) === 3,
+            ));
+            if ($h2h === null || $results === []) {
+                return;
+            }
+            $result = $this->fairProbabilities($results);
+
+            [$totals, , $line] = $this->pickMarket($data, 'totals');
+            $over = null;
+            if ($totals !== null && $line !== null) {
+                $overs = array_values(array_filter(
+                    $this->sourceOdds($data, 'totals', $line),
+                    fn (array $odds) => isset($odds['over'], $odds['under']) && count($odds) === 2,
+                ));
+                $over = $overs === [] ? null : $this->fairProbabilities($overs)['over'];
+            }
+            $line = $line === null ? null : (float) $line;
+            $at = $h2h->updatedAt;
+            $defaultTotal = (float) config('sports_data.live_model.default_total_goals', 2.6);
+
+            if (! $live) {
+                $rates = LiveOddsModel::fit($result, $line, $over, 0, 0, LiveOddsModel::PLAYING_MINUTES, $defaultTotal);
+                if ($rates !== null) {
+                    $event->update([
+                        'live_home_rate' => $this->rate($rates[0]),
+                        'live_away_rate' => $this->rate($rates[1]),
+                        'live_draw_boost' => round(LiveOddsModel::drawBoost($result, $rates[0], $rates[1]), 3),
+                        'live_model_at' => $at,
+                    ]);
+                }
+
+                return;
+            }
+
+            $event->refresh();
+            if ($event->home_score === null || $event->away_score === null || $event->score_checked_at === null
+                || $at->gt($event->score_checked_at)
+                || ($event->score_changed_at !== null && $at->lt($event->score_changed_at))
+                || ($event->live_model_at !== null && $at->lte($event->live_model_at))) {
+                return;
+            }
+
+            $previousTotal = (float) $event->live_home_rate + (float) $event->live_away_rate;
+            $rates = LiveOddsModel::fit($result, $line, $over, (int) $event->home_score, (int) $event->away_score,
+                LiveOddsModel::remainingMinutes($event->starts_at, $at), $previousTotal > 0 ? $previousTotal : $defaultTotal);
+            if ($rates !== null) {
+                $event->update([
+                    'live_home_rate' => $this->rate($rates[0]),
+                    'live_away_rate' => $this->rate($rates[1]),
+                    'live_draw_boost' => $event->live_draw_boost ?? 1.0,
+                    'live_model_at' => $at,
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('sports_data.live_model_failed', ['id' => $data->externalId, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Probabilités justes d'un marché : probabilités implicites de chaque bookmaker ramenées à 1 (sans sa marge),
+     * puis moyenne des bookmakers.
+     *
+     * @param  non-empty-list<array<string, string>>  $sources
+     * @return array<string, float>
+     */
+    private function fairProbabilities(array $sources): array
+    {
+        $fair = [];
+        foreach ($sources as $odds) {
+            $implied = array_map(fn (string $o) => 1 / (float) $o, $odds);
+            $sum = array_sum($implied);
+            foreach ($implied as $key => $p) {
+                $fair[$key] = ($fair[$key] ?? 0.0) + $p / $sum / count($sources);
+            }
+        }
+
+        return $fair;
+    }
+
+    /** Buts attendus sur un match, bornés pour la colonne et contre une cote aberrante. */
+    private function rate(float $goals): float
+    {
+        return round(max(0.05, min(15.0, $goals)), 3);
     }
 
     /**
@@ -392,6 +537,28 @@ class CatalogueSyncService
         }
 
         return $sources;
+    }
+
+    /**
+     * Meilleure cote de chaque sélection parmi les bookmakers suivis (V2-D03) : repère contre l'arbitrage quand un
+     * administrateur fixe une cote à la main. Calcul en chaînes décimales.
+     *
+     * @param  array<string, string>  $provider  cotes du bookmaker de référence
+     * @param  list<array<string, string>>  $sources
+     * @return array<string, string>
+     */
+    private function bestOdds(array $provider, array $sources): array
+    {
+        $best = $provider;
+        foreach ($sources as $odds) {
+            foreach ($odds as $key => $value) {
+                if (isset($best[$key]) && bccomp((string) $value, (string) $best[$key], 3) > 0) {
+                    $best[$key] = $value;
+                }
+            }
+        }
+
+        return $best;
     }
 
     /**
@@ -826,10 +993,17 @@ class CatalogueSyncService
     }
 
     /**
+     * Cote proposée de chaque sélection : la cote calculée ($odds), sauf une cote fixée à la main en vigueur
+     * (selections.adjusted, V2-D03), que la synchronisation n'écrase pas. Cote calculée, cote du bookmaker de référence
+     * et meilleure cote suivie sont mises à jour à chaque passage, sans nouvelle version si la cote proposée ne change
+     * pas ($provider et $best : null pour un marché maison, sans bookmaker).
+     *
      * @param  array<string, array{name: string, odds: string}>  $odds
-     * @return bool true si les cotes ou la ligne ont changé (nouvelle version)
+     * @param  array<string, string>|null  $provider
+     * @param  array<string, string>|null  $best
+     * @return bool true si les cotes proposées ou la ligne ont changé (nouvelle version)
      */
-    private function syncMarket(Event $event, MarketData $source, array $odds, ?string $line): bool
+    private function syncMarket(Event $event, MarketData $source, array $odds, ?string $line, ?array $provider = null, ?array $best = null): bool
     {
         /** @var Market $market */
         $market = $event->markets()->firstOrNew(['key' => $source->key]);
@@ -839,10 +1013,14 @@ class CatalogueSyncService
             return false;
         }
 
-        $current = $market->exists
-            ? $market->selections()->pluck('odds', 'key')->map(fn ($o) => $this->normalize((string) $o))->all()
-            : [];
-        $incoming = array_map(fn ($s) => $this->normalize($s['odds']), $odds);
+        // Une seule lecture des sélections (comme avant) : sert à la comparaison et aux mises à jour.
+        $existing = $market->exists ? $market->selections()->get()->keyBy('key') : collect();
+        $current = $existing->map(fn ($s) => $this->normalize((string) $s->odds))->all();
+        $incoming = [];
+        foreach ($odds as $key => $selection) {
+            $kept = $existing->get($key);
+            $incoming[$key] = $kept?->adjusted ? $this->normalize((string) $kept->odds) : $this->normalize($selection['odds']);
+        }
         ksort($current);
         ksort($incoming);
         // Un changement de ligne (ex. 2.5 → 3.5) change le pari même à cotes égales : nouvelle version.
@@ -867,20 +1045,33 @@ class CatalogueSyncService
             'odds_updated_at' => $source->updatedAt,
         ])->save();
 
-        if (! $changed) {
-            return false;
+        foreach ($odds as $key => $selection) {
+            // Sélection déjà lue, sinon nouvelle ; save() n'écrit rien si rien n'a changé (test de charge P8-03).
+            $model = $existing->get($key) ?? $market->selections()->make(['key' => $key]);
+            $model->fill([
+                'name' => $selection['name'],
+                'odds' => $incoming[$key],
+                'computed_odds' => $this->normalize($selection['odds']),
+                'provider_odds' => isset($provider[$key]) ? $this->normalize($provider[$key]) : null,
+                'best_odds' => isset($best[$key]) ? $this->normalize($best[$key]) : null,
+            ])->save();
+
+            if ($changed) {
+                OddsSnapshot::create([
+                    'selection_id' => $model->id,
+                    'odds_version' => $market->odds_version,
+                    'odds' => $incoming[$key],
+                    'computed_odds' => $model->computed_odds,
+                    'provider_odds' => $model->provider_odds,
+                    'adjusted' => (bool) $model->adjusted,
+                    'line' => $line,
+                    'provider_updated_at' => $source->updatedAt,
+                ]);
+            }
         }
 
-        foreach ($odds as $key => $selection) {
-            $model = $market->selections()->updateOrCreate(['key' => $key], $selection);
-
-            OddsSnapshot::create([
-                'selection_id' => $model->id,
-                'odds_version' => $market->odds_version,
-                'odds' => $selection['odds'],
-                'line' => $line,
-                'provider_updated_at' => $source->updatedAt,
-            ]);
+        if (! $changed) {
+            return false;
         }
 
         // Une sélection disparue du fournisseur ne doit plus être proposée.

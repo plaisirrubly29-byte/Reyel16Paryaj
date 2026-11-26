@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Catalogue\Http\Controllers\CatalogueController;
+use App\Modules\Catalogue\Http\Controllers\LiveOddsController;
 use App\Modules\Catalogue\Http\Middleware\CacheCatalogueResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -17,3 +18,7 @@ Route::middleware(['throttle:catalogue', CacheCatalogueResponse::class])->group(
     Route::get('/events', [CatalogueController::class, 'events']);
     Route::get('/events/{id}/markets', [CatalogueController::class, 'markets']);
 });
+
+// Paris en direct (D-20) : score et cotes du moment des matchs affichés, relus toutes les quelques secondes par l'onglet
+// Live, la page du match et le coupon. Jamais en cache (la cote change à chaque seconde) ; réponse légère.
+Route::middleware('throttle:live-odds')->get('/live/odds', LiveOddsController::class);

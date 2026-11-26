@@ -1,4 +1,6 @@
+import { useId } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Icon } from '../../../shared/components/Icon';
 import moncashLogo from '../../../assets/payments/moncash.jpg';
 import natcashLogo from '../../../assets/payments/natcash.jpg';
 
@@ -26,8 +28,19 @@ function MethodLogo({ option, decorative = false }: { option: MethodOption; deco
   return <span className="method-tile-logo" aria-hidden="true">{option.label.charAt(0)}</span>;
 }
 
-/** Étape 1 du dépôt ou du retrait : le joueur touche le logo de son portefeuille mobile. */
-export function MethodPicker({ title, options, onPick }: { title: string; options: MethodOption[]; onPick: (key: string) => void }) {
+/**
+ * Étape 1 du dépôt ou du retrait : une carte par portefeuille mobile (logo officiel, nom, ligne d'aide). Le nom lu
+ * par les lecteurs d'écran reste celui du moyen (« MonCash ») ; la ligne d'aide en est la description.
+ */
+export function MethodPicker({ title, options, onPick, describe }: {
+  title: string;
+  options: MethodOption[];
+  onPick: (key: string) => void;
+  /** Ligne d'aide sous le nom du moyen (ex. « Payer depuis votre compte »). */
+  describe?: (option: MethodOption) => string;
+}) {
+  const id = useId();
+
   return (
     <div className="method-picker" role="group" aria-label={title}>
       <p className="method-picker-title">{title}</p>
@@ -37,13 +50,33 @@ export function MethodPicker({ title, options, onPick }: { title: string; option
             key={o.key}
             type="button"
             className={`method-tile method-tile-${o.key}${LOGOS[o.key] ? ' has-logo' : ''}`}
+            aria-label={o.label}
+            aria-describedby={describe ? `${id}-${o.key}` : undefined}
             onClick={() => onPick(o.key)}
           >
-            <MethodLogo option={o} />
-            {!LOGOS[o.key] && <span className="method-tile-label">{o.label}</span>}
+            <span className="method-tile-media"><MethodLogo option={o} /></span>
+            <span className="method-tile-text">
+              <span className="method-tile-label">{o.label}</span>
+              {describe && <span id={`${id}-${o.key}`} className="method-tile-hint">{describe(o)}</span>}
+            </span>
+            <span className="method-tile-arrow" aria-hidden="true"><Icon name="chevron" size={18} /></span>
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Chargement des moyens de paiement : deux cartes grisées à la place des vraies, sans saut de mise en page. */
+export function MethodPickerSkeleton() {
+  return (
+    <div className="method-tiles method-tiles-loading" role="status" aria-label="Chargement des moyens de paiement…">
+      {[0, 1].map((i) => (
+        <span key={i} className="method-tile method-tile-skeleton" aria-hidden="true">
+          <span className="skeleton skeleton-logo" />
+          <span className="method-tile-text"><span className="skeleton skeleton-line" /><span className="skeleton skeleton-line short" /></span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -53,8 +86,8 @@ export function MethodChosen({ option, verb, onChange }: { option: MethodOption;
   return (
     <div className={`method-chosen method-tile-${option.key}`}>
       <MethodLogo option={option} decorative />
-      <span>{verb} <strong>{option.label}</strong></span>
-      {onChange && <button type="button" className="link-button" onClick={onChange}>Changer</button>}
+      <span className="method-chosen-text"><span className="muted small">{verb}</span> <strong>{option.label}</strong></span>
+      {onChange && <button type="button" className="method-chosen-change" onClick={onChange}>Changer</button>}
     </div>
   );
 }

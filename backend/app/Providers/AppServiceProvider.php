@@ -9,6 +9,8 @@ use App\Modules\Compliance\Contracts\DepositHistory;
 use App\Modules\Compliance\Contracts\LossHistory;
 use App\Modules\Compliance\Contracts\SpendingHistory;
 use App\Modules\Compliance\Contracts\StakeHistory;
+use App\Modules\IdentityAccess\Contracts\HumanVerifier;
+use App\Modules\IdentityAccess\Services\TurnstileVerifier;
 use App\Modules\IdentityAccess\Support\PhoneNumber;
 use App\Modules\Lottery\Contracts\LotteryProvider;
 use App\Modules\Lottery\Providers\FakeLotteryProvider;
@@ -74,6 +76,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(QueueHeartbeat::class);
 
         // Mises d'un joueur pour les limites de jeu responsable : fournies par Betting à Compliance (P7-02).
+        // Vérification « humain » (D-17) : Cloudflare Turnstile.
+        $this->app->bind(HumanVerifier::class, TurnstileVerifier::class);
         $this->app->bind(StakeHistory::class, TicketStakeHistory::class);
         // Dépôts d'un joueur pour ses limites de dépôt : fournis par Wallet à Compliance (V2-B06).
         $this->app->bind(DepositHistory::class, LedgerDepositHistory::class);
@@ -138,15 +142,20 @@ class AppServiceProvider extends ServiceProvider
 
     private function configureRateLimiting(): void
     {
-        // Toute l'API (throttleApi, bootstrap/app.php), par compte connecté (revue P8-02, F12) : /me, /wallet, /admin/*
-        // et les routes futures. Jamais par IP (cybercafés). Visiteur : aucune limite ici, ses routes ont les leurs
-        // (connexion, inscription, catalogue, webhooks).
+        // Toute l'API (throttleApi, bootstrap/app.php) : par compte connecté (revue P8-02, F12), jamais par IP
+        // (cybercafés) ; visiteur non connecté : par IP, large (D-17, PS-5), en plus des limites de ses routes.
+        // Les webhooks de paiement en sont retirés (withoutMiddleware), avec leur propre limite.
         RateLimiter::for('api', function (Request $request) {
             $id = $request->user()?->getAuthIdentifier();
 
-            return $id === null
-                ? Limit::none()
-                : Limit::perMinute(config('identity.api_rate_per_minute'))->by('api-account:'.$id);
+            if ($id !== null) {
+                return Limit::perMinute(config('identity.api_rate_per_minute'))->by('api-account:'.$id);
+            }
+
+            // Visiteur non connecté (D-17, PS-5) : par IP, sur toute l'API ; 0 = sans limite (urgence).
+            $guest = (int) config('identity.api_guest_rate_per_minute');
+
+            return $guest > 0 ? Limit::perMinute($guest)->by('api-guest:'.$request->ip()) : Limit::none();
         });
 
         RateLimiter::for('login', function (Request $request) {
@@ -208,5 +217,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('payments-withdrawal', fn (Request $request) => Limit::perMinute(5)->by('payments-withdrawal:'.$request->user()?->id));
 
         RateLimiter::for('catalogue', fn (Request $request) => Limit::perMinute(120)->by('catalogue:'.$request->ip()));
+        // Cotes en direct relues toutes les 3 s par page ouverte (D-20) ; large, plusieurs joueurs partagent souvent une IP.
+        RateLimiter::for('live-odds', fn (Request $request) => Limit::perMinute(240)->by('live-odds:'.$request->ip()));
     }
 }

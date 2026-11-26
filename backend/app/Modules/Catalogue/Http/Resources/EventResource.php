@@ -4,6 +4,7 @@ namespace App\Modules\Catalogue\Http\Resources;
 
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Services\LiveOddsModel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -31,6 +32,8 @@ class EventResource extends JsonResource
             'score' => $this->status === EventStatus::Live && $this->home_score !== null && $this->away_score !== null
                 ? ['home' => $this->home_score, 'away' => $this->away_score]
                 : null,
+            // Minute de jeu estimée d'après l'heure de début (match en cours), null pendant la pause et avant le match.
+            'minute' => $this->status === EventStatus::Live ? LiveOddsModel::minute($this->starts_at, now()) : null,
             // Paris maison REYEL 16 disponibles sur la page du match (repère « Spécial R16 » de la liste, V2-D10).
             'has_house_markets' => (bool) ($this->has_house_markets ?? false),
             // Le libellé d'un marché dépend du sport ("Nombre de buts" au football) : on rattache l'événement

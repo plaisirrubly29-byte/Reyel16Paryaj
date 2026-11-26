@@ -5,12 +5,16 @@ import { Alert } from '../../shared/components/Alert';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
-import { since, useAdminEvent, useChangeMarketStatus, type AdminEvent, type AdminMarket } from '../api/events';
+import {
+  since, useAdminEvent, useChangeMarketStatus, useEventMarkets, useUpdateEvent, type AdminEvent, type AdminMarket, type AdminSelection,
+} from '../api/events';
+import { deviationLabel, isOpen, useOddsOverrides, useOverrideAction, type OddsOverride } from '../api/odds';
 import {
   awaitsManualResult, CORRECTION_STATUS_LABELS, currentLabel, isFirstResult, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory,
   type ResultStatus,
 } from '../api/results';
 import { EventStatusBadge, MarketStatusBadge } from '../components/MarketStatusBadge';
+import { OddsOverrideForm } from '../components/OddsOverrideForm';
 import { PageHeader } from '../components/PageHeader';
 import { ReasonForm } from '../components/ReasonForm';
 import { dateTime } from '../api/events';
@@ -20,6 +24,9 @@ export function EventDetailPage() {
   const { id = '' } = useParams();
   const event = useAdminEvent(id);
   const e = event.data;
+  // Cotes fixées à la main de ce match (V2-D03) : la fiche du match ne les donne pas.
+  const overrides = useOddsOverrides({ event_id: id, page: 1 }, Boolean(e?.markets?.length));
+  const open = overrides.data?.data.filter(isOpen) ?? [];
 
   return (
     <section className="admin-page">
@@ -42,11 +49,16 @@ export function EventDetailPage() {
             <div className="summary-item"><dt>Résultat reçu</dt><dd>{e.result_received_at ? dateTime(e.result_received_at) : '—'}</dd></div>
           </dl>
 
+          <ManageSection event={e} />
+
           <section className="admin-card stack">
             <h2 className="card-title">Marchés</h2>
             {e.markets?.length === 0 && <p className="muted">Aucun marché pour ce match.</p>}
+            <ErrorAlert error={overrides.error} onRetry={() => overrides.refetch()} />
             <ul className="market-list">
-              {e.markets?.map((m) => <MarketItem key={m.id} market={m} />)}
+              {e.markets?.map((m) => (
+                <MarketItem key={m.id} market={m} event={e} overrides={open.filter((o) => o.market_id === m.id)} />
+              ))}
             </ul>
           </section>
 
@@ -57,9 +69,180 @@ export function EventDetailPage() {
   );
 }
 
-/** Un marché : cotes, origine, fraîcheur, et suspension / réouverture avec motif (markets.suspend). */
-function MarketItem({ market }: { market: AdminMarket }) {
+/** Valeur d'un champ datetime-local (heure locale du navigateur) pour un instant ISO. */
+function localInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Gestion du match (audit du 2026-11-22) : heure, report, annulation (D-05), masquage (events.update) ; suspension ou
+ * réouverture de tous ses marchés (markets.suspend). Chaque action exige un motif, enregistré dans le journal d'audit.
+ */
+function ManageSection({ event }: { event: AdminEvent }) {
   const { data: me } = useMe();
+  const canUpdate = Boolean(me?.permissions.includes('events.update'));
+  const canSuspend = Boolean(me?.permissions.includes('markets.suspend'));
+  const update = useUpdateEvent(event.id);
+  const markets = useEventMarkets(event.id);
+  const [startsAt, setStartsAt] = useState(() => localInput(event.starts_at));
+  const [correctionId, setCorrectionId] = useState<string | null>(null);
+  const over = event.status === 'finished' || event.status === 'cancelled';
+  const schedulable = (event.status === 'scheduled' || event.status === 'postponed') && !event.result_received_at;
+  const started = new Date(event.starts_at).getTime() <= Date.now();
+  const played = event.status === 'live' || (started && event.status !== 'postponed');
+  const newTime = startsAt ? new Date(startsAt).toISOString() : '';
+  // Comparé à la minute près : le champ n'a pas de secondes.
+  const timeChanged = Boolean(newTime) && startsAt !== localInput(event.starts_at);
+
+  async function cancel(reason: string, idempotencyKey: string) {
+    const result = await update.mutateAsync({ status: 'cancelled', reason, idempotencyKey });
+    setCorrectionId(result.meta.result_correction_id);
+  }
+
+  return (
+    <section className="admin-card stack" aria-labelledby="manage-title">
+      <h2 id="manage-title" className="card-title">Gestion du match</h2>
+
+      {event.hidden && (
+        <Alert tone="warning">
+          Match masqué depuis le {dateTime(event.hidden.at)} : il n'apparaît plus sur le site et n'est plus pariable.
+          {event.hidden.reason && <> Motif : {event.hidden.reason}</>}
+        </Alert>
+      )}
+      {event.admin_locked_at && (
+        <p className="muted small">
+          Heure ou statut fixés par l'administration le {dateTime(event.admin_locked_at)} : la synchronisation ne les remplace plus.
+        </p>
+      )}
+      {correctionId && (
+        <Alert tone="info">
+          Le match a commencé : son annulation attend la validation d'un second administrateur.{' '}
+          <Link to={`/admin/settlements/${correctionId}`}>Voir la demande</Link>. Ses marchés sont suspendus en attendant.
+        </Alert>
+      )}
+      <p className="small"><Link to={`/admin/tickets?event_id=${event.id}`}>Tickets sur ce match</Link></p>
+
+      {canUpdate && schedulable && (
+        <details className="market-action">
+          <summary>Changer l'heure du match</summary>
+          <ReasonForm
+            id="event-time"
+            title="Nouvelle heure"
+            description="Les tickets gardent l'heure prévue au moment du pari : un match qui ne commence pas dans les 48 h qui la suivent voit ses sélections annulées (cote 1)."
+            submitLabel="Enregistrer l'heure"
+            incomplete={!timeChanged}
+            successMessage="Heure du match mise à jour."
+            onSubmit={(reason, idempotencyKey) => update.mutateAsync({ starts_at: newTime, reason, idempotencyKey })}
+          >
+            <div className="field">
+              <label htmlFor="event-starts-at">Début du match (heure locale)</label>
+              <input id="event-starts-at" type="datetime-local" value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
+            </div>
+          </ReasonForm>
+        </details>
+      )}
+
+      {canUpdate && schedulable && (
+        <details className="market-action">
+          <summary>{event.status === 'postponed' ? 'Remettre le match au programme' : 'Reporter le match'}</summary>
+          <ReasonForm
+            id="event-postpone"
+            title={event.status === 'postponed' ? 'Remettre au programme' : 'Reporter le match'}
+            description={event.status === 'postponed'
+              ? "Le match redevient « programmé » et revient sur le site s'il est à venir. Changez aussi son heure si elle a bougé."
+              : "Le match disparaît du site. S'il ne commence pas dans les 48 h qui suivent l'heure prévue au moment du pari, ses sélections sont annulées (cote 1) et les mises rendues."}
+            submitLabel={event.status === 'postponed' ? 'Remettre au programme' : 'Reporter'}
+            variant={event.status === 'postponed' ? 'primary' : 'danger'}
+            successMessage="Statut du match mis à jour."
+            onSubmit={(reason, idempotencyKey) => update.mutateAsync({
+              status: event.status === 'postponed' ? 'scheduled' : 'postponed',
+              ...(timeChanged ? { starts_at: newTime } : {}),
+              reason,
+              idempotencyKey,
+            })}
+          />
+        </details>
+      )}
+
+      {canUpdate && !over && !event.result_received_at && (
+        <details className="market-action">
+          <summary>Annuler le match</summary>
+          <ReasonForm
+            id="event-cancel"
+            title="Annuler le match"
+            description={played
+              ? "Le match a commencé : l'annulation sera validée par un second administrateur. À la validation, ses sélections passent à la cote 1 (simples remboursés, combinés recalculés). Ses marchés sont suspendus dès la demande."
+              : "Le match n'a pas été joué : il est annulé tout de suite. Ses sélections passent à la cote 1 (simples remboursés, combinés recalculés) et ses marchés sont fermés."}
+            submitLabel={played ? "Demander l'annulation" : 'Annuler le match'}
+            variant="danger"
+            successMessage={played ? "Demande envoyée : elle attend la validation d'un second administrateur." : 'Match annulé, tickets réglés.'}
+            onSubmit={cancel}
+          />
+        </details>
+      )}
+
+      {canUpdate && (
+        <details className="market-action">
+          <summary>{event.hidden ? 'Réafficher le match' : 'Masquer le match'}</summary>
+          <ReasonForm
+            id="event-hide"
+            title={event.hidden ? 'Réafficher le match' : 'Masquer le match'}
+            description={event.hidden
+              ? 'Le match revient sur le site ; ses marchés ouverts redeviennent pariables.'
+              : "Le match disparaît du site et n'est plus pariable. Les tickets déjà pris ne changent pas."}
+            submitLabel={event.hidden ? 'Réafficher' : 'Masquer'}
+            variant={event.hidden ? 'primary' : 'danger'}
+            successMessage="Visibilité du match mise à jour."
+            onSubmit={(reason, idempotencyKey) => update.mutateAsync({ hidden: !event.hidden, reason, idempotencyKey })}
+          />
+        </details>
+      )}
+
+      {canSuspend && !over && (
+        <>
+          <details className="market-action">
+            <summary>Suspendre tous les marchés</summary>
+            <ReasonForm
+              id="event-suspend"
+              title="Suspendre tous les marchés du match"
+              description="Plus aucun pari sur ce match, avant comme pendant la rencontre. La synchronisation ne rouvrira pas ces marchés."
+              submitLabel="Suspendre tous les marchés"
+              variant="danger"
+              successMessage="Marchés du match suspendus."
+              onSubmit={(reason, idempotencyKey) => markets.mutateAsync({ action: 'suspend', reason, idempotencyKey })}
+            />
+          </details>
+          <details className="market-action">
+            <summary>Rouvrir les marchés suspendus</summary>
+            <ReasonForm
+              id="event-reopen"
+              title="Rouvrir les marchés du match"
+              description="Rouvre les marchés suspendus par l'administration (pas ceux suspendus automatiquement pour une cote trop ancienne). Un marché n'est pariable que si sa cote est assez récente."
+              submitLabel="Rouvrir les marchés"
+              successMessage="Marchés du match rouverts."
+              onSubmit={(reason, idempotencyKey) => markets.mutateAsync({ action: 'reopen', reason, idempotencyKey })}
+            />
+          </details>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Un marché : cotes et leurs repères, origine, fraîcheur ; suspension / réouverture avec motif (markets.suspend) ;
+ * cote fixée à la main (odds.override, V2-D03).
+ */
+function MarketItem({ market, event, overrides }: { market: AdminMarket; event: AdminEvent; overrides: OddsOverride[] }) {
+  const { data: me } = useMe();
+  const selections = market.selections ?? [];
+  const overrideFor = (s: AdminSelection) => overrides.find((o) => o.selection.id === s.id);
+  // Fixer une cote : marché ouvert, match pas commencé, sélection sans demande en attente ou en vigueur.
+  const free = selections.filter((s) => !overrideFor(s));
+  const canOverride = Boolean(me?.permissions.includes('odds.override')) && market.status === 'open'
+    && new Date(event.starts_at).getTime() > Date.now() && free.length > 0;
   const change = useChangeMarketStatus(market);
   const canChange = me?.permissions.includes('markets.suspend') && (market.status === 'open' || market.status === 'suspended');
   const target = market.status === 'open' ? 'suspended' : 'open';
@@ -79,9 +262,9 @@ function MarketItem({ market }: { market: AdminMarket }) {
         </p>
       )}
 
-      <p className="selection-odds small">
-        {market.selections?.map((s) => <span key={s.id} className="odds-pill" title={s.name}>{s.label} {s.odds}</span>)}
-      </p>
+      <ul className="selections small" aria-label={`Cotes : ${market.name}`}>
+        {selections.map((s) => <SelectionRow key={s.id} selection={s} override={overrideFor(s)} />)}
+      </ul>
 
       <p className="muted small">
         Cote <strong className={market.freshness.stale ? 'text-warning' : undefined}>{market.freshness.stale ? 'périmée' : 'fraîche'}</strong>
@@ -105,7 +288,73 @@ function MarketItem({ market }: { market: AdminMarket }) {
           />
         </details>
       )}
+
+      {canOverride && (
+        <details className="market-action">
+          <summary>Fixer une cote</summary>
+          <OddsOverrideForm market={market} selections={free} />
+        </details>
+      )}
     </li>
+  );
+}
+
+/** Une sélection : cote proposée, mention « Ajustée », repères, et cote fixée à la main en attente ou en vigueur. */
+function SelectionRow({ selection: s, override }: { selection: AdminSelection; override?: OddsOverride }) {
+  const references = [
+    s.computed_odds && `calculée ${s.computed_odds}`,
+    s.provider_odds && `bookmaker ${s.provider_odds}`,
+    s.best_odds && `meilleure ${s.best_odds}`,
+  ].filter(Boolean);
+
+  return (
+    <li>
+      <div className="selection-main">
+        <strong>{s.label} · {s.name}</strong>
+        {references.length > 0 && <span className="muted">Repères : {references.join(' · ')}</span>}
+        {override?.status === 'pending' && (
+          <span>
+            Cote {override.odds} ({deviationLabel(override.deviation_percent)}) en attente de validation :{' '}
+            <Link to={`/admin/odds/${override.id}`}>voir la demande</Link>
+          </span>
+        )}
+        {override?.status === 'active' && (
+          <>
+            <span className="muted">
+              Fixée à la main par {override.requested_by?.name ?? '—'} jusqu'au {dateTime(override.expires_at)} :{' '}
+              <Link to={`/admin/odds/${override.id}`}>voir la demande</Link>
+            </span>
+            <EndOverride override={override} />
+          </>
+        )}
+      </div>
+      <div className="selection-side">
+        <span className="odds-pill" title={s.name}>{s.odds}</span>
+        {s.adjusted && <span className="badge status-suspended" title="Cote fixée à la main par l'administration">Ajustée</span>}
+      </div>
+    </li>
+  );
+}
+
+/** Revenir à la cote calculée avant la date limite (odds.override, motif obligatoire). */
+function EndOverride({ override }: { override: OddsOverride }) {
+  const { data: me } = useMe();
+  const action = useOverrideAction(override);
+  if (!me?.permissions.includes('odds.override')) return null;
+
+  return (
+    <details className="market-action">
+      <summary>Revenir à la cote calculée</summary>
+      <ReasonForm
+        id={`end-${override.id}`}
+        title="Revenir à la cote calculée"
+        description="La cote fixée à la main prend fin maintenant ; la cote calculée revient (nouvelle version de cote, les tickets placés gardent la leur)."
+        submitLabel="Revenir à la cote calculée"
+        variant="secondary"
+        successMessage="La cote calculée est de retour."
+        onSubmit={(reason, idempotencyKey) => action.mutateAsync({ action: 'end', reason, idempotencyKey })}
+      />
+    </details>
   );
 }
 

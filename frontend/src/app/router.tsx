@@ -9,14 +9,16 @@ import { AccountLayout } from '../features/account/AccountLayout';
 import { ADMIN_SECTIONS } from '../admin/navigation';
 import { NotFoundPage } from '../features/legal/pages/NotFoundPage';
 import { Spinner } from '../shared/components/Spinner';
+import { RouteError } from './RouteError';
+import { importOrReload } from './staleAssets';
 
 /**
  * Écran chargé à la demande (V2-E05, site léger) : l'administration est dans des fichiers à part, que le joueur ne
- * télécharge jamais.
+ * télécharge jamais. Si le fichier a été effacé par un déploiement, la page se recharge sur la nouvelle version.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- n'importe quel composant exporté par le module
 function lazyPage<K extends string, M extends Record<K, ComponentType<any>>>(load: () => Promise<M>, name: K) {
-  return lazy(async () => ({ default: (await load())[name] as M[K] }));
+  return lazy(async () => ({ default: (await importOrReload(load))[name] as M[K] }));
 }
 
 /** Pages joueur moins visitées, chargées à la demande (V2-E05) : le premier chargement reste léger. */
@@ -58,6 +60,8 @@ const RequirePermission = lazyPage(() => import('../admin/components/RequireAdmi
 const AdminLayout = lazyPage(() => import('./layouts/AdminLayout'), 'AdminLayout');
 const KycQueuePage = lazyPage(() => import('../admin/pages/KycQueuePage'), 'KycQueuePage');
 const KycSubmissionPage = lazyPage(() => import('../admin/pages/KycSubmissionPage'), 'KycSubmissionPage');
+const AmlAlertDetailPage = lazyPage(() => import('../admin/pages/AmlAlertDetailPage'), 'AmlAlertDetailPage');
+const AmlAlertsPage = lazyPage(() => import('../admin/pages/AmlAlertsPage'), 'AmlAlertsPage');
 const AdminHomePage = lazyPage(() => import('../admin/pages/AdminHomePage'), 'AdminHomePage');
 const AuditPage = lazyPage(() => import('../admin/pages/AuditPage'), 'AuditPage');
 const CorrectionDetailPage = lazyPage(() => import('../admin/pages/CorrectionDetailPage'), 'CorrectionDetailPage');
@@ -69,6 +73,8 @@ const LedgerPage = lazyPage(() => import('../admin/pages/LedgerPage'), 'LedgerPa
 const ReconciliationPage = lazyPage(() => import('../admin/pages/ReconciliationPage'), 'ReconciliationPage');
 const SettingsPage = lazyPage(() => import('../admin/pages/SettingsPage'), 'SettingsPage');
 const SettlementsPage = lazyPage(() => import('../admin/pages/SettlementsPage'), 'SettlementsPage');
+const OddsOverridesPage = lazyPage(() => import('../admin/pages/OddsOverridesPage'), 'OddsOverridesPage');
+const OddsOverrideDetailPage = lazyPage(() => import('../admin/pages/OddsOverrideDetailPage'), 'OddsOverrideDetailPage');
 const UserDetailPage = lazyPage(() => import('../admin/pages/UserDetailPage'), 'UserDetailPage');
 const TicketDetailPage = lazyPage(() => import('../admin/pages/TicketDetailPage'), 'TicketDetailPage');
 const TicketsPage = lazyPage(() => import('../admin/pages/TicketsPage'), 'TicketsPage');
@@ -85,6 +91,7 @@ function section(path: string, element: ReactNode, sectionPath = path.split('/')
 export const routes = [
   {
     element: <PublicLayout />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'sports', element: <SportsPage /> },
@@ -126,20 +133,25 @@ export const routes = [
     ],
   },
   // Connexion de l'équipe : hors AdminLayout (qui exige déjà une session admin).
-  { path: 'admin/login', element: <div className="admin-login">{page(<LoginPage admin />)}</div> },
+  { path: 'admin/login', element: <div className="admin-login">{page(<LoginPage admin />)}</div>, errorElement: <RouteError /> },
   {
     path: 'admin',
     element: <Suspense fallback={adminLoading}><AdminLayout /></Suspense>,
+    errorElement: <RouteError />,
     children: [
       section('', <AdminHomePage />),
       section('events', <EventsPage />),
       section('events/:id', <EventDetailPage />),
+      section('odds', <OddsOverridesPage />),
+      section('odds/:id', <OddsOverrideDetailPage />),
       section('settlements', <SettlementsPage />),
       section('settlements/:id', <CorrectionDetailPage />),
       section('users', <UsersPage />),
       section('users/:id', <UserDetailPage />),
       section('kyc', <KycQueuePage />),
       section('kyc/:id', <KycSubmissionPage />),
+      section('aml', <AmlAlertsPage />),
+      section('aml/:id', <AmlAlertDetailPage />),
       section('tickets', <TicketsPage />),
       section('tickets/:id', <TicketDetailPage />),
       section('risk', <RiskPage />),

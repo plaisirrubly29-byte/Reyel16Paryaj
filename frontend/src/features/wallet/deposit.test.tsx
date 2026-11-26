@@ -32,9 +32,9 @@ const base = {
   'GET /payments/withdrawals': { status: 200, body: page([]) },
 };
 
-/** Bouton « Dépôt » sous le solde, puis le moyen de paiement choisi (si donné). */
+/** Bouton « Déposer » sous le solde, puis le moyen de paiement choisi (si donné). */
 async function openDeposit(method?: string) {
-  await userEvent.click(await screen.findByRole('button', { name: 'Dépôt' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Déposer' }));
   if (method) await userEvent.click(await screen.findByRole('button', { name: method }));
 }
 
@@ -61,7 +61,7 @@ describe('dépôt en ligne', () => {
     const router = renderApp('/wallet');
 
     // Rien d'ouvert sous le solde tant que le joueur n'a pas choisi Dépôt ou Retrait.
-    expect(await screen.findByRole('button', { name: 'Retrait' })).toHaveAttribute('aria-expanded', 'false');
+    expect(await screen.findByRole('button', { name: 'Retirer' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByLabelText('Montant du dépôt')).toBeNull();
 
     await openDeposit();
@@ -82,6 +82,22 @@ describe('dépôt en ligne', () => {
     // « Changer » revient au choix du moyen.
     await userEvent.click(screen.getByRole('button', { name: 'Changer' }));
     expect(screen.getByRole('group', { name: 'Déposer avec' })).toBeInTheDocument();
+  });
+
+  it('chaque moyen est une carte avec sa ligne d’aide, et un montant rapide remplit le champ', async () => {
+    mockApi(base);
+    renderApp('/wallet');
+    await openDeposit();
+
+    const moncash = within(await screen.findByRole('group', { name: 'Déposer avec' })).getByRole('button', { name: 'MonCash' });
+    expect(moncash).toHaveAccessibleDescription('Payer depuis votre compte');
+    await userEvent.click(moncash);
+
+    const quick = screen.getByRole('group', { name: 'Montants rapides' });
+    const chip = within(quick).getByRole('button', { name: /^2.500 HTG$/ });
+    await userEvent.click(chip);
+    expect(screen.getByLabelText('Montant du dépôt')).toHaveValue('2500');
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('refuse un montant hors des bornes du serveur avant tout appel', async () => {

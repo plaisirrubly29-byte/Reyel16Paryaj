@@ -35,8 +35,7 @@ export function CookieBanner() {
   return (
     <section className="cookie-banner" aria-label="Cookies">
       <p>
-        Ce site utilise seulement les cookies nécessaires à la connexion et à la sécurité, et garde votre coupon sur cet
-        appareil. Aucun cookie publicitaire ni de mesure d'audience.{' '}
+        Seulement des cookies nécessaires (connexion, sécurité, coupon). Aucune publicité.{' '}
         <Link to="/confidentialite">En savoir plus</Link>
       </p>
       <Button className="btn-sm" onClick={close}>J'ai compris</Button>

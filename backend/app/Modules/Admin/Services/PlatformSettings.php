@@ -7,6 +7,7 @@ use App\Modules\Admin\Models\SettingVersion;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Support\Http\ApiException;
+use App\Support\TransactionLock;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -34,7 +35,11 @@ class PlatformSettings
             'help' => 'Le gain potentiel est plafonné à ce montant.'],
         'betting.allow_multiple' => ['group' => 'Paris', 'label' => 'Paris combinés autorisés', 'type' => 'boolean', 'rules' => ['boolean']],
         'betting.max_selections' => ['group' => 'Paris', 'label' => 'Sélections maximum par combiné', 'type' => 'integer', 'rules' => ['integer', 'min:1', 'max:30']],
-        'betting.allow_live' => ['group' => 'Paris', 'label' => 'Paris en direct autorisés', 'type' => 'boolean', 'rules' => ['boolean']],
+        'betting.allow_live' => ['group' => 'Paris', 'label' => 'Paris en direct autorisés', 'type' => 'boolean', 'rules' => ['boolean'],
+            'help' => 'Coupe-circuit de tout le direct : décoché, plus aucun pari en direct et les paris en attente d\'acceptation sont refusés (mise rendue).'],
+        'betting.live_acceptance_delay_seconds' => ['group' => 'Paris', 'label' => 'Délai d\'acceptation en direct (secondes)', 'type' => 'integer', 'rules' => ['integer', 'min:5', 'max:15'],
+            'help' => 'Un pari en direct est revérifié après ce délai (score inchangé, cote proche) avant d\'être accepté.'],
+        'betting.live_max_stake_minor' => ['group' => 'Paris', 'label' => 'Mise maximale en direct', 'type' => 'money', 'rules' => ['integer', 'min:1', 'max:100000000']],
         'betting.max_event_liability_minor' => ['group' => 'Risque', 'label' => 'Perte maximale sur un match', 'type' => 'money', 'rules' => ['integer', 'min:1', 'max:100000000000'],
             'help' => 'Pire cas des tickets en cours, tous marchés du match confondus. Au-delà, les nouveaux paris sur ce match sont refusés.'],
         'betting.max_market_liability_minor' => ['group' => 'Risque', 'label' => 'Perte maximale sur un marché', 'type' => 'money', 'rules' => ['integer', 'min:1', 'max:100000000000'],
@@ -136,7 +141,10 @@ class PlatformSettings
 
         try {
             return DB::transaction(function () use ($actor, $values, $reason, $baseVersion) {
-                $latest = SettingVersion::query()->orderByDesc('version')->lockForUpdate()->first();
+                // Pas de FOR UPDATE : setting_versions est en ajout seul, le compte de l'application n'y a pas le
+                // droit UPDATE en Production (erreur « permission denied »). Verrou applicatif à la place.
+                TransactionLock::acquire('setting_versions');
+                $latest = SettingVersion::query()->orderByDesc('version')->first();
                 $currentVersion = $latest?->version ?? 0;
 
                 if ($currentVersion !== $baseVersion) {

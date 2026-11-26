@@ -1,15 +1,19 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Alert } from '../../../shared/components/Alert';
 import { Icon } from '../../../shared/components/Icon';
 import { TextField } from '../../../shared/components/TextField';
 import { formatMoney } from '../../../shared/format/money';
 import { useMe } from '../../auth/api/auth';
 import { formatKickoff } from '../../catalogue/format';
+import { SUSPENDED_LABELS, isLiveClosed, useLiveOdds, type LiveSuspendedReason } from '../../catalogue/api/liveOdds';
 import { ApiError } from '../../../shared/api/client';
 import { MAX_SELECTIONS, useBetSlip, type BetMode, type SlipSelection } from './BetSlipContext';
 import { BetCodeShare } from '../tickets/BetCodeShare';
-import { usePlaceBet, type BetTicket, type OddsChange } from '../api/bets';
+import {
+  BETS_KEY, isUncertainBetError, rejectionMessage, usePlaceBet, waitForAcceptance, type BetTicket, type OddsChange,
+} from '../api/bets';
 import { parseStakeMinor, sanitizeStake } from './stake';
 import { combinedOdds, potentialReturnMinor } from './totalOdds';
 
@@ -23,6 +27,10 @@ type Notice = { tone: 'success' | 'warning' | 'error'; text: string };
 
 const money = (minor: bigint) => formatMoney({ minor: Number(minor), currency: CURRENCY });
 
+/** Réponse perdue : le pari a peut-être été placé. Réessayer le même pari ne le compte jamais deux fois. */
+const UNCERTAIN = 'Connexion interrompue : votre pari a peut-être été placé. Vérifiez « Mes paris » avant de changer quoi que ce soit. '
+  + 'Réessayer le même pari ne le comptera jamais deux fois.';
+
 /** Message affichable pour un refus du serveur ; les cotes changées ou sélections fermées sont aussi corrigées dans le coupon. */
 function refusal(error: unknown): string {
   if (!(error instanceof ApiError)) return 'Le pari n\'a pas pu être placé. Réessayez.';
@@ -31,6 +39,7 @@ function refusal(error: unknown): string {
     return min && max ? `La mise doit être comprise entre ${formatMoney(min)} et ${formatMoney(max)}.` : error.message;
   }
   if (error.code === 'insufficient_funds') return 'Solde insuffisant pour cette mise.';
+  if (error.code === 'live_multiple_not_allowed') return 'Les paris en direct se jouent en simple : passez en Simple ou retirez les autres sélections.';
   // Limites que le joueur s'est fixées (P7-02, V2-E06) : le montant encore possible l'aide à ajuster sa mise.
   if (error.code === 'stake_limit_exceeded' || error.code === 'loss_limit_exceeded') {
     const { remaining_minor: remaining } = error.details as { remaining_minor?: number };
@@ -39,7 +48,7 @@ function refusal(error: unknown): string {
       ? `${error.message} Mise maximale possible : ${formatMoney({ minor: remaining, currency: 'HTG' })}.`
       : `${error.message} Vous ne pouvez plus parier sur cette période.`;
   }
-  if (error.status === 0) return 'Serveur injoignable : le pari n\'a pas été placé.';
+  if (isUncertainBetError(error)) return UNCERTAIN;
   return error.message;
 }
 
@@ -87,11 +96,45 @@ export function BetSlipPanel() {
     return minor === null ? sum : sum + potentialReturnMinor(minor, [s.odds]);
   }, 0n);
 
+  // Paris en direct (D-20) : cotes des matchs commencés relues toutes les 3 s et mises à jour dans le coupon ; une
+  // sélection d'un marché suspendu ne peut pas être pariée tant qu'il n'a pas rouvert.
+  const live = useLiveSelections(slip.selections);
+  const { updateOdds } = slip;
+  useEffect(() => {
+    const changes = slip.selections.flatMap((s) => {
+      const info = live.get(s.selectionId);
+      return info && (info.odds !== s.odds || info.oddsVersion !== s.oddsVersion)
+        ? [{ selectionId: s.selectionId, odds: info.odds, oddsVersion: info.oddsVersion }]
+        : [];
+    });
+    if (changes.length > 0) updateOdds(changes);
+  }, [live, slip.selections, updateOdds]);
+  const suspended = slip.selections.filter((s) => live.get(s.selectionId)?.bettable === false);
+  const hasLive = slip.selections.some((s) => live.has(s.selectionId));
+
+  const queryClient = useQueryClient();
   const placeBetMutation = usePlaceBet();
   const [placing, setPlacing] = useState(false);
-  const busy = placing || placeBetMutation.isPending;
-  const canPlace = user !== null && user !== undefined && count > 0 && !busy
+  const [validating, setValidating] = useState(false);
+  const busy = placing || validating || placeBetMutation.isPending;
+  const canPlace = user !== null && user !== undefined && count > 0 && !busy && suspended.length === 0
     && (singles ? allSinglesStaked : combined !== null && stakeMinor !== null && potential !== null && conflicts.size === 0);
+
+  /**
+   * Pari en direct (202) : « Pari en cours de validation… » jusqu'à la réponse du serveur, quelques secondes après.
+   * Accepté : statut « pending » ; refusé : « rejected », mise rendue (solde relu).
+   */
+  async function settleLive(ticket: BetTicket): Promise<BetTicket> {
+    if (ticket.status !== 'awaiting') return ticket;
+    setValidating(true);
+    try {
+      return await waitForAcceptance(ticket);
+    } finally {
+      setValidating(false);
+      void queryClient.invalidateQueries({ queryKey: BETS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+    }
+  }
 
   // Tickets venant d'être placés : affichés à la place du coupon vide, avec le betcode à partager.
   const [placed, setPlaced] = useState<BetTicket[]>([]);
@@ -126,9 +169,9 @@ export function BetSlipPanel() {
   function absorb(error: unknown): string {
     if (error instanceof ApiError && error.code === 'odds_changed') {
       const changes = ((error.details.selections ?? []) as OddsChange[])
-        .map((c) => ({ selectionId: c.selection_id, odds: c.odds, oddsVersion: c.odds_version }));
+        .map((c) => ({ selectionId: c.selection_id, odds: c.odds, oddsVersion: c.odds_version, label: c.label }));
       slip.updateOdds(changes);
-      return 'La cote a changé. Vérifiez la nouvelle cote, puis confirmez votre pari.';
+      return 'La cote ou la ligne a changé. Vérifiez votre sélection, puis confirmez votre pari.';
     }
     if (error instanceof ApiError && error.code === 'selection_unavailable') {
       slip.removeMany((error.details.selection_ids ?? []) as string[]);
@@ -145,17 +188,23 @@ export function BetSlipPanel() {
       {
         stakeMinor: Number(stakeMinor),
         currency: CURRENCY,
-        selections: slip.selections.map((s) => ({ selectionId: s.selectionId, odds: s.odds })),
+        selections: slip.selections.map((s) => ({ selectionId: s.selectionId, odds: s.odds, oddsVersion: s.oddsVersion })),
       },
       {
-        onSuccess: (ticket) => {
+        onSuccess: async (accepted) => {
+          const ticket = await settleLive(accepted);
+          if (ticket.status === 'rejected') {
+            // Refusé à la fin du délai (score ou cote changés) : la mise est rendue, le coupon reste pour réessayer.
+            setNotice({ tone: 'error', text: rejectionMessage(ticket) });
+            return;
+          }
           setPlaced([ticket]);
           slip.clear();
           slip.setStake('');
         },
         onError: (error) => {
           const unavailable = error instanceof ApiError && (error.code === 'odds_changed' || error.code === 'selection_unavailable');
-          setNotice({ tone: unavailable ? 'warning' : 'error', text: absorb(error) });
+          setNotice({ tone: unavailable || isUncertainBetError(error) ? 'warning' : 'error', text: absorb(error) });
         },
       },
     );
@@ -173,11 +222,16 @@ export function BetSlipPanel() {
     const accepted: string[] = [];
     for (const [i, s] of slip.selections.entries()) {
       try {
-        tickets.push(await placeBetMutation.mutateAsync({
+        const ticket = await settleLive(await placeBetMutation.mutateAsync({
           stakeMinor: Number(singleStakes[i]),
           currency: CURRENCY,
-          selections: [{ selectionId: s.selectionId, odds: s.odds }],
+          selections: [{ selectionId: s.selectionId, odds: s.odds, oddsVersion: s.oddsVersion }],
         }));
+        if (ticket.status === 'rejected') {
+          errors[s.selectionId] = rejectionMessage(ticket);
+          continue;
+        }
+        tickets.push(ticket);
         accepted.push(s.selectionId);
       } catch (error) {
         errors[s.selectionId] = absorb(error);
@@ -196,7 +250,7 @@ export function BetSlipPanel() {
     }
   }
 
-  const placeLabel = busy ? 'Validation…' : singles ? `Placer ${count} paris` : 'Placer mon pari';
+  const placeLabel = validating ? 'Pari en cours de validation…' : busy ? 'Validation…' : singles ? `Placer ${count} paris` : 'Placer mon pari';
 
   return (
     <aside
@@ -239,6 +293,11 @@ export function BetSlipPanel() {
         {slip.full && (
           <Alert tone="warning">Coupon complet : {MAX_SELECTIONS} sélections au maximum. Retirez une sélection pour en ajouter une autre.</Alert>
         )}
+        {validating && (
+          <Alert tone="info" title="Pari en cours de validation…">
+            Pari en direct : le score et la cote sont revérifiés pendant quelques secondes avant l'acceptation.
+          </Alert>
+        )}
         {/* Refus du serveur : visible même si toutes les sélections ont été retirées du coupon. */}
         {notice && (count > 0 || placed.length === 0) && <Alert tone={notice.tone}>{notice.text}</Alert>}
         {count > 0 && placed.length > 0 && <PlacedList tickets={placed} />}
@@ -273,14 +332,19 @@ export function BetSlipPanel() {
                 const { day, time } = formatKickoff(s.startsAt);
                 const rowStake = singleStakes[i];
                 const rowError = rowErrors[s.selectionId];
+                const liveInfo = live.get(s.selectionId);
+                const rowSuspended = liveInfo?.bettable === false;
+                const rowClosed = rowSuspended && isLiveClosed(liveInfo.reason);
                 return (
-                  <li key={s.selectionId} className={conflicts.has(s.selectionId) || rowError ? 'has-issue' : undefined}>
+                  <li key={s.selectionId} className={conflicts.has(s.selectionId) || rowError || rowSuspended ? 'has-issue' : undefined}>
                     <div className="betslip-pick">
                       <strong>{s.label === s.pick ? s.pick : `${s.label} · ${s.pick}`}</strong>
                       <div className="betslip-match">{s.match}</div>
-                      <div className="muted small">{s.market ?? 'Résultat du match'} · {day} {time}</div>
+                      <div className="muted small">
+                        {s.market ?? 'Résultat du match'} · {liveInfo ? <span className="live-indicator">En direct</span> : `${day} ${time}`}
+                      </div>
                     </div>
-                    <span className="odds-value">{s.odds}</span>
+                    <span className="odds-value">{rowClosed ? 'Fermé' : rowSuspended ? 'Suspendu' : s.odds}</span>
                     <button
                       type="button"
                       className="remove"
@@ -311,6 +375,12 @@ export function BetSlipPanel() {
                       <p className="betslip-issue">Même match : un combiné n'accepte qu'une sélection par match.</p>
                     )}
                     {rowError && <p className="betslip-issue">{rowError}</p>}
+                    {rowSuspended && (
+                      <p className="betslip-issue">
+                        {liveInfo.reason ? SUSPENDED_LABELS[liveInfo.reason] : 'Suspendu'}
+                        {rowClosed ? ' : retirez-la du coupon.' : '. Le pari reprend dès sa réouverture.'}
+                      </p>
+                    )}
                   </li>
                 );
               })}
@@ -353,6 +423,7 @@ export function BetSlipPanel() {
             <div className="betslip-footer">
               <p className="muted small">
                 {singles ? 'Chaque mise est débitée de votre solde dès que son pari est accepté.' : 'La mise est débitée de votre solde dès que le pari est accepté.'}
+                {hasLive && ' Pari en direct : validé quelques secondes après l\'envoi, refusé et mise rendue si le score ou la cote change entre-temps.'}
               </p>
               {!user && <Link to="/login" className="btn btn-green btn-block">Se connecter pour parier</Link>}
               {user && (
@@ -366,7 +437,14 @@ export function BetSlipPanel() {
                   {placeLabel}
                 </button>
               )}
-              {user && <PlaceHint singles={singles} allStaked={allSinglesStaked} stakeMissing={stakeMinor === null} conflicts={conflicts.size > 0} />}
+              {user && suspended.length > 0 && (
+                <p className="muted small place-hint">
+                  {suspended.some((s) => isLiveClosed(live.get(s.selectionId)?.reason ?? null))
+                    ? 'Une sélection en direct est fermée : retirez-la du coupon.'
+                    : 'Une sélection en direct est suspendue : attendez sa réouverture ou retirez-la.'}
+                </p>
+              )}
+              {user && suspended.length === 0 && <PlaceHint singles={singles} allStaked={allSinglesStaked} stakeMissing={stakeMinor === null} conflicts={conflicts.size > 0} />}
             </div>
           </>
         )}
@@ -378,6 +456,41 @@ export function BetSlipPanel() {
       )}
     </aside>
   );
+}
+
+type LiveSelection = { odds: string; oddsVersion: number; bettable: boolean; reason: LiveSuspendedReason | null };
+
+/**
+ * Sélections du coupon sur un match en cours : cote du moment, version et état (ouvert ou suspendu), relus toutes les
+ * 3 s (GET /live/odds). Seuls les matchs déjà commencés sont demandés.
+ */
+function useLiveSelections(selections: SlipSelection[]): Map<string, LiveSelection> {
+  const started = useMemo(
+    () => selections.filter((s) => Date.parse(s.startsAt) <= Date.now()).map((s) => s.eventId),
+    [selections],
+  );
+  const { data } = useLiveOdds(started);
+
+  return useMemo(() => {
+    const map = new Map<string, LiveSelection>();
+    const liveEvents = new Set<string>();
+    for (const event of data?.data ?? []) {
+      if (event.status !== 'live') continue;
+      liveEvents.add(event.id);
+      for (const market of event.markets) {
+        for (const s of market.selections) {
+          map.set(s.id, { odds: s.odds, oddsVersion: market.odds_version, bettable: market.bettable, reason: market.suspended_reason });
+        }
+      }
+    }
+    // Match en cours sans cette issue : score exact déjà dépassé (« 1-0 » à 2-1) ou marché sans paris en direct.
+    for (const s of selections) {
+      if (liveEvents.has(s.eventId) && !map.has(s.selectionId)) {
+        map.set(s.selectionId, { odds: s.odds, oddsVersion: s.oddsVersion, bettable: false, reason: 'selection_closed' });
+      }
+    }
+    return map;
+  }, [data, selections]);
 }
 
 /** Ce qui manque pour pouvoir parier. */

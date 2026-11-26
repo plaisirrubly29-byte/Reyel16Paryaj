@@ -48,16 +48,18 @@ class AdminFinanceApiTest extends TestCase
     {
         $payout = match ($status) {
             BetTicketStatus::Won => 205_00,
-            BetTicketStatus::Void => 100_00,
+            BetTicketStatus::Void, BetTicketStatus::Rejected => 100_00,
             default => 0,
         };
         $ticket = $this->ticket($this->player);
         $this->ledger->reserveStake($this->wallet, Money::ofMinor(100_00, 'HTG'), "bet:{$ticket->id}:stake", (string) $ticket->id);
 
-        if ($status !== BetTicketStatus::Pending) {
+        if (! in_array($status, [BetTicketStatus::Pending, BetTicketStatus::Awaiting], true)) {
             match ($status) {
                 BetTicketStatus::Won => $this->ledger->payout($this->wallet, Money::ofMinor($payout, 'HTG'), "settlement:{$ticket->id}:r1:payout", (string) $ticket->id),
                 BetTicketStatus::Void => $this->ledger->refund($this->wallet, Money::ofMinor($payout, 'HTG'), "settlement:{$ticket->id}:r1:refund", (string) $ticket->id),
+                // Pari en direct refusé à la fin du délai d'acceptation (D-20) : mise rendue.
+                BetTicketStatus::Rejected => $this->ledger->refund($this->wallet, Money::ofMinor($payout, 'HTG'), "bet:{$ticket->id}:rejected", (string) $ticket->id),
                 default => null,
             };
             $ticket->update(['status' => $status, 'payout_minor' => $payout, 'settled_at' => now()]);
@@ -115,11 +117,11 @@ class AdminFinanceApiTest extends TestCase
         $this->actingAsVerifiedAdmin($this->admin(RoleSlug::Finance))
             ->getJson('/api/v1/admin/finance/reconciliation')
             ->assertOk()
-            ->assertJsonPath('data.checked', ['wallets' => 1, 'ledger_entries' => 7, 'tickets' => 4])
+            ->assertJsonPath('data.checked', ['wallets' => 1, 'ledger_entries' => 10, 'tickets' => 6])
             ->assertJsonPath('data.discrepancies_count', 0)
             ->assertJsonPath('data.discrepancies', [])
             ->assertJsonPath('data.truncated', false)
-            ->assertJsonFragment(['currency' => 'HTG', 'type' => 'stake', 'entries' => 4, 'sum' => ['minor' => -400_00, 'currency' => 'HTG']])
+            ->assertJsonFragment(['currency' => 'HTG', 'type' => 'stake', 'entries' => 6, 'sum' => ['minor' => -600_00, 'currency' => 'HTG']])
             ->assertJsonFragment(['currency' => 'HTG', 'type' => 'payout', 'entries' => 1, 'sum' => ['minor' => 205_00, 'currency' => 'HTG']]);
     }
 

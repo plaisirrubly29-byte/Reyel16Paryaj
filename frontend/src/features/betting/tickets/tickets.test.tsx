@@ -87,7 +87,7 @@ describe('placer un pari', () => {
     const init = call?.[1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
       stake: { minor: 10000, currency: 'HTG' },
-      selections: [{ selection_id: 11, odds: '2.95' }],
+      selections: [{ selection_id: 11, odds: '2.95', odds_version: 2 }],
     });
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
 
@@ -99,20 +99,22 @@ describe('placer un pari', () => {
 
   it('met à jour une cote changée et demande de confirmer', async () => {
     let calls = 0;
-    loggedIn(() => (++calls === 1
+    const fetchMock = loggedIn(() => (++calls === 1
       ? { status: 409, body: { error: { code: 'odds_changed', message: 'La cote a changé.', details: { selections: [{ selection_id: '11', odds: '2.70', odds_version: 3 }] } } } }
       : { status: 201, body: { data: { ...ticket, total_odds: '2.70' } } }));
     renderApp('/');
 
     const slip = await placeEvertonBet();
 
-    expect(await within(slip).findByText(/La cote a changé/)).toBeInTheDocument();
+    expect(await within(slip).findByText(/La cote ou la ligne a changé/)).toBeInTheDocument();
     expect(within(slip).getByText('Cote totale').nextElementSibling).toHaveTextContent('2.70');
     expect(within(slip).queryByText('Pari placé')).toBeNull();
 
-    // Le joueur confirme : le pari part avec la nouvelle cote.
+    // Le joueur confirme : le pari part avec la nouvelle cote et la nouvelle version du marché.
     await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
     expect(await within(slip).findByText('Pari placé')).toBeInTheDocument();
+    const posts = fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/bets') && init?.method === 'POST');
+    expect(JSON.parse(String((posts[1][1] as RequestInit).body)).selections).toEqual([{ selection_id: 11, odds: '2.70', odds_version: 3 }]);
   });
 
   it('retire du coupon une sélection que le serveur ne propose plus', async () => {

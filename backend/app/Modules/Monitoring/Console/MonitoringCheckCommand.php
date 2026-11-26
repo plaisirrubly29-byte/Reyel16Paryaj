@@ -2,10 +2,12 @@
 
 namespace App\Modules\Monitoring\Console;
 
+use App\Modules\IdentityAccess\Contracts\HumanVerifier;
 use App\Modules\Monitoring\Services\AlertDispatcher;
 use App\Modules\Monitoring\Services\AlertNotifier;
 use App\Modules\Monitoring\Services\MonitoringService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -36,8 +38,24 @@ class MonitoringCheckCommand extends Command
         $this->info(sprintf('%d alerte(s) active(s), %d envoyée(s), %d résolue(s).', $result['active'], count($result['sent']), count($result['resolved'])));
 
         $this->pingHeartbeat();
+        $this->warnIfHumanVerificationDisabled();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Production sans clé Turnstile (D-17) : avertissement dans les logs, au plus une fois par heure, sans bloquer
+     * (décision D4 du 2026-11-19 : les écrans #193 peuvent ne pas être prêts ; la case de docs/ops/lancement.md fait foi).
+     */
+    private function warnIfHumanVerificationDisabled(): void
+    {
+        if (! app()->isProduction() || app(HumanVerifier::class)->enabled()) {
+            return;
+        }
+
+        if (Cache::add('monitoring:turnstile_disabled_warned', true, now()->addHour())) {
+            Log::warning('security.turnstile_disabled', ['message' => 'Production sans TURNSTILE_SECRET_KEY : inscription, mot de passe oublié et connexion ne sont pas protégés contre les robots (D-17).']);
+        }
     }
 
     private function sendTest(AlertNotifier $notifier): int

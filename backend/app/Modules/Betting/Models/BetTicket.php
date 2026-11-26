@@ -5,6 +5,7 @@ namespace App\Modules\Betting\Models;
 use App\Models\User;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Enums\BetType;
+use App\Modules\Settlement\Models\TicketVoid;
 use App\Modules\Wallet\Models\Wallet;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
@@ -33,6 +34,9 @@ use LogicException;
  * @property array<string, mixed> $rules_snapshot
  * @property Carbon $placed_at
  * @property Carbon|null $settled_at
+ * @property bool $live pari sur un match en cours (délai d'acceptation, D-20)
+ * @property Carbon|null $acceptance_due_at fin du délai d'acceptation d'un pari en direct
+ * @property string|null $rejection_reason motif du refus d'un pari en direct (odds_changed, score_changed…)
  */
 class BetTicket extends Model
 {
@@ -44,14 +48,14 @@ class BetTicket extends Model
     /** Conditions acceptées par le joueur : aucune modification après création. */
     private const FROZEN = [
         'reference', 'placement_key', 'user_id', 'wallet_id', 'type', 'stake_minor', 'currency', 'total_odds',
-        'potential_payout_minor', 'rules_version', 'rules_snapshot', 'placed_at',
+        'potential_payout_minor', 'rules_version', 'rules_snapshot', 'placed_at', 'live',
     ];
 
     /** Toutes les colonnes sauf id : liste explicite, sans introspection du schéma à chaque requête (test de charge P8-03). */
     protected $fillable = [
         'reference', 'user_id', 'wallet_id', 'type', 'status', 'stake_minor', 'currency', 'total_odds',
         'potential_payout_minor', 'payout_minor', 'rules_version', 'rules_snapshot', 'placed_at', 'settled_at',
-        'created_at', 'updated_at', 'placement_key',
+        'created_at', 'updated_at', 'placement_key', 'live', 'acceptance_due_at', 'rejection_reason',
     ];
 
     /** @var array<string, mixed> */
@@ -71,6 +75,8 @@ class BetTicket extends Model
             'rules_snapshot' => 'array',
             'placed_at' => 'datetime',
             'settled_at' => 'datetime',
+            'live' => 'boolean',
+            'acceptance_due_at' => 'datetime',
         ];
     }
 
@@ -131,5 +137,11 @@ class BetTicket extends Model
     public function selections(): HasMany
     {
         return $this->hasMany(BetSelection::class)->orderBy('id');
+    }
+
+    /** Demandes d'annulation par l'administration (double validation). @return HasMany<TicketVoid, $this> */
+    public function voids(): HasMany
+    {
+        return $this->hasMany(TicketVoid::class);
     }
 }

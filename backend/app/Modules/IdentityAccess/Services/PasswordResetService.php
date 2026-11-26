@@ -3,6 +3,8 @@
 namespace App\Modules\IdentityAccess\Services;
 
 use App\Models\User;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Support\Http\ApiException;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +13,8 @@ use Illuminate\Support\Str;
 
 class PasswordResetService
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     /**
      * Envoie un lien de réinitialisation si le compte existe.
      * Ne renvoie rien et ne lève rien : le résultat (compte inconnu, envoi limité…) n'est jamais exposé.
@@ -36,6 +40,9 @@ class PasswordResetService
                 ])->save();
 
                 $this->closeSessions($user);
+
+                // Jamais le mot de passe ni le jeton du lien (audit du 18/11/2026).
+                $this->audit->record(AuditAction::PasswordReset, $user, after: ['sessions_closed' => true], actor: $user);
 
                 event(new PasswordReset($user));
             },

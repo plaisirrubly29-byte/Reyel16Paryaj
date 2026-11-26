@@ -10,6 +10,8 @@ enum AuditAction: string
     // Identity & Access
     case LoginSucceeded = 'auth.login_succeeded'; // connexion réussie, tout compte (revue P8-02, F12)
     case LoginFailed = 'auth.login_failed'; // échec : mauvais identifiants, compte suspendu ou exclu (F12)
+    case Logout = 'auth.logout'; // déconnexion par le titulaire (audit du 18/11/2026)
+    case PasswordReset = 'auth.password_reset'; // mot de passe changé par le lien « mot de passe oublié », sessions fermées
     case RolesUpdated = 'roles.updated';
     case UserSuspended = 'user.suspended';
     case UserReactivated = 'user.reactivated';
@@ -18,6 +20,8 @@ enum AuditAction: string
     case UserStakeLimitChanged = 'user.stake_limit_changed'; // mise maximale propre au joueur (V2-D05)
     case ResponsibleGamingViewed = 'responsible_gaming.viewed';
     case MfaReset = 'mfa.reset';
+    case MfaEnabled = 'mfa.enabled'; // double authentification activée par le titulaire (audit du 18/11/2026)
+    case MfaVerified = 'mfa.verified'; // session validée par un code TOTP ou un code de secours (méthode en métadonnée)
     case MfaFailed = 'mfa.failed';
     case MfaRecoveryCodesRegenerated = 'mfa.recovery_codes_regenerated';
     case SessionsRevoked = 'sessions.revoked'; // le titulaire déconnecte un ou tous ses autres appareils (V2-C06)
@@ -32,6 +36,24 @@ enum AuditAction: string
     // Admin — événements et marchés (P6-02)
     case MarketSuspended = 'market.suspended';
     case MarketReopened = 'market.reopened';
+
+    // Admin — gestion d'un match entier (audit du 2026-11-22, A1 et A3) : heure, report, annulation, masquage ;
+    // suspension ou réouverture de tous ses marchés.
+    case EventUpdated = 'event.updated';
+    case EventSuspended = 'event.suspended';
+    case EventReopened = 'event.reopened';
+
+    // Admin — annulation d'un ticket à double validation (audit du 2026-11-22, A2)
+    case TicketVoidRequested = 'ticket.void_requested';
+    case TicketVoidApproved = 'ticket.void_approved';
+    case TicketVoidRejected = 'ticket.void_rejected';
+
+    // Cotes fixées à la main, double validation au-delà de 20 % d'écart (V2-D03, D-18)
+    case OddsOverrideRequested = 'odds.override_requested';
+    case OddsOverrideApproved = 'odds.override_approved';
+    case OddsOverrideRejected = 'odds.override_rejected';
+    case OddsOverrideEnded = 'odds.override_ended';
+    case OddsOverrideExpired = 'odds.override_expired';
 
     // Admin — corrections financières à double validation (P6-04)
     case FinanceCorrectionRequested = 'finance.correction_requested';
@@ -69,7 +91,9 @@ enum AuditAction: string
         return match ($this) {
             self::AuditViewed, self::UserPersonalDataViewed, self::MfaFailed, self::MfaRecoveryCodesRegenerated, self::UserSelfExcluded,
             self::KycSubmitted, self::KycDocumentViewed,
-            self::ResponsibleGamingViewed, self::SessionsRevoked, self::LoginSucceeded, self::LoginFailed => false,
+            self::ResponsibleGamingViewed, self::SessionsRevoked, self::LoginSucceeded, self::LoginFailed,
+            // Actions du titulaire sur son propre compte, pas des décisions d'administration : sans motif.
+            self::Logout, self::PasswordReset, self::MfaEnabled, self::MfaVerified => false,
             default => true,
         };
     }

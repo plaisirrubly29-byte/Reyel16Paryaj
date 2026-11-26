@@ -8,6 +8,24 @@ info:
 
     Conventions (format des réponses, codes d'erreur, pagination, idempotence) : docs/api/README.md.
     Toute erreur suit le schéma `Error`.
+
+    Limites globales (D-17, V2-F04) : 120 requêtes/min par compte connecté ; 300 requêtes/min par IP pour un visiteur
+    non connecté (IDENTITY_API_GUEST_RATE_PER_MINUTE, 0 = sans limite), sur toute l'API, en plus des limites propres
+    à chaque route. Au-delà : 429 `too_many_requests` (en-tête Retry-After). Les webhooks des prestataires de paiement
+    n'y sont pas comptés (ils ont leur propre limite), ni les requêtes refusées faute de connexion (401).
+
+    Protection contre les robots (D-17, PS-3/PS-4) : inscription, mot de passe oublié et connexion après 3 échecs
+    exigent `captcha_token`, le jeton du widget Cloudflare Turnstile, vérifié par le serveur. Désactivé tant que
+    TURNSTILE_SECRET_KEY n'est pas configurée.
+    - Le jeton est vérifié AVANT toute autre validation : sans jeton valide, aucune autre erreur n'est renvoyée.
+    - Un jeton ne sert qu'une fois et expire après 5 minutes : après toute réponse du serveur, l'écran réinitialise
+      le widget pour en obtenir un nouveau.
+    - Refus : 422 `captcha_failed`, `details.reason` = `required` (jeton absent), `invalid` (refusé, expiré ou déjà
+      utilisé) ou `unavailable` (Cloudflare injoignable).
+    - Cloudflare injoignable (PS-7) : inscription et mot de passe oublié refusés (`unavailable`) ; connexion laissée
+      passer, les limites de la connexion restant appliquées. Une alerte d'exploitation est envoyée.
+    - Connexion : les échecs sont comptés par identifiant saisi (téléphone ou email normalisé) et par IP, que le
+      compte existe ou non, sur 15 minutes ; une connexion réussie remet les compteurs à zéro.
 servers:
   - url: http://localhost:8000/api/v1
     description: Développement local
@@ -95,11 +113,16 @@ paths:
                     Bêta fermée (V2-F07) : exigé tant que REGISTRATION_INVITE_CODES n'est pas vide (majuscules ou non).
                     Absent : 422 (details.invite_code, « inscriptions sur invitation ») ; inconnu : 422 (details.invite_code).
                     Ignoré quand l'inscription est ouverte.
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Toujours exigé. Absent ou refusé :
+                    422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "201":
           description: Compte créé, session ouverte
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
-        "422": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/CaptchaOrValidationError" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/login:
     post:
@@ -123,12 +146,19 @@ paths:
                 phone: { type: string, example: "34123456" }
                 email: { type: string, format: email, example: "chef@example.com" }
                 password: { type: string }
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Exigé après 3 échecs de connexion en 15 minutes
+                    pour le même compte ou la même IP (remis à zéro après une connexion réussie) ; avant, il peut être omis.
+                    Absent ou refusé : 422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que
+                    TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "200":
           description: Session ouverte
           content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
         "422":
-          description: "`invalid_credentials` ou `validation_failed`"
+          description: "`invalid_credentials`, `validation_failed` ou `captcha_failed` (après 3 échecs : afficher le widget Turnstile si `details.reason` = `required`)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "423":
           description: "`account_suspended` — compte suspendu ou fermé ; `account_excluded` — auto-exclusion du joueur (jeu responsable)"
@@ -145,10 +175,19 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                captcha_token:
+                  type: [string, "null"]
+                  description: |
+                    D-17 (V2-F04) : jeton du widget Cloudflare Turnstile. Toujours exigé. Absent ou refusé :
+                    422 `captcha_failed` (voir l'en-tête du contrat). Ignoré tant que TURNSTILE_SECRET_KEY n'est pas configurée.
       responses:
         "202": { description: Demande prise en compte }
-        "422": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/CaptchaOrValidationError" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /auth/reset-password:
     post:
@@ -487,7 +526,11 @@ paths:
     get:
       tags: [Catalogue]
       summary: Sports ayant des matchs ouverts, avec leurs compétitions
-      description: Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+      description: |
+        Public. Seuls les matchs dont un marché est ouvert et à jour sont comptés (règle de fraîcheur).
+        Les compétitions d'un sport sont rangées par pays (ou zone : Europe, Monde, Amérique du Sud…) : d'abord les
+        pays des « top compétitions » (`sports_data.featured_competitions`) dans cet ordre, puis les autres par nom ;
+        dans un pays, 1re division → 2e → 3e → 4e → coupes, puis les compétitions sans niveau.
       responses:
         "200":
           description: OK
@@ -510,8 +553,15 @@ paths:
                             type: object
                             properties:
                               id: { type: string }
-                              name: { type: string, example: EPL }
-                              country: { type: [string, "null"] }
+                              name: { type: string, example: LaLiga }
+                              country: { type: [string, "null"], example: Espagne }
+                              tier:
+                                type: [string, "null"]
+                                enum: [d1, d2, d3, d4, cup, null]
+                                example: d1
+                                description: |
+                                  Niveau dans le pays (`sports_data.competition_labels.*.tier`) : d1 = 1re division …
+                                  d4, cup = coupe nationale ; null pour une compétition internationale ou sans niveau.
                               events_count: { type: integer }
   /competitions:
     get:
@@ -561,6 +611,69 @@ paths:
           description: OK
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CatalogueEvent" } } } } }
         "404": { description: Match inconnu ou plus proposé }
+
+  /live/odds:
+    get:
+      tags: [Catalogue]
+      summary: Score et cotes du moment des matchs en cours (paris en direct)
+      x-task: V2-D06
+      description: |
+        Public, jamais en cache : relu toutes les quelques secondes par l'onglet Live, la page du match et le coupon
+        (décision D-20, option « Modèle + The Odds »). Cotes du 1X2, du plus/moins et du score exact final calculées à
+        chaque appel par le modèle en direct (force des équipes, score, temps restant) ; 1X2 et plus/moins jamais mieux
+        payés que la dernière cote en direct du fournisseur. Le score exact ne contient que les scores encore possibles
+        (à 2-1 : « 3-1 » oui, « 1-0 » jamais), dans l'ordre à afficher : cette liste remplace celle du catalogue.
+        Un match qui n'est plus en cours est renvoyé avec son statut et sans marché.
+      parameters:
+        - { name: event_ids, in: query, required: true, description: "Identifiants des matchs, séparés par des virgules (50 au plus)", schema: { type: string, example: "12,15" } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        status: { type: string, enum: [scheduled, live, finished, postponed, cancelled] }
+                        score: { type: [object, "null"], properties: { home: { type: string }, away: { type: string } } }
+                        minute: { type: [integer, "null"], description: "Minute de jeu estimée d'après l'heure de début ; null à la pause" }
+                        markets:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: { type: string }
+                              key: { type: string, enum: [h2h, totals, correct_score] }
+                              line: { type: [string, "null"] }
+                              odds_version: { type: integer }
+                              bettable: { type: boolean }
+                              suspended_reason: { $ref: "#/components/schemas/LiveSuspendedReason" }
+                              selections:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    id: { type: string }
+                                    key: { type: string, example: "3-1" }
+                                    label: { type: string, description: "Libellé court du bouton de cote (1, X, 2, > 2.5, 3-1)" }
+                                    name: { type: string, example: "3 - 1" }
+                                    odds: { type: string, example: "2.05" }
+                  live_betting:
+                    type: object
+                    properties:
+                      enabled: { type: boolean, description: "Coupe-circuit betting.allow_live" }
+                      acceptance_delay_seconds: { type: integer, example: 8 }
+                      max_stake_minor: { type: integer, example: 1000000 }
+                      allow_multiple: { type: boolean }
+                  server_time: { type: string, format: date-time }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { description: Trop de requêtes }
 
   /lottery/draws:
     get:
@@ -637,7 +750,7 @@ paths:
       x-task: V2-D09
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -781,15 +894,23 @@ paths:
                     properties:
                       selection_id: { type: integer, example: 462 }
                       odds: { type: string, example: "2.10", description: Cote vue par le joueur (détection de changement) }
+                      odds_version: { type: integer, minimum: 1, example: 3, description: "Version du marché vue par le joueur (catalogue). Facultative ; si elle diffère (changement de cote ou de ligne), 409 odds_changed" }
       responses:
         "201":
           description: Ticket créé (reçu immuable)
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
+        "202":
+          description: |
+            Pari en direct (D-20) : ticket « awaiting », mise réservée, revérifié à acceptance_due_at (score inchangé,
+            marché ouvert, cote pas plus basse que betting.live_odds_tolerance) puis « pending » ou « rejected » avec la mise
+            rendue. Le coupon relit GET /bets/{id}. En direct, la cote vue reste acceptée si la cote du moment n'est pas
+            plus basse de plus de la tolérance ; le ticket prend la plus basse des deux.
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BetTicket" } } } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "409":
           description: |
-            odds_changed — cote changée, rien n'est créé. details.selections : [{ selection_id, odds, odds_version }]
-            avec la cote actuelle ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
+            odds_changed — cote ou ligne changée, rien n'est créé. details.selections : [{ selection_id, odds,
+            odds_version, label }] avec la cote, la version et le libellé (ligne comprise) actuels ; le joueur confirme en renvoyant le pari avec ces cotes (nouvelle clé d'idempotence).
             idempotency_key_reused — clé déjà utilisée pour un autre pari. La clé est figée sur le ticket : rejouer
             le même pari avec la même clé (même après une panne du serveur) renvoie le ticket existant, sans seconde mise.
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -797,8 +918,9 @@ paths:
           description: |
             validation_failed ; selection_unavailable (details.selection_ids : match commencé, en direct (paris en
             direct désactivés par défaut) ou terminé, marché fermé, cote trop ancienne) ; same_event_selections ;
-            multiple_not_allowed ; stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée
-            par un administrateur pour ce joueur, V2-D05) ; currency_mismatch ; insufficient_funds ;
+            multiple_not_allowed ; live_multiple_not_allowed (D-20 : sélection en direct dans un combiné) ;
+            stake_out_of_range (details.min / max ; max tient compte de la mise maximale posée par un administrateur
+            pour ce joueur, V2-D05, et de la mise maximale en direct, D-20) ; currency_mismatch ; insufficient_funds ;
             jeu responsable (P7-02, journalisé) : betting_paused (details.ends_at), stake_limit_exceeded (details.period,
             limit_minor, remaining_minor) ; loss_limit_exceeded (V2-E06 : si le pari est perdu, la perte nette de la
             période dépasserait la limite du joueur ; mêmes details) ; risk_limit_exceeded (V2-D05 : le pari ferait dépasser la perte maximale
@@ -816,7 +938,7 @@ paths:
       description: Tickets du joueur connecté uniquement, avec leurs sélections.
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: type, in: query, schema: { type: string, enum: [single, multiple] } }
         - { name: days, in: query, description: Tickets placés depuis N jours, schema: { type: integer, enum: [1, 7, 30, 90] } }
         - $ref: "#/components/parameters/Page"
@@ -839,7 +961,9 @@ paths:
     get:
       tags: [Bets]
       summary: Reçu d'un ticket
-      description: Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+      description: |
+        Le ticket d'un autre joueur répond 404, comme un ticket inexistant (sans révéler qu'il existe).
+        Pari en direct « awaiting » dont le délai est écoulé : revérifié à cette lecture s'il ne l'a pas encore été.
       security: [{ sessionCookie: [] }]
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
@@ -1421,7 +1545,8 @@ paths:
       description: |
         Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
         Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
-        settlement_overdue, finance_corrections, reconciliation, aml_alerts (aml.view), failed_jobs, mfa_failures, role_changes,
+        selections_stuck (sélections en attente plus de 6 h après le début d'un match sans résultat), settlement_overdue,
+        ticket_voids (tickets.void_approve), finance_corrections, reconciliation, aml_alerts (aml.view), failed_jobs, mfa_failures, role_changes,
         login_failures (échecs de connexion répétés sur 1 h, par compte ou par adresse IP, revue P8-02 F12).
       security: [{ sessionCookie: [] }]
       responses:
@@ -1704,6 +1829,7 @@ paths:
         - { name: competition, in: query, schema: { type: integer } }
         - { name: date, in: query, schema: { type: string, format: date } }
         - { name: market_status, in: query, description: "Événements ayant au moins un marché dans ce statut", schema: { type: string, enum: [open, suspended, closed, settled] } }
+        - { name: stuck, in: query, description: "1 : matchs sans résultat dont des sélections attendent depuis plus de 6 h après le début", schema: { type: boolean } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -1732,6 +1858,95 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" } } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin]
+      summary: Modifier un match — heure, report, annulation, masquage (motif requis, audité)
+      description: |
+        Permission events.update (Super Admin, Opérations). Audit : event.updated.
+        Heure ou statut (scheduled ↔ postponed) : match programmé ou reporté, sans résultat ; la synchronisation ne
+        remplace plus ce qui a été fixé (admin_locked_at). Les tickets gardent l'heure figée au pari (D-05 §3, 48 h).
+        Annulation (D-05 §2, seule dans la requête) : match pas encore joué → annulé tout de suite, sélections à la
+        cote 1 et tickets réglés ; match commencé → demande de résultat « annulé » à valider par un autre
+        administrateur (meta.result_correction_id) et marchés suspendus ; match avec un résultat → 409 result_exists.
+        Masquage : le match quitte le site et n'est plus pariable.
+      x-task: A1 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                starts_at: { type: string, format: date-time }
+                status: { type: string, enum: [scheduled, postponed, cancelled] }
+                hidden: { type: boolean }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Match modifié (ou annulation demandée)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AdminEvent" }
+                  meta: { type: object, properties: { result_correction_id: { type: [string, "null"] } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`event_not_editable`, `event_unchanged`, `result_exists`, `correction_already_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/events/{id}/suspend:
+    post:
+      tags: [Admin]
+      summary: Suspendre tous les marchés ouverts d'un match (motif requis, audité)
+      description: |
+        Permission markets.suspend. Chaque marché est audité (market.suspended), le match aussi (event.suspended).
+        Aucun marché à suspendre : 409 event_unchanged ; match terminé ou annulé : 409 event_not_editable.
+      x-task: A3 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 255 } } } } }
+      responses:
+        "200":
+          description: "Marchés suspendus (meta.markets_changed)"
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" }, meta: { type: object, properties: { markets_changed: { type: integer } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`event_unchanged`, `event_not_editable`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/events/{id}/reopen:
+    post:
+      tags: [Admin]
+      summary: Rouvrir les marchés d'un match suspendus par l'administration (motif requis, audité)
+      description: Permission markets.suspend. Les suspensions automatiques (cotes trop anciennes) restent. Audit event.reopened.
+      x-task: A3 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 255 } } } } }
+      responses:
+        "200":
+          description: "Marchés rouverts (meta.markets_changed)"
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" }, meta: { type: object, properties: { markets_changed: { type: integer } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`event_unchanged`, `event_not_editable`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/markets/{id}:
     get:
       tags: [Admin]
@@ -1777,6 +1992,157 @@ paths:
         "409":
           description: "`invalid_status_transition` (marché fermé ou réglé)"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/markets/{id}/odds-overrides:
+    post:
+      tags: [Admin]
+      summary: Fixer à la main la cote d'une sélection (permission odds.override, motif requis, auditée)
+      description: |
+        V2-D03 (D-18). Opérations et Super Admin. Écart de **20 % au plus** avec la cote calculée : cote en vigueur tout
+        de suite (`active`, nouvelle version de cote). Au-delà : `pending`, en attente d'un **second administrateur**
+        (`/admin/odds-overrides/{id}/approve`). La synchronisation n'écrase pas une cote en vigueur ; elle prend fin à la
+        date limite ou au début du match (`expired`), puis la cote calculée revient. Une seule modification en attente ou
+        en vigueur par sélection. Audit : `odds.override_requested` (et `odds.override_approved` quand elle prend effet
+        sans validation).
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selection_id, odds, reason]
+              properties:
+                selection_id: { type: string, description: Sélection de ce marché }
+                odds: { type: string, example: "1.80", description: "Cote décimale en chaîne, 2 décimales, de 1.01 à 1000.00" }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+                expires_at: { type: [string, "null"], format: date-time, description: "Facultatif : avant le début du match ; par défaut le début du match" }
+      responses:
+        "201":
+          description: Modification enregistrée (active ou pending)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`override_already_exists` (details.override_id) ; `market_not_open` (marché suspendu, fermé ou réglé) ; `event_started`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { description: "Validation : cote hors bornes, sélection d'un autre marché, date limite passée ou après le début du match", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides:
+    get:
+      tags: [Admin]
+      summary: Cotes fixées à la main (permission events.view)
+      description: Les demandes en attente d'abord, puis les plus récentes.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, ended, expired] } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/OddsOverride" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/odds-overrides/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une cote fixée à la main (permission events.view)
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/odds-overrides/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une cote en attente (permission odds.override, motif requis)
+      description: |
+        Second administrateur, différent du demandeur (`403 self_approval_forbidden`), dont le rôle n'a pas été attribué
+        depuis moins de 24 h (`403 approver_role_too_recent`). La cote entre en vigueur (nouvelle version). Match commencé
+        ou date limite passée : `409 override_expired`. Audit : `odds.override_approved`.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Cote en vigueur (status active)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403":
+          description: "Permission refusée, `self_approval_forbidden` ou `approver_role_too_recent`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`override_not_pending` ; `override_expired` ; `market_not_open`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser une cote en attente (permission odds.override, motif requis)
+      description: "Le demandeur peut retirer sa propre demande par ce refus. Aucune cote ne change. Audit : `odds.override_rejected`."
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Refusée (status rejected)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`override_not_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/odds-overrides/{id}/end:
+    post:
+      tags: [Admin]
+      summary: Revenir à la cote calculée (permission odds.override, motif requis)
+      description: |
+        Met fin à une cote en vigueur : la cote calculée revient (nouvelle version de cote). Audit : `odds.override_ended`.
+      x-task: V2-D03
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Terminée (status ended)
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OddsOverride" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`override_not_active`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "422": { $ref: "#/components/responses/ValidationError" }
         "428": { description: En-tête Idempotency-Key manquant }
   /admin/users/{id}/responsible-gaming:
@@ -2350,8 +2716,10 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string, example: R16-7KQ2M9XAPB } }
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: user_id, in: query, schema: { type: integer } }
+        - { name: event_id, in: query, description: "Tickets qui ont une sélection sur ce match", schema: { type: integer } }
+        - { name: void_status, in: query, description: "Tickets dont une demande d'annulation est dans cet état", schema: { type: string, enum: [pending, approved, rejected] } }
         - { name: placed_from, in: query, description: Jour inclus, schema: { type: string, format: date } }
         - { name: placed_to, in: query, description: Jour inclus, schema: { type: string, format: date } }
         - $ref: "#/components/parameters/Page"
@@ -2383,6 +2751,108 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminTicket" } } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/tickets/{id}/void:
+    post:
+      tags: [Admin]
+      summary: Demander l'annulation d'un ticket (tickets.void, motif requis, double validation)
+      description: |
+        Rien ne change avant la validation par un AUTRE administrateur (tickets.void_approve). Ticket en cours, gagné
+        ou perdu ; réglé depuis plus de 72 h (D-05 §5) : 409 correction_window_closed. Audit ticket.void_requested.
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "201":
+          description: Demande créée, avec l'aperçu de son effet
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`ticket_not_voidable`, `correction_window_closed`, `void_already_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/ticket-voids:
+    get:
+      tags: [Admin]
+      summary: Demandes d'annulation de ticket (tickets.view)
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: ticket_id, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Demandes, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/TicketVoid" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/ticket-voids/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une demande d'annulation, avec l'aperçu de son effet si elle attend (tickets.view)
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/ticket-voids/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une annulation de ticket (tickets.void_approve, jamais le demandeur)
+      description: |
+        Sélections à la cote 1, mise rendue ; un gain ou un remboursement déjà versé est d'abord compensé (le solde peut
+        devenir négatif), nouvelle révision du règlement. Audit ticket.void_approved.
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Ticket annulé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { description: "`forbidden`, `self_approval_forbidden`, `approver_role_too_recent`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`void_not_pending`, `ticket_changed`, `ticket_not_voidable`, `correction_window_closed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/ticket-voids/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser (tickets.void_approve) ou retirer (demandeur) une demande d'annulation
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Demande close
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`void_not_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/ledger:
     get:
       tags: [Admin]
@@ -2928,7 +3398,7 @@ paths:
         - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string } }
         - { name: draw, in: query, schema: { type: string } }
         - { name: date, in: query, description: Date locale du tirage, schema: { type: string, format: date } }
-        - { name: status, in: query, schema: { type: string, enum: [pending, won, lost, void] } }
+        - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: user_id, in: query, schema: { type: string } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
@@ -3272,6 +3742,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: { code: not_found, message: Ressource introuvable. } }
+    CaptchaOrValidationError:
+      description: "`validation_failed` (details par champ) ou `captcha_failed` (details.reason : required, invalid, unavailable)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            captcha_required:
+              value: { error: { code: captcha_failed, message: "Confirmez que vous n'êtes pas un robot.", details: { reason: required } } }
+            captcha_unavailable:
+              value: { error: { code: captcha_failed, message: "La vérification anti-robot est momentanément indisponible. Réessayez dans quelques minutes.", details: { reason: unavailable } } }
+
     TooManyRequests:
       description: Trop de tentatives
       headers:
@@ -3601,6 +4082,8 @@ components:
         origin: { type: object, properties: { provider: { type: string, example: the_odds_api }, external_id: { type: string } } }
         last_synced_at: { type: [string, "null"], format: date-time }
         result_received_at: { type: [string, "null"], format: date-time }
+        hidden: { oneOf: [{ type: object, properties: { at: { type: string, format: date-time }, reason: { type: [string, "null"] } } }, { type: "null" }], description: "Masqué par l'administration : retiré du site, plus pariable" }
+        admin_locked_at: { type: [string, "null"], format: date-time, description: "Heure ou statut fixés par l'administration : la synchronisation ne les remplace plus" }
         markets_count:
           type: object
           description: Nombre de marchés par statut
@@ -3632,8 +4115,46 @@ components:
         bettable: { type: boolean }
         selections:
           type: array
-          items: { type: object, properties: { id: { type: string }, key: { type: string }, label: { type: string }, name: { type: string }, odds: { type: string, example: "2.10" } } }
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              key: { type: string }
+              label: { type: string }
+              name: { type: string }
+              odds: { type: string, example: "2.10", description: "Cote proposée aux joueurs (calculée, ou fixée à la main)" }
+              computed_odds: { type: [string, "null"], example: "2.09", description: "V2-D03 : cote calculée par la synchronisation (marge de l'opérateur avec l'argent réel, D-18), avant toute cote fixée à la main" }
+              provider_odds: { type: [string, "null"], example: "2.15", description: "Cote du bookmaker de référence ; null pour un marché maison (V2-D10)" }
+              best_odds: { type: [string, "null"], example: "2.20", description: "Meilleure cote parmi les bookmakers suivis : repère pour une cote fixée à la main (au-dessus, risque d'arbitrage) ; null pour un marché maison" }
+              adjusted: { type: boolean, description: Cote fixée à la main en vigueur }
+              override: { oneOf: [{ $ref: "#/components/schemas/OddsOverride" }, { type: "null" }], description: "Fiche du marché : cote fixée à la main en attente ou en vigueur" }
         updated_at: { type: [string, "null"], format: date-time }
+    OddsOverride:
+      type: object
+      description: |
+        V2-D03 (D-18) : cote fixée à la main. Statuts : pending (écart de plus de 20 % avec la cote calculée, attend un
+        second administrateur) → active (cote proposée aux joueurs, nouvelle version de cote) → ended (fin demandée, retour
+        à la cote calculée) ou expired (date limite ou début du match atteints) ; rejected (refusée par le second
+        administrateur). Les tickets déjà placés gardent leur version de cote.
+      properties:
+        id: { type: string }
+        market_id: { type: string }
+        selection: { type: object, properties: { id: { type: string }, key: { type: string }, name: { type: string } } }
+        event: { type: object, properties: { id: { type: string }, home_team: { type: string }, away_team: { type: string }, starts_at: { type: string, format: date-time } } }
+        status: { type: string, enum: [pending, active, rejected, ended, expired] }
+        odds: { type: string, example: "1.80", description: Cote fixée }
+        computed_odds: { type: string, example: "2.09", description: Cote calculée au moment de la demande }
+        deviation_percent: { type: string, example: "-13.88", description: "Écart avec la cote calculée, en pourcentage (double validation au-delà de ±20)" }
+        requires_approval: { type: boolean }
+        reason: { type: string }
+        expires_at: { type: string, format: date-time, description: "Date limite, au plus le début du match" }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        requested_at: { type: string, format: date-time }
+        decided_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } } }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        ended_by: { type: [object, "null"], properties: { id: { type: string }, name: { type: string } }, description: "null pour une expiration" }
+        ended_at: { type: [string, "null"], format: date-time }
     AuditLog:
       type: object
       properties:
@@ -3832,6 +4353,7 @@ components:
           properties:
             home: { type: string, example: "1" }
             away: { type: string, example: "0" }
+        minute: { type: [integer, "null"], description: "Match en cours : minute de jeu estimée d'après l'heure de début ; null à la pause et avant le match" }
         has_house_markets: { type: boolean, description: "true : le match a des paris maison REYEL 16 (r16_*) sur sa page ; repère « Spécial R16 » de la liste" }
         markets:
           type: array
@@ -3844,7 +4366,8 @@ components:
               line: { type: [string, "null"], example: "2.5", description: "Ligne du plus/moins ou du handicap (celle de l'équipe à domicile, ex. \"-0.5\") ; null pour les autres marchés, dont ceux à plusieurs lignes (ligne dans la clé de la sélection)" }
               odds_version: { type: integer, description: "À renvoyer avec le pari ; le serveur refuse une version périmée (P4-03)" }
               odds_updated_at: { type: string, format: date-time }
-              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou match en direct (paris en direct désactivés, betting.allow_live), affichée mais non pariable" }
+              bettable: { type: boolean, description: "false : cote trop ancienne (règle de fraîcheur) ou marché en direct suspendu (suspended_reason), affichée mais non pariable" }
+              suspended_reason: { $ref: "#/components/schemas/LiveSuspendedReason" }
               selections:
                 type: array
                 items:
@@ -3855,6 +4378,18 @@ components:
                     label: { type: string, example: "1X", description: "1, X, 2 ; 1X, 12, X2 ; > 2.5 / < 2.5 ; Oui / Non ; 1 (-0.5) / 2 (+0.5) ; 1 > 1.5 ; Impair / Pair ; 2-1" }
                     name: { type: string, example: Arsenal }
                     odds: { type: string, example: "2.10", description: Cote décimale en chaîne (jamais de float) }
+                    adjusted: { type: boolean, description: "V2-D03 (D-18) : true quand la cote est fixée à la main par l'administration, au lieu de la cote calculée" }
+    LiveSuspendedReason:
+      type: [string, "null"]
+      enum: [live_closed, not_available, suspended, score_stale, score_changed, closing, decided, score_unavailable, null]
+      description: |
+        Motif d'un marché en direct suspendu ou fermé (D-20) ; null s'il est ouvert ou hors direct. live_closed : paris
+        en direct coupés ; not_available : pas proposé en direct (seulement football 1X2, plus/moins et score exact) ;
+        suspended : par un administrateur ; score_stale : score en retard (suspendu jusqu'au prochain score) ;
+        score_changed : but en cours de vérification (levé de lui-même après
+        live_model.action_suspension_seconds, 10 s) ; closing : fin de match (fermé) ; decided : issue acquise ou trop
+        probable ; score_unavailable : plus de score depuis live_model.score_unavailable_close_seconds (match arrêté ou
+        pas suivi en direct, fermé ; rouvert si le score revient).
     BetTicket:
       type: object
       description: Reçu immuable — mise, cotes et gain potentiel figés à l'acceptation ; seuls le statut et le gain versé évoluent au règlement.
@@ -3862,7 +4397,10 @@ components:
         id: { type: string }
         reference: { type: string, example: R16-7KQ2M9XAPB, description: Référence à communiquer au support }
         type: { type: string, enum: [single, multiple] }
-        status: { type: string, enum: [pending, won, lost, void], description: "void : annulé et remboursé" }
+        status: { type: string, enum: [awaiting, pending, won, lost, void, rejected], description: "awaiting : pari en direct en attente d'acceptation (D-20) ; void : annulé et remboursé ; rejected : pari en direct refusé à la fin du délai, mise rendue" }
+        live: { type: boolean, description: Pari sur un match en cours }
+        acceptance_due_at: { type: [string, "null"], format: date-time, description: Fin du délai d'acceptation d'un pari en direct }
+        rejection_reason: { type: [string, "null"], enum: [odds_changed, score_changed, market_suspended, live_closed, timeout, null] }
         stake: { $ref: "#/components/schemas/Money" }
         total_odds: { type: string, example: "3.895", description: "Produit des cotes acceptées (chaîne, jamais de float)" }
         potential_payout: { $ref: "#/components/schemas/Money" }
@@ -3937,6 +4475,29 @@ components:
         rules_snapshot: { type: object, description: Règles acceptées par le joueur (détail uniquement) }
         selections: { type: array, items: { $ref: "#/components/schemas/BetTicket/properties/selections/items" } }
         ledger_entries: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+        voids: { type: array, description: "Demandes d'annulation du ticket (détail uniquement)", items: { $ref: "#/components/schemas/TicketVoid" } }
+    TicketVoid:
+      type: object
+      description: Demande d'annulation d'un ticket à double validation (audit du 2026-11-22, A2).
+      properties:
+        id: { type: string }
+        ticket:
+          type: object
+          properties:
+            id: { type: string }
+            reference: { type: string }
+            status: { type: string }
+            stake: { $ref: "#/components/schemas/Money" }
+        status: { type: string, enum: [pending, approved, rejected] }
+        ticket_status: { type: string, description: Statut du ticket au moment de la demande }
+        reason: { type: string }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: [string, "null"] } } }
+        decided_by: { oneOf: [{ type: object, properties: { id: { type: string }, name: { type: string } } }, { type: "null" }] }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        impact: { type: [object, "null"], description: "Effet appliqué : from, to (status, payout_minor), ledger_delta_minor" }
+        preview: { type: object, description: "Demande en attente (détail) : effet si elle était validée maintenant" }
+        created_at: { type: string, format: date-time }
     AdminPaymentTransaction:
       type: object
       properties:

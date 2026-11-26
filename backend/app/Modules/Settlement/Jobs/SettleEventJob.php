@@ -4,17 +4,19 @@ namespace App\Modules\Settlement\Jobs;
 
 use App\Modules\Settlement\Services\SettlementService;
 use App\Modules\SportsData\Models\Event;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Règle les tickets d'un match après l'enregistrement de son résultat (ResultRecorder).
- * Relançable sans risque : le règlement est idempotent ; un seul job par match en file à la fois.
+ * Relançable sans risque : le règlement est idempotent ; un seul job par match EN ATTENTE dans la file.
+ * Unique jusqu'au début de son exécution seulement (audit du 18/11/2026, constat n° 6) : le job envoyé par une
+ * correction de résultat pendant qu'un règlement tourne n'est plus ignoré ; il passe juste après.
  * En cas d'échec définitif, la commande planifiée settlement:run rattrape le match.
  */
-class SettleEventJob implements ShouldBeUnique, ShouldQueue
+class SettleEventJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 

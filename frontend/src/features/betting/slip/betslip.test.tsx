@@ -113,8 +113,8 @@ describe('coupon : simple ou multiple', () => {
     expect(within(slip).getByText('R16-TICKET0002')).toBeInTheDocument();
     const posts = postedBodies(fetchMock);
     expect(posts.map((p) => p.body)).toEqual([
-      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 11, odds: '2.00' }] },
-      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 21, odds: '1.50' }] },
+      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 11, odds: '2.00', odds_version: 1 }] },
+      { stake: { minor: 10000, currency: 'HTG' }, selections: [{ selection_id: 21, odds: '1.50', odds_version: 1 }] },
     ]);
     expect(posts[0].key).not.toBe(posts[1].key);
   });
@@ -162,5 +162,77 @@ describe('coupon : simple ou multiple', () => {
     await userEvent.click(modeButton(slip, 'Simple'));
     expect(within(slip).queryByText(/Même match/)).toBeNull();
     expect(within(slip).getByRole('button', { name: 'Placer 2 paris' })).toBeEnabled();
+  });
+});
+
+describe('coupon : réponse perdue après l\'envoi du pari', () => {
+  it('réessayer le même pari renvoie la même clé d\'idempotence : jamais deux tickets', async () => {
+    let n = 0;
+    const fetchMock = loggedIn(() => {
+      n += 1;
+      // 1er envoi : réponse perdue (le serveur a pu débiter la mise) ; 2e : le serveur rend le ticket déjà créé.
+      if (n === 1) throw new TypeError('Failed to fetch');
+      return { status: 201, body: { data: ticket('1', 'Everton', 5000, '2.00', 10000) } };
+    });
+    renderApp('/');
+
+    await userEvent.click((await screen.findAllByRole('button', { name: '1 Everton à 2.00' }))[0]);
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
+    await userEvent.type(within(slip).getByLabelText('Montant de la mise'), '50');
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+
+    expect(await within(slip).findByText(/votre pari a peut-être été placé/)).toBeInTheDocument();
+    expect(within(slip).queryByText(/n'a pas été placé/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+    expect(await within(slip).findByText('R16-TICKET0001')).toBeInTheDocument();
+
+    const posts = postedBodies(fetchMock);
+    expect(posts).toHaveLength(2);
+    expect(posts[1].key).toBe(posts[0].key);
+  });
+
+  it('une panne du serveur (502) garde aussi la clé', async () => {
+    let n = 0;
+    const fetchMock = loggedIn(() => (++n === 1
+      ? { status: 502 }
+      : { status: 201, body: { data: ticket('1', 'Everton', 5000, '2.00', 10000) } }));
+    renderApp('/');
+
+    await userEvent.click((await screen.findAllByRole('button', { name: '1 Everton à 2.00' }))[0]);
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
+    await userEvent.type(within(slip).getByLabelText('Montant de la mise'), '50');
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+    expect(await within(slip).findByText(/votre pari a peut-être été placé/)).toBeInTheDocument();
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+    await within(slip).findByText('R16-TICKET0001');
+
+    const posts = postedBodies(fetchMock);
+    expect(posts[1].key).toBe(posts[0].key);
+  });
+
+  it('après un refus du serveur ou un pari réussi, le pari suivant a une nouvelle clé', async () => {
+    let n = 0;
+    const fetchMock = loggedIn(() => (++n === 1
+      ? { status: 422, body: { error: { code: 'insufficient_funds', message: 'Solde insuffisant.' } } }
+      : { status: 201, body: { data: ticket(String(n), 'Everton', 5000, '2.00', 10000) } }));
+    renderApp('/');
+
+    await userEvent.click((await screen.findAllByRole('button', { name: '1 Everton à 2.00' }))[0]);
+    const slip = screen.getByRole('complementary', { name: 'Coupon' });
+    await userEvent.type(within(slip).getByLabelText('Montant de la mise'), '50');
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+    expect(await within(slip).findByText('Solde insuffisant pour cette mise.')).toBeInTheDocument();
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+    await within(slip).findByText('R16-TICKET0002');
+
+    // Le même pari, placé exprès une seconde fois : un nouveau pari.
+    await userEvent.click(screen.getAllByRole('button', { name: '1 Everton à 2.00' })[0]);
+    await userEvent.type(within(slip).getByLabelText('Montant de la mise'), '50');
+    await userEvent.click(within(slip).getByRole('button', { name: 'Placer mon pari' }));
+    await within(slip).findByText('R16-TICKET0003');
+
+    const keys = postedBodies(fetchMock).map((p) => p.key);
+    expect(new Set(keys).size).toBe(3);
   });
 });

@@ -51,16 +51,6 @@ export function favoriteSelection(selections: CatalogueSelection[]): string | un
   return sorted.length > 1 && key(sorted[0].odds) !== key(sorted[1].odds) ? sorted[0].id : undefined;
 }
 
-/**
- * Part de chaque sélection dans les probabilités implicites du marché (1 / cote, ramenées à 100 %), en pourcentage entier.
- * Affichage seulement (barre sous la cote) : jamais utilisé pour un calcul de mise ou de gain.
- */
-export function impliedShares(selections: CatalogueSelection[]): Record<string, number> {
-  const inverse = selections.map((s) => ({ id: s.id, value: Number(s.odds) > 1 ? 1 / Number(s.odds) : 0 }));
-  const total = inverse.reduce((sum, s) => sum + s.value, 0);
-  return Object.fromEntries(inverse.map((s) => [s.id, total > 0 ? Math.round((s.value / total) * 100) : 0]));
-}
-
 /** Nom court d'un marché pour le coupon : « Résultat du match (1X2) » → « Résultat du match ». */
 export function marketTitle(market: CatalogueMarket): string {
   return market.name.replace(/\s*\(1X2\)$/, '');
