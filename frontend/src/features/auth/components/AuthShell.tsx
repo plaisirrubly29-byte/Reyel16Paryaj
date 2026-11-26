@@ -11,7 +11,7 @@ const HIGHLIGHTS: { icon: IconName; text: string }[] = [
 type Props = {
   title: string;
   subtitle?: string;
-  /** Icône de l'en-tête, affichée dans un badge (visible seulement sur mobile : le panneau de marque la remplace sur ordinateur). */
+  /** Icône de l'en-tête (ordinateur sans panneau de marque, pages secondaires). */
   icon: IconName;
   children: ReactNode;
   /** Panneau de marque (ordinateur) : texte joueur par défaut, remplacé pour l'espace administrateur. */
@@ -20,8 +20,9 @@ type Props = {
 
 /**
  * Habillage commun des pages de connexion, inscription et mot de passe :
- * panneau de marque à gauche (masqué sur mobile) et carte de formulaire à droite.
- * Sur mobile, un badge d'icône et un en-tête centré remplacent le panneau de marque.
+ * - ordinateur : panneau de marque à gauche et carte de formulaire à droite ;
+ * - mobile : bandeau bordeaux avec le logo et le titre, puis le formulaire sur une feuille blanche arrondie
+ *   qui remonte sur le bandeau, comme l'écran d'accueil d'une application.
  */
 export function AuthShell({ title, subtitle, icon, children, visual = { heading: 'Pariez en toute confiance', highlights: HIGHLIGHTS } }: Props) {
   return (
@@ -44,11 +45,12 @@ export function AuthShell({ title, subtitle, icon, children, visual = { heading:
 
         <section className="auth-card stack">
           <div className="auth-card-head">
+            <span className="auth-hero-logo" aria-hidden="true"><BrandLogo /></span>
             <span className="auth-icon-badge" aria-hidden="true"><Icon name={icon} size={22} /></span>
             <h1>{title}</h1>
             {subtitle && <p className="muted">{subtitle}</p>}
           </div>
-          {children}
+          <div className="auth-sheet stack">{children}</div>
         </section>
       </div>
     </div>

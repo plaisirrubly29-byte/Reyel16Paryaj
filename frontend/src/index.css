@@ -275,21 +275,57 @@ p { margin: 0; }
 /* Indicatif « +509 » : même badge, mais une puce (le texte a besoin de plus de largeur qu'un cercle). */
 .field-icon-badge-text { width: auto; min-width: 2.3rem; padding: 0 0.65rem; font-weight: 700; font-size: 0.85rem; }
 
-/* Formulaire centré : en-tête, libellés, indications, erreurs et texte saisi.
-   La marge droite égale la place du badge à gauche, pour que le texte tombe au milieu de la pilule. */
+/* Formulaire moderne : en-tête centré, libellés visibles au-dessus des champs, texte saisi aligné à gauche. */
 .auth-card .auth-card-head { align-items: center; text-align: center; }
-.auth-card .field label,
-.auth-card .field-hint,
-.auth-card .field-error { text-align: center; }
-.auth-card .field-control input, .auth-card .field-control select { text-align: center; padding-right: 3.6rem; }
-.auth-card .field-control select { text-align-last: center; cursor: pointer; }
-/* Champs et bouton principal de même dimension : pleine largeur, même hauteur. */
-.auth-card .field-control input, .auth-card .field-control select,
-.auth-card .field input { flex: 1; width: 100%; min-width: 0; height: 3.2rem; }
-.auth-card .btn-primary { width: 100%; height: 3.2rem; }
+.auth-card .field label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.auth-card .field-hint, .auth-card .field-error { font-size: 0.8rem; }
+.auth-card .field-control select { cursor: pointer; }
+/* Tous les champs (avec ou sans badge) : même pilule, même hauteur, pleine largeur. */
+.auth-card .field input:not([type='checkbox']), .auth-card .field-control select {
+  flex: 1; width: 100%; min-width: 0; height: 3.2rem; border-radius: 14px; font-size: 1rem;
+}
+.auth-card .field-control input, .auth-card .field-control select { border-radius: 14px; }
+.auth-card .field-control-plain > input { padding-left: 1rem; }
+.auth-card .field-control:has(.field-icon-badge-text) > input { padding-left: 4.4rem; }
+/* Bouton « œil » du mot de passe, à droite dans le champ. */
+.field-control-reveal > input { padding-right: 3.2rem; }
+.field-reveal {
+  position: absolute; right: 0.45rem; display: inline-grid; place-items: center; width: 2.4rem; height: 2.4rem;
+  border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer;
+}
+.field-reveal:hover { color: var(--accent-ink); background: var(--surface-3); }
+.field-reveal:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Bouton principal : grande pilule, comme le bouton d'action d'un écran de connexion mobile. */
-.auth-card .btn-primary { border-radius: 999px; min-height: 3.2rem; font-size: 1rem; font-weight: 700; }
+/* Bouton principal : pleine largeur, même hauteur que les champs. */
+.auth-card .btn-primary { width: 100%; height: 3.3rem; border-radius: 14px; font-size: 1rem; font-weight: 700; }
+
+/* Sous-parties de l'inscription (« Vos informations », « Sécurité »). */
+.auth-section { display: flex; flex-direction: column; gap: 0.9rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.auth-section legend {
+  padding: 0; margin-bottom: 0.2rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.auth-section + .auth-section { padding-top: 1rem; border-top: 1px solid var(--border); }
+/* Règles du mot de passe cochées pendant la saisie. */
+.password-rules { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.password-rule {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.55rem; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); font-size: 0.75rem; font-weight: 600;
+}
+.password-rule-ok { background: #e8f7ee; color: #157a3e; }
+/* Lien « Mot de passe oublié ? » sous le mot de passe, et « J'ai un code parrain ». */
+.auth-card .auth-forgot { align-self: flex-end; margin-top: -0.35rem; font-size: 0.85rem; }
+.auth-link-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem; align-self: flex-start; padding: 0.25rem 0; border: 0;
+  background: none; color: var(--accent-ink); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+}
+.auth-link-btn:hover { text-decoration: underline; }
+/* « Pas encore de compte ? » + bouton « Créer un compte » sous le formulaire de connexion. */
+.auth-switch { display: flex; flex-direction: column; align-items: stretch; gap: 0.6rem; }
+.auth-switch-line { height: 1px; background: var(--border); }
+.auth-card .auth-switch-btn { height: 3.1rem; border-radius: 14px; font-weight: 700; color: var(--accent-ink); }
+/* Logo de l'en-tête : seulement sur mobile (bandeau de marque). */
+.auth-hero-logo { display: none; }
 
 /* Page de connexion / inscription : panneau de marque + carte, côte à côte. */
 .auth-page { display: flex; justify-content: center; padding: 1.5rem 0; }
@@ -332,10 +368,29 @@ p { margin: 0; }
     background: var(--accent-soft); color: var(--accent-ink); margin-bottom: 0.2rem;
   }
 }
-@media (max-width: 480px) {
-  .auth-page { padding: 0.75rem 0; }
-  .auth-shell { max-width: none; }
-  .auth-shell .auth-card { padding: 1.85rem 1.35rem; }
+/* Téléphone : écran d'application. Bandeau bordeaux avec le logo et le titre en blanc, puis le formulaire sur une
+   feuille blanche aux coins arrondis ; le pied de page du site est masqué pour garder l'écran centré sur le formulaire. */
+@media (max-width: 560px) {
+  .content:has(> .auth-page) { padding: 0; }
+  .shell:has(.auth-page) > .site-footer { display: none; }
+  .auth-page { padding: 0; background: linear-gradient(170deg, var(--navy), var(--brand)); min-height: calc(100dvh - 4rem); }
+  .auth-shell { max-width: none; background: none; border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+  .auth-shell .auth-card {
+    gap: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: none;
+  }
+  .auth-card .auth-card-head { padding: 1.5rem 1.25rem 2.4rem; color: #fff; }
+  .auth-card .auth-card-head h1 { color: #fff; font-size: 1.6rem; }
+  .auth-card .auth-card-head .muted { color: rgba(255, 255, 255, 0.85); }
+  .auth-icon-badge { display: none; }
+  .auth-hero-logo { display: block; margin-bottom: 0.5rem; }
+  .auth-hero-logo .brand-logo { height: 4.5rem; border-radius: 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+  /* La feuille blanche qui remonte sur le bandeau. */
+  .auth-sheet {
+    flex: 1; margin-top: -1.25rem; padding: 1.6rem 1.25rem 2.25rem; gap: 1.1rem; background: var(--surface);
+    border-radius: 24px 24px 0 0; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+  }
+  .auth-shell, .auth-shell .auth-card { min-height: calc(100dvh - 4rem); }
+  .auth-shell .auth-card { display: flex; flex-direction: column; }
 }
 
 /* Deux champs sur une ligne (inscription : date de naissance / pays). */
@@ -1015,7 +1070,9 @@ p { margin: 0; }
 }
 
 /* Rangée des sports proposés, sous la bannière : pastilles claires qui défilent de côté */
-.home-sports { display: flex; gap: 0.4rem; overflow-x: auto; scrollbar-width: none; padding: 0.05rem 0; }
+/* position: relative : les textes .sr-only (absolus) des pastilles restent dans la rangée ; sinon ils dépassent
+   à droite, élargissent la page sur mobile et décalent le panier flottant et la barre du bas. */
+.home-sports { position: relative; display: flex; gap: 0.4rem; overflow-x: auto; scrollbar-width: none; padding: 0.05rem 0; }
 .home-sports::-webkit-scrollbar { display: none; }
 .home-sports-placeholder { min-height: 2.2rem; }
 .home-sport {
@@ -1055,6 +1112,7 @@ p { margin: 0; }
 
 /* Cartes : verre sombre, bordure en dégradé lumineux, teinte du sport, reflet au survol */
 .top-matches {
+  position: relative; /* textes .sr-only dans la rangée : voir .home-sports */
   display: grid; grid-auto-flow: column; grid-auto-columns: 340px; gap: 1rem;
   list-style: none; margin: 0; padding: 0.3rem 0.15rem 1rem; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; overscroll-behavior-x: contain;

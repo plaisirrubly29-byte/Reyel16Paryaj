@@ -36,7 +36,7 @@ describe('connexion', () => {
     });
     renderApp('/login');
 
-    await userEvent.type(await screen.findByLabelText('Téléphone ou email'), '34123456');
+    await userEvent.type(await screen.findByLabelText('Numéro de téléphone'), '34123456');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'mauvais');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
@@ -51,7 +51,7 @@ describe('connexion', () => {
     });
     const router = renderApp('/login?redirect=%2Fwallet');
 
-    await userEvent.type(await screen.findByLabelText('Téléphone ou email'), '34123456');
+    await userEvent.type(await screen.findByLabelText('Numéro de téléphone'), '34123456');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
@@ -63,28 +63,54 @@ describe('connexion', () => {
     expect((loginCall?.[1]?.headers as Record<string, string>)['X-XSRF-TOKEN']).toBe('test');
   });
 
-  it('se connecte par email ou par téléphone avec le même champ', async () => {
+  it('connecte le joueur avec son numéro de téléphone, même collé avec l’indicatif', async () => {
     const fetchMock = mockApi({
       'GET /me': guest,
       'POST /auth/login': { status: 422, body: { error: { code: 'invalid_credentials', message: 'Identifiants invalides.' } } },
     });
     renderApp('/login');
-    const login = await screen.findByLabelText('Téléphone ou email');
+    const phone = await screen.findByLabelText('Numéro de téléphone');
     const bodies = () => fetchMock.mock.calls
       .filter(([url]) => String(url).endsWith('/auth/login'))
       .map(([, init]) => JSON.parse(String(init?.body)));
 
-    await userEvent.type(login, ' Chef@Example.com ');
+    expect(screen.queryByLabelText('Téléphone ou email')).toBeNull();
+    await userEvent.click(phone);
+    await userEvent.paste('+509 34-12 34 56');
+    expect(phone).toHaveValue('34123456');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
+    await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+    await waitFor(() => expect(bodies()).toHaveLength(1));
+    expect(bodies()[0]).toEqual({ phone: '34123456', password: 'motdepasse123' });
+  });
+
+  it('affiche ou masque le mot de passe', async () => {
+    mockApi({ 'GET /me': guest });
+    renderApp('/login');
+    const password = await screen.findByLabelText('Mot de passe');
+
+    expect(password).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Afficher le mot de passe' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await userEvent.click(screen.getByRole('button', { name: 'Masquer le mot de passe' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  it('garde la connexion par email pour l’équipe (/admin/login)', async () => {
+    const fetchMock = mockApi({
+      'GET /me': guest,
+      'POST /auth/login': { status: 422, body: { error: { code: 'invalid_credentials', message: 'Identifiants invalides.' } } },
+    });
+    renderApp('/admin/login');
+    const bodies = () => fetchMock.mock.calls
+      .filter(([url]) => String(url).endsWith('/auth/login'))
+      .map(([, init]) => JSON.parse(String(init?.body)));
+
+    await userEvent.type(await screen.findByLabelText('Téléphone ou email'), ' Chef@Example.com ');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'motdepasse123');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
     await waitFor(() => expect(bodies()).toHaveLength(1));
     expect(bodies()[0]).toEqual({ email: 'Chef@Example.com', password: 'motdepasse123' });
-
-    await userEvent.clear(login);
-    await userEvent.type(login, '+509 34-12 34 56');
-    await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
-    await waitFor(() => expect(bodies()).toHaveLength(2));
-    expect(bodies()[1]).toEqual({ phone: '34123456', password: 'motdepasse123' });
   });
 
   it('ne suit jamais une redirection vers un autre site', () => {
