@@ -28,8 +28,10 @@ test('deux paris simples placés depuis le même coupon', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: `1 ${first.home} à 2.00` }).first().click();
   await page.getByRole('button', { name: `1 ${second.home} à 2.00` }).first().click();
-  // Sur ordinateur, le panier est un panneau flottant ouvert par le bouton « Panier ».
-  await page.getByRole('button', { name: /^Panier/ }).click();
+  // Grand écran (≥ 1280 px, taille par défaut de Playwright) : coupon toujours ouvert à droite. Plus petit : panneau
+  // flottant ouvert par le bouton « Panier ».
+  const panier = page.getByRole('button', { name: /^Panier/ });
+  if (await panier.isVisible()) await panier.click();
 
   const slip = page.getByRole('complementary', { name: 'Coupon' });
   const mode = slip.getByRole('group', { name: 'Type de pari' });

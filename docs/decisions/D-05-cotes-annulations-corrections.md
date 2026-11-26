@@ -50,6 +50,8 @@ résultat ou une saisie manuelle par un administrateur (`results.enter`).
 Mise en œuvre : `SettlementService` (rattrapage `settlement:run` toutes les 15 min), délai `BETTING_POSTPONED_VOID_HOURS`
 figé sur chaque ticket (`rules_snapshot.postponed_void_hours`).
 
+**Match avancé** (audit du 2026-11-22, B1) : une sélection d'avant-match placée à l'heure de début réelle publiée par le fournisseur ou après est annulée (cote 1), quel que soit le score ; la synchro ferme l'avant-match dès qu'elle reçoit la nouvelle heure (`CatalogueSyncService`, `SettlementService`).
+
 ## 4. Plus/moins sur une ligne entière
 
 Total exactement égal à la ligne (ex. ligne 3, score 2-1) : sélection annulée (cote 1). Avec une ligne en

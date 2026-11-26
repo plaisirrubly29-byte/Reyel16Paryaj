@@ -7,12 +7,16 @@ use App\Modules\Admin\Http\Resources\SettingVersionResource;
 use App\Modules\Admin\Models\SettingVersion;
 use App\Modules\Admin\Services\PlatformSettings;
 use App\Support\Http\Pagination;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Arr;
 
-/** Paramètres de la plateforme versionnés (P6-08) : consultation (settings.view), modification (settings.update). */
+/**
+ * Paramètres de la plateforme versionnés (P6-08) : consultation (settings.view), modification (settings.update) ;
+ * plafonds de risque seulement avec risk.manage (Risk & Fraud, V2-G03).
+ */
 class AdminSettingsController extends Controller
 {
     public function show(PlatformSettings $settings): JsonResponse
@@ -40,7 +44,14 @@ class AdminSettingsController extends Controller
         ]);
 
         // { betting: { min_stake_minor: … } } → { "betting.min_stake_minor": … } ; les clés inconnues sont refusées.
-        $settings->update($request->user(), Arr::dot((array) $request->input('values')), $data['reason'], (int) $data['base_version']);
+        $values = Arr::dot((array) $request->input('values'));
+
+        // Sans settings.update (route : settings.update ou risk.manage), seuls les plafonds de risque sont modifiables.
+        if (! $request->user()->hasPermission('settings.update') && array_diff(array_keys($values), PlatformSettings::riskKeys()) !== []) {
+            throw new AuthorizationException;
+        }
+
+        $settings->update($request->user(), $values, $data['reason'], (int) $data['base_version']);
 
         return response()->json(['data' => $this->present($settings)]);
     }

@@ -26,6 +26,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $live_model_at heure des cotes sur lesquelles le modèle a été calé
  * @property Carbon|null $score_checked_at dernier score reçu du fournisseur pendant le match
  * @property Carbon|null $score_changed_at dernier changement de score vu
+ * @property Carbon|null $hidden_at match masqué par un administrateur : retiré du site, plus pariable
+ * @property string|null $hidden_reason
+ * @property Carbon|null $admin_locked_at heure ou statut fixés par un administrateur : la synchronisation ne les remplace plus
  */
 class Event extends Model
 {
@@ -34,6 +37,7 @@ class Event extends Model
         'competition_id', 'provider', 'external_id', 'home_team_id', 'away_team_id', 'starts_at', 'status',
         'home_score', 'away_score', 'result_received_at', 'last_synced_at', 'created_at', 'updated_at',
         'live_home_rate', 'live_away_rate', 'live_draw_boost', 'live_model_at', 'score_checked_at', 'score_changed_at',
+        'hidden_at', 'hidden_reason', 'admin_locked_at',
     ];
 
     protected function casts(): array
@@ -49,6 +53,8 @@ class Event extends Model
             'live_model_at' => 'datetime',
             'score_checked_at' => 'datetime',
             'score_changed_at' => 'datetime',
+            'hidden_at' => 'datetime',
+            'admin_locked_at' => 'datetime',
         ];
     }
 

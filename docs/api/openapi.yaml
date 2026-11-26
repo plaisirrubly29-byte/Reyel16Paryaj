@@ -1421,7 +1421,7 @@ paths:
               properties:
                 roles:
                   type: array
-                  items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+                  items: { type: string, enum: [super_admin, operations, finance, support, compliance, risk_fraud, agent_manager] }
                 reason: { type: string, minLength: 5, maxLength: 500 }
       responses:
         "200":
@@ -1545,7 +1545,8 @@ paths:
       description: |
         Calculés à partir des données réelles, filtrés selon les permissions du rôle, critiques en premier.
         Clés possibles : provider_credits, provider_silent, stale_live_events, markets_suspended,
-        settlement_overdue, finance_corrections, reconciliation, aml_alerts (aml.view), failed_jobs, mfa_failures, role_changes,
+        selections_stuck (sélections en attente plus de 6 h après le début d'un match sans résultat), settlement_overdue,
+        ticket_voids (tickets.void_approve), finance_corrections, reconciliation, aml_alerts (aml.view), failed_jobs, mfa_failures, role_changes,
         login_failures (échecs de connexion répétés sur 1 h, par compte ou par adresse IP, revue P8-02 F12).
       security: [{ sessionCookie: [] }]
       responses:
@@ -1661,7 +1662,7 @@ paths:
       parameters:
         - { name: search, in: query, description: "Nom (fragment), email (fragment ; complet seulement sans users.view_personal_data), téléphone complet ou identifiant", schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
-        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
+        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance, risk_fraud, agent_manager] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -1723,8 +1724,9 @@ paths:
       tags: [Admin]
       summary: Mise maximale par ticket propre à un joueur (motif requis, audité)
       description: |
-        Permission users.suspend (V2-D05). Baisse la limite générale betting.max_stake_minor pour ce joueur ; null la
-        retire. Audit user.stake_limit_changed (avant / après, motif). Comptes joueurs uniquement (422 not_a_player).
+        Permission users.suspend ou risk.manage (V2-D05, rôle Risk & Fraud V2-G03). Baisse la limite générale
+        betting.max_stake_minor pour ce joueur ; null la retire. Audit user.stake_limit_changed (avant / après,
+        motif). Comptes joueurs uniquement (422 not_a_player).
       x-task: V2-D05
       security: [{ sessionCookie: [] }]
       parameters:
@@ -1827,6 +1829,7 @@ paths:
         - { name: competition, in: query, schema: { type: integer } }
         - { name: date, in: query, schema: { type: string, format: date } }
         - { name: market_status, in: query, description: "Événements ayant au moins un marché dans ce statut", schema: { type: string, enum: [open, suspended, closed, settled] } }
+        - { name: stuck, in: query, description: "1 : matchs sans résultat dont des sélections attendent depuis plus de 6 h après le début", schema: { type: boolean } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -1855,6 +1858,95 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" } } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin]
+      summary: Modifier un match — heure, report, annulation, masquage (motif requis, audité)
+      description: |
+        Permission events.update (Super Admin, Opérations). Audit : event.updated.
+        Heure ou statut (scheduled ↔ postponed) : match programmé ou reporté, sans résultat ; la synchronisation ne
+        remplace plus ce qui a été fixé (admin_locked_at). Les tickets gardent l'heure figée au pari (D-05 §3, 48 h).
+        Annulation (D-05 §2, seule dans la requête) : match pas encore joué → annulé tout de suite, sélections à la
+        cote 1 et tickets réglés ; match commencé → demande de résultat « annulé » à valider par un autre
+        administrateur (meta.result_correction_id) et marchés suspendus ; match avec un résultat → 409 result_exists.
+        Masquage : le match quitte le site et n'est plus pariable.
+      x-task: A1 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                starts_at: { type: string, format: date-time }
+                status: { type: string, enum: [scheduled, postponed, cancelled] }
+                hidden: { type: boolean }
+                reason: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        "200":
+          description: Match modifié (ou annulation demandée)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AdminEvent" }
+                  meta: { type: object, properties: { result_correction_id: { type: [string, "null"] } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`event_not_editable`, `event_unchanged`, `result_exists`, `correction_already_pending`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "428": { description: En-tête Idempotency-Key manquant }
+  /admin/events/{id}/suspend:
+    post:
+      tags: [Admin]
+      summary: Suspendre tous les marchés ouverts d'un match (motif requis, audité)
+      description: |
+        Permission markets.suspend. Chaque marché est audité (market.suspended), le match aussi (event.suspended).
+        Aucun marché à suspendre : 409 event_unchanged ; match terminé ou annulé : 409 event_not_editable.
+      x-task: A3 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 255 } } } } }
+      responses:
+        "200":
+          description: "Marchés suspendus (meta.markets_changed)"
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" }, meta: { type: object, properties: { markets_changed: { type: integer } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`event_unchanged`, `event_not_editable`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/events/{id}/reopen:
+    post:
+      tags: [Admin]
+      summary: Rouvrir les marchés d'un match suspendus par l'administration (motif requis, audité)
+      description: Permission markets.suspend. Les suspensions automatiques (cotes trop anciennes) restent. Audit event.reopened.
+      x-task: A3 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 255 } } } } }
+      responses:
+        "200":
+          description: "Marchés rouverts (meta.markets_changed)"
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminEvent" }, meta: { type: object, properties: { markets_changed: { type: integer } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`event_unchanged`, `event_not_editable`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/markets/{id}:
     get:
       tags: [Admin]
@@ -2534,6 +2626,8 @@ paths:
       tags: [Admin]
       summary: Enregistrer une nouvelle version des paramètres (permission settings.update, motif requis, auditée)
       description: |
+        Permission settings.update ; ou risk.manage (rôle Risk & Fraud, V2-G03) pour les seuls plafonds de risque
+        (betting.max_event_liability_minor, betting.max_market_liability_minor) : toute autre clé envoyée → 403 forbidden.
         Seules les valeurs envoyées changent ; la nouvelle version est un instantané complet, en ajout seul, et
         s'applique immédiatement. `base_version` est la version affichée : si une autre version a été enregistrée
         entre-temps, `409 settings_changed` (rien n'est écrasé). Les paramètres déjà figés sur un ticket ne changent pas.
@@ -2624,6 +2718,8 @@ paths:
         - { name: reference, in: query, description: "Référence exacte ; casse et espaces ignorés", schema: { type: string, example: R16-7KQ2M9XAPB } }
         - { name: status, in: query, schema: { type: string, enum: [awaiting, pending, won, lost, void, rejected] } }
         - { name: user_id, in: query, schema: { type: integer } }
+        - { name: event_id, in: query, description: "Tickets qui ont une sélection sur ce match", schema: { type: integer } }
+        - { name: void_status, in: query, description: "Tickets dont une demande d'annulation est dans cet état", schema: { type: string, enum: [pending, approved, rejected] } }
         - { name: placed_from, in: query, description: Jour inclus, schema: { type: string, format: date } }
         - { name: placed_to, in: query, description: Jour inclus, schema: { type: string, format: date } }
         - $ref: "#/components/parameters/Page"
@@ -2655,6 +2751,108 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/AdminTicket" } } } } }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/tickets/{id}/void:
+    post:
+      tags: [Admin]
+      summary: Demander l'annulation d'un ticket (tickets.void, motif requis, double validation)
+      description: |
+        Rien ne change avant la validation par un AUTRE administrateur (tickets.void_approve). Ticket en cours, gagné
+        ou perdu ; réglé depuis plus de 72 h (D-05 §5) : 409 correction_window_closed. Audit ticket.void_requested.
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "201":
+          description: Demande créée, avec l'aperçu de son effet
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`ticket_not_voidable`, `correction_window_closed`, `void_already_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/ticket-voids:
+    get:
+      tags: [Admin]
+      summary: Demandes d'annulation de ticket (tickets.view)
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: ticket_id, in: query, schema: { type: integer } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Demandes, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/TicketVoid" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/ticket-voids/{id}:
+    get:
+      tags: [Admin]
+      summary: Détail d'une demande d'annulation, avec l'aperçu de son effet si elle attend (tickets.view)
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/ticket-voids/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Valider une annulation de ticket (tickets.void_approve, jamais le demandeur)
+      description: |
+        Sélections à la cote 1, mise rendue ; un gain ou un remboursement déjà versé est d'abord compensé (le solde peut
+        devenir négatif), nouvelle révision du règlement. Audit ticket.void_approved.
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Ticket annulé
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { description: "`forbidden`, `self_approval_forbidden`, `approver_role_too_recent`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`void_not_pending`, `ticket_changed`, `ticket_not_voidable`, `correction_window_closed`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /admin/ticket-voids/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Refuser (tickets.void_approve) ou retirer (demandeur) une demande d'annulation
+      x-task: A2 (audit du 2026-11-22)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } } } }
+      responses:
+        "200":
+          description: Demande close
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/TicketVoid" } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`void_not_pending`", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /admin/ledger:
     get:
       tags: [Admin]
@@ -3884,6 +4082,8 @@ components:
         origin: { type: object, properties: { provider: { type: string, example: the_odds_api }, external_id: { type: string } } }
         last_synced_at: { type: [string, "null"], format: date-time }
         result_received_at: { type: [string, "null"], format: date-time }
+        hidden: { oneOf: [{ type: object, properties: { at: { type: string, format: date-time }, reason: { type: [string, "null"] } } }, { type: "null" }], description: "Masqué par l'administration : retiré du site, plus pariable" }
+        admin_locked_at: { type: [string, "null"], format: date-time, description: "Heure ou statut fixés par l'administration : la synchronisation ne les remplace plus" }
         markets_count:
           type: object
           description: Nombre de marchés par statut
@@ -3980,7 +4180,7 @@ components:
         kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "Vérification d'identité (V2-C03) ; détail par GET /me/kyc" }
         roles:
           type: array
-          items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+          items: { type: string, enum: [super_admin, operations, finance, support, compliance, risk_fraud, agent_manager] }
           description: Vide pour un joueur.
         permissions:
           type: array
@@ -4275,6 +4475,29 @@ components:
         rules_snapshot: { type: object, description: Règles acceptées par le joueur (détail uniquement) }
         selections: { type: array, items: { $ref: "#/components/schemas/BetTicket/properties/selections/items" } }
         ledger_entries: { type: array, items: { $ref: "#/components/schemas/AdminLedgerEntry" } }
+        voids: { type: array, description: "Demandes d'annulation du ticket (détail uniquement)", items: { $ref: "#/components/schemas/TicketVoid" } }
+    TicketVoid:
+      type: object
+      description: Demande d'annulation d'un ticket à double validation (audit du 2026-11-22, A2).
+      properties:
+        id: { type: string }
+        ticket:
+          type: object
+          properties:
+            id: { type: string }
+            reference: { type: string }
+            status: { type: string }
+            stake: { $ref: "#/components/schemas/Money" }
+        status: { type: string, enum: [pending, approved, rejected] }
+        ticket_status: { type: string, description: Statut du ticket au moment de la demande }
+        reason: { type: string }
+        requested_by: { type: object, properties: { id: { type: string }, name: { type: [string, "null"] } } }
+        decided_by: { oneOf: [{ type: object, properties: { id: { type: string }, name: { type: string } } }, { type: "null" }] }
+        decision_reason: { type: [string, "null"] }
+        decided_at: { type: [string, "null"], format: date-time }
+        impact: { type: [object, "null"], description: "Effet appliqué : from, to (status, payout_minor), ledger_delta_minor" }
+        preview: { type: object, description: "Demande en attente (détail) : effet si elle était validée maintenant" }
+        created_at: { type: string, format: date-time }
     AdminPaymentTransaction:
       type: object
       properties:

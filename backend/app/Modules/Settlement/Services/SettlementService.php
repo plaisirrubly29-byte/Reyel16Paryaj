@@ -13,6 +13,7 @@ use App\Modules\Settlement\Models\Settlement;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
+use App\Modules\SportsData\Providers\FakeSportsDataProvider;
 use App\Modules\Wallet\Models\LedgerEntry;
 use App\Modules\Wallet\Services\LedgerService;
 use App\Support\Money;
@@ -77,9 +78,17 @@ class SettlementService
         $this->settleCatalogue($event, $result);
 
         $ticketIds = [];
-        $pending = BetSelection::where('event_id', $event->id)->where('status', BetSelectionStatus::Pending)->get();
+        $pending = BetSelection::where('event_id', $event->id)->where('status', BetSelectionStatus::Pending)->with('ticket')->get();
 
         foreach ($pending as $selection) {
+            // Pari d'avant-match placé après le vrai coup d'envoi (match avancé par le fournisseur) : annulé, cote 1 (D-05).
+            if ($this->placedAfterKickoff($selection, $event)) {
+                $report->selections += $this->voidSelection($selection, 'settlement.selection_after_kickoff');
+                $ticketIds[$selection->bet_ticket_id] = true;
+
+                continue;
+            }
+
             // Match joué plus de postponed_void_hours après l'heure du pari : annulé, quel que soit le score (D-05).
             if ($event->starts_at->gt($this->postponedDeadline($selection))) {
                 $report->selections += $this->voidPostponed($selection);
@@ -270,6 +279,25 @@ class SettlementService
      */
     private function voidPostponed(BetSelection $selection): int
     {
+        return $this->voidSelection($selection, 'settlement.selection_postponed');
+    }
+
+    /**
+     * Sélection d'avant-match (sans score figé en direct) d'un ticket placé à l'heure de début réelle du match ou
+     * après : le fournisseur a avancé le match après la prise du pari dans notre catalogue (audit B1).
+     * Sauf matchs du faux fournisseur (jamais en production) : sports-data:fake-match finish simule le temps qui passe
+     * en reculant le coup d'envoi, les tickets du parcours E2E seraient sinon tous annulés.
+     */
+    private function placedAfterKickoff(BetSelection $selection, Event $event): bool
+    {
+        return $event->provider !== FakeSportsDataProvider::NAME
+            && $selection->live_score === null
+            && $selection->ticket->placed_at->gte($event->starts_at);
+    }
+
+    /** Annule une sélection sans result_id (indépendante du score) ; $log : événement journalisé. */
+    private function voidSelection(BetSelection $selection, string $log): int
+    {
         $updated = BetSelection::whereKey($selection->id)->where('status', BetSelectionStatus::Pending)->update([
             'status' => BetSelectionStatus::Void,
             'result_id' => null,
@@ -278,7 +306,7 @@ class SettlementService
         ]);
 
         if ($updated > 0) {
-            Log::info('settlement.selection_postponed', ['bet_selection_id' => $selection->id, 'event_id' => $selection->event_id]);
+            Log::info($log, ['bet_selection_id' => $selection->id, 'event_id' => $selection->event_id]);
         }
 
         return $updated;
@@ -420,6 +448,65 @@ class SettlementService
             'from' => ['status' => $from->value, 'payout_minor' => $fromPayout],
             'to' => ['status' => $to->value, 'payout_minor' => $payout->minor],
             'ledger_delta_minor' => $payout->minor - $fromPayout,
+        ];
+    }
+
+    /**
+     * Annulation d'un ticket entier par l'administration, après double validation (TicketVoidService) : toutes ses
+     * sélections passent à la cote 1 (D-05), la mise est rendue. Ticket déjà réglé : écriture compensatoire du gain ou
+     * du remboursement versé (le solde peut devenir négatif), puis remboursement, dans une nouvelle révision.
+     * Les sélections annulées n'ont pas de result_id : une correction de score ne les touche plus.
+     *
+     * À appeler dans une transaction, ticket verrouillé.
+     *
+     * @param  bool  $apply  false : aperçu, rien n'est écrit
+     * @return array{ticket_id: string, reference: string, user_id: string, from: array{status: string, payout_minor: int}, to: array{status: string, payout_minor: int}, ledger_delta_minor: int}
+     */
+    public function voidTicket(BetTicket $ticket, bool $apply, ?User $actor = null, string $reason = ''): array
+    {
+        $from = $ticket->status;
+        $fromPayout = $from->isSettled() ? (int) $ticket->payout_minor : 0;
+        $stake = $ticket->stake();
+
+        if ($apply) {
+            BetSelection::where('bet_ticket_id', $ticket->id)->update([
+                'status' => BetSelectionStatus::Void,
+                'result_id' => null,
+                'settled_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $last = Settlement::where('bet_ticket_id', $ticket->id)->orderByDesc('revision')->first();
+            $revision = ($last->revision ?? 0) + 1;
+
+            if ($from->isSettled() && $last?->ledger_entry_id !== null) {
+                $this->ledger->reverse(LedgerEntry::findOrFail($last->ledger_entry_id), $this->reference($ticket, 'reversal', $revision), $reason, $actor);
+            }
+
+            $entry = $this->ledger->refund($ticket->wallet, $stake, $this->reference($ticket, 'refund', $revision), (string) $ticket->id);
+
+            Settlement::create([
+                'bet_ticket_id' => $ticket->id,
+                'revision' => $revision,
+                'status' => BetTicketStatus::Void,
+                'payout_minor' => $stake->minor,
+                'currency' => $ticket->currency,
+                'ledger_entry_id' => $entry->id,
+                'results' => $ticket->selections()->get()->mapWithKeys(fn (BetSelection $s) => [(string) $s->event_id => null])->all(),
+            ]);
+
+            $ticket->update(['status' => BetTicketStatus::Void, 'payout_minor' => $stake->minor, 'settled_at' => now()]);
+
+            Log::warning('settlement.ticket_voided', ['ticket' => $ticket->reference, 'from' => $from->value, 'payout_minor' => $stake->minor]);
+        }
+
+        return [
+            'ticket_id' => (string) $ticket->id,
+            'reference' => $ticket->reference,
+            'user_id' => (string) $ticket->user_id,
+            'from' => ['status' => $from->value, 'payout_minor' => $fromPayout],
+            'to' => ['status' => BetTicketStatus::Void->value, 'payout_minor' => $stake->minor],
+            'ledger_delta_minor' => $stake->minor - $fromPayout,
         ];
     }
 

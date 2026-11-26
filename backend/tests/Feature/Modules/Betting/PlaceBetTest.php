@@ -223,6 +223,25 @@ class PlaceBetTest extends TestCase
         $this->assertSame(0, BetTicket::count());
     }
 
+    public function test_a_match_advanced_by_the_provider_to_a_past_time_closes_pre_match_betting(): void
+    {
+        // Audit B1 : The Odds avance le coup d'envoi à une heure déjà passée ; notre catalogue l'attendait demain.
+        $selection = $this->selection();
+        $kickOff = now()->subMinutes(20)->startOfSecond()->toImmutable();
+        $this->fake->setStartsAt('fake-1', $kickOff);
+
+        app(CatalogueSyncService::class)->sync('soccer_epl');
+
+        $event = Event::where('external_id', 'fake-1')->firstOrFail();
+        $this->assertTrue($event->starts_at->equalTo($kickOff));
+        $this->assertSame(EventStatus::Scheduled, $event->status);
+        $this->bet([[$selection->fresh()]])->assertUnprocessable()->assertJsonPath('error.code', 'selection_unavailable');
+        $this->assertSame(0, BetTicket::count());
+
+        // L'autre match, toujours à venir, reste pariable.
+        $this->bet([[$this->selection('fake-2')]])->assertCreated();
+    }
+
     public function test_a_live_match_cannot_be_bet_unless_live_betting_is_allowed(): void
     {
         // Revue P8-02, E1 : un joueur qui voit un but parierait sur la cote d'avant le but.

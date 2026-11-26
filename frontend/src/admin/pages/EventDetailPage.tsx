@@ -5,7 +5,9 @@ import { Alert } from '../../shared/components/Alert';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
-import { since, useAdminEvent, useChangeMarketStatus, type AdminEvent, type AdminMarket, type AdminSelection } from '../api/events';
+import {
+  since, useAdminEvent, useChangeMarketStatus, useEventMarkets, useUpdateEvent, type AdminEvent, type AdminMarket, type AdminSelection,
+} from '../api/events';
 import { deviationLabel, isOpen, useOddsOverrides, useOverrideAction, type OddsOverride } from '../api/odds';
 import {
   awaitsManualResult, CORRECTION_STATUS_LABELS, currentLabel, isFirstResult, outcomeLabel, sourceLabel, useRequestCorrection, useResultHistory,
@@ -47,6 +49,8 @@ export function EventDetailPage() {
             <div className="summary-item"><dt>Résultat reçu</dt><dd>{e.result_received_at ? dateTime(e.result_received_at) : '—'}</dd></div>
           </dl>
 
+          <ManageSection event={e} />
+
           <section className="admin-card stack">
             <h2 className="card-title">Marchés</h2>
             {e.markets?.length === 0 && <p className="muted">Aucun marché pour ce match.</p>}
@@ -59,6 +63,168 @@ export function EventDetailPage() {
           </section>
 
           <ResultSection event={e} />
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Valeur d'un champ datetime-local (heure locale du navigateur) pour un instant ISO. */
+function localInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Gestion du match (audit du 2026-11-22) : heure, report, annulation (D-05), masquage (events.update) ; suspension ou
+ * réouverture de tous ses marchés (markets.suspend). Chaque action exige un motif, enregistré dans le journal d'audit.
+ */
+function ManageSection({ event }: { event: AdminEvent }) {
+  const { data: me } = useMe();
+  const canUpdate = Boolean(me?.permissions.includes('events.update'));
+  const canSuspend = Boolean(me?.permissions.includes('markets.suspend'));
+  const update = useUpdateEvent(event.id);
+  const markets = useEventMarkets(event.id);
+  const [startsAt, setStartsAt] = useState(() => localInput(event.starts_at));
+  const [correctionId, setCorrectionId] = useState<string | null>(null);
+  const over = event.status === 'finished' || event.status === 'cancelled';
+  const schedulable = (event.status === 'scheduled' || event.status === 'postponed') && !event.result_received_at;
+  const started = new Date(event.starts_at).getTime() <= Date.now();
+  const played = event.status === 'live' || (started && event.status !== 'postponed');
+  const newTime = startsAt ? new Date(startsAt).toISOString() : '';
+  // Comparé à la minute près : le champ n'a pas de secondes.
+  const timeChanged = Boolean(newTime) && startsAt !== localInput(event.starts_at);
+
+  async function cancel(reason: string, idempotencyKey: string) {
+    const result = await update.mutateAsync({ status: 'cancelled', reason, idempotencyKey });
+    setCorrectionId(result.meta.result_correction_id);
+  }
+
+  return (
+    <section className="admin-card stack" aria-labelledby="manage-title">
+      <h2 id="manage-title" className="card-title">Gestion du match</h2>
+
+      {event.hidden && (
+        <Alert tone="warning">
+          Match masqué depuis le {dateTime(event.hidden.at)} : il n'apparaît plus sur le site et n'est plus pariable.
+          {event.hidden.reason && <> Motif : {event.hidden.reason}</>}
+        </Alert>
+      )}
+      {event.admin_locked_at && (
+        <p className="muted small">
+          Heure ou statut fixés par l'administration le {dateTime(event.admin_locked_at)} : la synchronisation ne les remplace plus.
+        </p>
+      )}
+      {correctionId && (
+        <Alert tone="info">
+          Le match a commencé : son annulation attend la validation d'un second administrateur.{' '}
+          <Link to={`/admin/settlements/${correctionId}`}>Voir la demande</Link>. Ses marchés sont suspendus en attendant.
+        </Alert>
+      )}
+      <p className="small"><Link to={`/admin/tickets?event_id=${event.id}`}>Tickets sur ce match</Link></p>
+
+      {canUpdate && schedulable && (
+        <details className="market-action">
+          <summary>Changer l'heure du match</summary>
+          <ReasonForm
+            id="event-time"
+            title="Nouvelle heure"
+            description="Les tickets gardent l'heure prévue au moment du pari : un match qui ne commence pas dans les 48 h qui la suivent voit ses sélections annulées (cote 1)."
+            submitLabel="Enregistrer l'heure"
+            incomplete={!timeChanged}
+            successMessage="Heure du match mise à jour."
+            onSubmit={(reason, idempotencyKey) => update.mutateAsync({ starts_at: newTime, reason, idempotencyKey })}
+          >
+            <div className="field">
+              <label htmlFor="event-starts-at">Début du match (heure locale)</label>
+              <input id="event-starts-at" type="datetime-local" value={startsAt} onChange={(ev) => setStartsAt(ev.target.value)} />
+            </div>
+          </ReasonForm>
+        </details>
+      )}
+
+      {canUpdate && schedulable && (
+        <details className="market-action">
+          <summary>{event.status === 'postponed' ? 'Remettre le match au programme' : 'Reporter le match'}</summary>
+          <ReasonForm
+            id="event-postpone"
+            title={event.status === 'postponed' ? 'Remettre au programme' : 'Reporter le match'}
+            description={event.status === 'postponed'
+              ? "Le match redevient « programmé » et revient sur le site s'il est à venir. Changez aussi son heure si elle a bougé."
+              : "Le match disparaît du site. S'il ne commence pas dans les 48 h qui suivent l'heure prévue au moment du pari, ses sélections sont annulées (cote 1) et les mises rendues."}
+            submitLabel={event.status === 'postponed' ? 'Remettre au programme' : 'Reporter'}
+            variant={event.status === 'postponed' ? 'primary' : 'danger'}
+            successMessage="Statut du match mis à jour."
+            onSubmit={(reason, idempotencyKey) => update.mutateAsync({
+              status: event.status === 'postponed' ? 'scheduled' : 'postponed',
+              ...(timeChanged ? { starts_at: newTime } : {}),
+              reason,
+              idempotencyKey,
+            })}
+          />
+        </details>
+      )}
+
+      {canUpdate && !over && !event.result_received_at && (
+        <details className="market-action">
+          <summary>Annuler le match</summary>
+          <ReasonForm
+            id="event-cancel"
+            title="Annuler le match"
+            description={played
+              ? "Le match a commencé : l'annulation sera validée par un second administrateur. À la validation, ses sélections passent à la cote 1 (simples remboursés, combinés recalculés). Ses marchés sont suspendus dès la demande."
+              : "Le match n'a pas été joué : il est annulé tout de suite. Ses sélections passent à la cote 1 (simples remboursés, combinés recalculés) et ses marchés sont fermés."}
+            submitLabel={played ? "Demander l'annulation" : 'Annuler le match'}
+            variant="danger"
+            successMessage={played ? "Demande envoyée : elle attend la validation d'un second administrateur." : 'Match annulé, tickets réglés.'}
+            onSubmit={cancel}
+          />
+        </details>
+      )}
+
+      {canUpdate && (
+        <details className="market-action">
+          <summary>{event.hidden ? 'Réafficher le match' : 'Masquer le match'}</summary>
+          <ReasonForm
+            id="event-hide"
+            title={event.hidden ? 'Réafficher le match' : 'Masquer le match'}
+            description={event.hidden
+              ? 'Le match revient sur le site ; ses marchés ouverts redeviennent pariables.'
+              : "Le match disparaît du site et n'est plus pariable. Les tickets déjà pris ne changent pas."}
+            submitLabel={event.hidden ? 'Réafficher' : 'Masquer'}
+            variant={event.hidden ? 'primary' : 'danger'}
+            successMessage="Visibilité du match mise à jour."
+            onSubmit={(reason, idempotencyKey) => update.mutateAsync({ hidden: !event.hidden, reason, idempotencyKey })}
+          />
+        </details>
+      )}
+
+      {canSuspend && !over && (
+        <>
+          <details className="market-action">
+            <summary>Suspendre tous les marchés</summary>
+            <ReasonForm
+              id="event-suspend"
+              title="Suspendre tous les marchés du match"
+              description="Plus aucun pari sur ce match, avant comme pendant la rencontre. La synchronisation ne rouvrira pas ces marchés."
+              submitLabel="Suspendre tous les marchés"
+              variant="danger"
+              successMessage="Marchés du match suspendus."
+              onSubmit={(reason, idempotencyKey) => markets.mutateAsync({ action: 'suspend', reason, idempotencyKey })}
+            />
+          </details>
+          <details className="market-action">
+            <summary>Rouvrir les marchés suspendus</summary>
+            <ReasonForm
+              id="event-reopen"
+              title="Rouvrir les marchés du match"
+              description="Rouvre les marchés suspendus par l'administration (pas ceux suspendus automatiquement pour une cote trop ancienne). Un marché n'est pariable que si sa cote est assez récente."
+              submitLabel="Rouvrir les marchés"
+              successMessage="Marchés du match rouverts."
+              onSubmit={(reason, idempotencyKey) => markets.mutateAsync({ action: 'reopen', reason, idempotencyKey })}
+            />
+          </details>
         </>
       )}
     </section>

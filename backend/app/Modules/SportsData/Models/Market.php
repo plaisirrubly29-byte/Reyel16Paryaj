@@ -87,6 +87,11 @@ class Market extends Model
      */
     public function isBettable(): bool
     {
+        // Match masqué par un administrateur : plus pariable, quel que soit l'état de ses marchés.
+        if ($this->event?->hidden_at !== null) {
+            return false;
+        }
+
         if ($this->event?->status === EventStatus::Live) {
             return self::liveBettingAllowed() && app(LiveOddsService::class)->quote($this)->open;
         }
