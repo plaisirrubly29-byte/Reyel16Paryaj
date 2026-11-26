@@ -787,7 +787,8 @@ paths:
           date (422 lottery_number_limit, details.remaining_stake = mise encore acceptée sur cette boule).
         - **Ledger** : une écriture `stake` du total (related type lottery_ticket).
 
-        Clé d'idempotence obligatoire : un rejeu renvoie la même fiche (200) ; la même clé pour une autre fiche donne
+        Clé d'idempotence obligatoire : un rejeu renvoie la même fiche (réponse d'origine rejouée, en-tête
+        Idempotent-Replayed, ou 200 si la clé a expiré) ; la même clé pour une autre fiche donne
         409 idempotency_key_reused.
       x-task: V2-D09
       security: [{ sessionCookie: [] }]
@@ -830,7 +831,7 @@ paths:
           content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LotteryTicket" } } } } }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403":
-          description: lottery_sales_closed (vente fermée ou barème absent) ; betting_paused (pause ou auto-exclusion)
+          description: lottery_sales_closed (vente fermée ou barème absent)
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -839,6 +840,7 @@ paths:
         "422":
           description: |
             validation_failed (details par ligne : plays.0.numbers…) ; lottery_draw_unknown ; insufficient_funds ;
+            betting_paused (pause ou auto-exclusion, comme POST /bets) ; loss_limit_exceeded ;
             stake_limit_exceeded (jeu responsable) ; lottery_number_blocked (details.play, details.numbers) ;
             lottery_number_limit (details.play, details.numbers, details.remaining_stake) ; not_a_player
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

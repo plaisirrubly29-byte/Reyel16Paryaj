@@ -45,6 +45,7 @@ class AccessAndSessionTest extends TestCase
         'POST api/v1/payments/fake/checkout/{reference}',
         // Borlette : tirages et résultats publiés, en lecture seule (404 tant que LOTTERY_ENABLED=false).
         'GET api/v1/lottery/draws',
+        'GET api/v1/lottery/games',
         'GET api/v1/lottery/results',
     ];
 

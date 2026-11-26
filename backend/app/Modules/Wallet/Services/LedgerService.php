@@ -92,19 +92,20 @@ class LedgerService
      *
      * @throws ApiException insufficient_funds
      */
-    public function reserveStake(Wallet $wallet, Money $stake, string $reference, ?string $betId = null): LedgerEntry
+    public function reserveStake(Wallet $wallet, Money $stake, string $reference, ?string $betId = null, string $relatedType = 'bet'): LedgerEntry
     {
-        return $this->post($wallet, LedgerEntryType::Stake, $stake, $reference, 'bet', $betId);
+        return $this->post($wallet, LedgerEntryType::Stake, $stake, $reference, $relatedType, $betId);
     }
 
-    public function payout(Wallet $wallet, Money $amount, string $reference, ?string $betId = null): LedgerEntry
+    /** $relatedType : "bet" (pari sportif) ou "lottery_ticket" (fiche de borlette). */
+    public function payout(Wallet $wallet, Money $amount, string $reference, ?string $betId = null, string $relatedType = 'bet'): LedgerEntry
     {
-        return $this->post($wallet, LedgerEntryType::Payout, $amount, $reference, 'bet', $betId);
+        return $this->post($wallet, LedgerEntryType::Payout, $amount, $reference, $relatedType, $betId);
     }
 
-    public function refund(Wallet $wallet, Money $amount, string $reference, ?string $betId = null): LedgerEntry
+    public function refund(Wallet $wallet, Money $amount, string $reference, ?string $betId = null, string $relatedType = 'bet'): LedgerEntry
     {
-        return $this->post($wallet, LedgerEntryType::Refund, $amount, $reference, 'bet', $betId);
+        return $this->post($wallet, LedgerEntryType::Refund, $amount, $reference, $relatedType, $betId);
     }
 
     /**

@@ -50,6 +50,11 @@ class SyncLotteryCommand extends Command
             $this->warn('Des résultats différents de ceux déjà importés ont été reçus : voir lottery.result_conflict dans les logs.');
         }
 
+        // Nouveaux résultats : les fiches vendues sur ces tirages sont réglées tout de suite (V2-D09).
+        if ($report->created > 0) {
+            $this->call('lottery:settle');
+        }
+
         return self::SUCCESS;
     }
 }
