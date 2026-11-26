@@ -905,50 +905,53 @@ p { margin: 0; }
 .shell > .content { flex: 1; }
 .content-wide { max-width: none; padding: 1rem 1rem 2rem 0; }
 
-/* Deux colonnes : sports | matchs (le panier est un panneau flottant) */
-.sportsbook { display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
-.sportsbook-main { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+/* Colonnes : sports | matchs ; sur grand écran, le coupon est toujours ouvert à droite (voir « Coupon fixe »). */
+.sportsbook { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.sportsbook-main { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 
-/* Colonne des sports : bande d'icônes + menu (Top paris, compétitions) */
+/* Colonne des sports : fine bande d'icônes + liste compacte (Top paris, compétitions par pays) */
 .sports-sidebar {
-  position: sticky; top: var(--nav-h); display: grid; grid-template-columns: 96px minmax(0, 1fr);
+  position: sticky; top: var(--nav-h); display: grid; grid-template-columns: 64px minmax(0, 1fr);
   height: calc(100vh - var(--nav-h)); overflow-y: auto; background: var(--surface);
   margin-top: -1rem; border-right: 1px solid var(--border); scrollbar-width: thin;
 }
 .sport-rail { display: flex; flex-direction: column; background: var(--surface-2); }
 .sport-rail a {
-  display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding: 0.9rem 0.25rem;
-  color: #8a9099; font-size: 0.95rem; font-weight: 500; text-align: center; line-height: 1.15; transition: color 0.15s, background-color 0.15s;
+  display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.65rem 0.15rem;
+  color: #8a9099; font-size: 0.7rem; font-weight: 600; text-align: center; line-height: 1.15; transition: color 0.15s, background-color 0.15s;
 }
 .sport-rail a:hover { color: var(--text); background: var(--surface-3); }
 .sport-rail a.active { color: var(--brand); background: var(--surface); }
-.sport-rail-icon { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 50%; background: #c8ccd3; color: #fff; }
+.sport-rail-icon { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: #c8ccd3; color: #fff; }
+.sport-rail-icon svg { width: 18px; height: 18px; }
 .sport-rail a.active .sport-rail-icon { background: var(--brand); }
-.sport-rail .sport-rail-top { background: var(--navy); color: #fff; min-height: 4.4rem; justify-content: center; }
+.sport-rail .sport-rail-top { background: var(--navy); color: #fff; min-height: 3rem; justify-content: center; }
+.sport-rail .sport-rail-top svg { width: 22px; height: 22px; }
 .sport-rail .sport-rail-top:hover { background: var(--navy-hover); color: #fff; }
 .sport-rail .sport-rail-top.active { background: var(--navy); color: #fff; }
 
 .side-menu { display: flex; flex-direction: column; min-width: 0; }
-.side-menu a { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; color: var(--text); transition: color 0.15s, background-color 0.15s; }
+.side-menu a { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: var(--text); transition: color 0.15s, background-color 0.15s; }
+.side-menu a svg { width: 14px; height: 14px; flex: none; opacity: 0.6; }
 .side-menu-top {
-  min-height: 4.4rem; padding: 0 1.25rem 0 2rem; font-size: 1.3rem; font-weight: 700; text-transform: uppercase;
+  min-height: 3rem; padding: 0 0.9rem; font-size: 0.9rem; font-weight: 700; text-transform: uppercase;
 }
 .side-menu-top.active { background: var(--navy); color: #fff !important; }
 .side-menu-top:hover { background: var(--surface-2); }
 .side-menu-top.active:hover { background: var(--navy-hover); }
 .side-menu-title {
-  margin: 1.1rem 1.25rem 0 2rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border);
-  font-size: 1.3rem; font-weight: 700; text-transform: uppercase;
+  margin: 0.8rem 0.9rem 0; padding-bottom: 0.45rem; border-bottom: 1px solid var(--border);
+  font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--muted);
 }
-.side-menu-list { list-style: none; margin: 0; padding: 0.35rem 0; }
-.side-menu-list a { padding: 0.75rem 1.25rem 0.75rem 2rem; font-size: 1.15rem; font-weight: 500; }
+.side-menu-list { list-style: none; margin: 0; padding: 0.2rem 0; }
+.side-menu-list a { padding: 0.4rem 0.9rem; font-size: 0.86rem; font-weight: 500; }
 .side-menu-list a:hover { background: var(--surface-2); color: var(--brand); }
 .side-menu-list a.active { color: var(--brand); font-weight: 600; }
 .side-menu-label { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
-.side-sub { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+.side-sub { font-size: 0.7rem; font-weight: 400; color: var(--muted); }
 /* Compétitions regroupées par pays : le pays en titre, ses championnats en dessous (D1 → D2 → coupes) */
 .side-menu-country {
-  margin: 0.9rem 1.25rem 0 2rem; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em;
+  margin: 0.6rem 0.9rem 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--muted);
 }
 .side-menu-group .side-menu-list { padding-top: 0.15rem; }
@@ -1299,7 +1302,7 @@ a.match-line-teams:hover { color: var(--brand); }
 .odds-btn-bar.selected .odds-value, .odds-btn-wide.selected .odds-value { background: var(--accent); color: var(--accent-text); }
 /* Ordinateur : un match par ligne — équipes et heure à gauche, cotes à droite. */
 @media (min-width: 961px) {
-  .match-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); align-items: center; gap: 1.25rem; }
+  .match-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, min(42%, 400px)); align-items: center; gap: 1rem; }
   .match-line .match-odds-bar, .match-line .odds-unavailable { max-width: none; margin: 0; }
 }
 .odds-value { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -1405,6 +1408,23 @@ a.match-line-teams:hover { color: var(--brand); }
 @keyframes fab-bump { 0% { transform: scale(0.6); } 70% { transform: scale(1.2); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .betslip.open, .slip-fab-count { animation: none; }
+}
+
+/* Coupon fixe : sur grand écran, les pages de paris (colonne des sports présente) ont trois colonnes — sports, matchs,
+   coupon toujours ouvert à droite, sans bouton flottant ni bouton de fermeture. Ailleurs (compte, portefeuille…) et
+   sur les écrans plus petits, le coupon reste le panneau flottant ouvert par « Panier ». */
+@media (min-width: 1280px) {
+  .shell:has(.sportsbook) { --slip-w: 340px; }
+  .shell:has(.sportsbook) > .content,
+  .shell:has(.sportsbook) > .site-footer { width: auto; margin-left: 0; margin-right: var(--slip-w); }
+  .shell:has(.sportsbook) .betslip {
+    display: flex; flex-direction: column; top: var(--nav-h); right: 0; bottom: 0; z-index: 30; width: var(--slip-w);
+    border-radius: 0; box-shadow: -1px 0 0 var(--border); animation: none;
+  }
+  .shell:has(.sportsbook) .betslip .betslip-body { flex: 1 1 auto; max-height: none; min-height: 0; }
+  .shell:has(.sportsbook) .betslip-footer-empty { margin-top: auto; }
+  .shell:has(.sportsbook) .betslip-close,
+  .shell:has(.sportsbook) .slip-fab { display: none; }
 }
 
 /* Menu « Championnats » de l'en-tête */
@@ -1665,13 +1685,7 @@ a.match-line-teams:hover { color: var(--brand); }
 
 /* --- Grand écran moyen : colonnes plus étroites --- */
 @media (max-width: 1500px) {
-  .sportsbook { grid-template-columns: 300px minmax(0, 1fr); gap: 1rem; }
-  .sports-sidebar { grid-template-columns: 84px minmax(0, 1fr); }
-  .side-menu-top, .side-menu-title { font-size: 1.1rem; }
-  .side-menu-list a { font-size: 1rem; padding-left: 1.25rem; }
-  .side-menu-top, .side-menu-title { padding-left: 1.25rem; margin-left: 0; }
-  .side-menu-title { margin-left: 1.25rem; }
-  .side-menu-country { margin-left: 1.25rem; }
+  .sportsbook { gap: 1rem; }
   .top-matches { grid-auto-columns: 320px; }
   .board-tabs button { padding: 0 2rem; font-size: 1.15rem; }
 }
@@ -1681,7 +1695,12 @@ a.match-line-teams:hover { color: var(--brand); }
   .sportsbook { grid-template-columns: minmax(0, 1fr); }
   .sports-sidebar { display: none; }
   .content-wide { padding: 1rem; }
-  .header-search { flex-basis: 220px; }
+  /* En-tête plus serré : la recherche rétrécit au lieu de pousser « S'inscrire » hors de l'écran (vers 1000 px). */
+  .site-header-inner { gap: 0.75rem; padding: 0 1rem; }
+  .main-nav { margin-left: 0; gap: 0.1rem; }
+  .main-nav a, .competitions-toggle { padding: 0 0.6rem; }
+  .header-search { flex: 1 1 220px; min-width: 2.6rem; }
+  .header-search input { min-width: 0; width: 100%; }
 }
 
 /* --- Tablette et mobile : une colonne, panier en panneau, barre d'onglets en bas --- */
