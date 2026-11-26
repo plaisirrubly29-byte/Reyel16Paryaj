@@ -6,14 +6,18 @@ use App\Modules\Admin\Enums\FinanceCorrectionStatus;
 use App\Modules\Admin\Models\FinanceCorrection;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
+use App\Modules\Betting\Enums\BetSelectionStatus;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Compliance\Enums\AmlAlertStatus;
 use App\Modules\Compliance\Models\AmlAlert;
+use App\Modules\Settlement\Enums\TicketVoidStatus;
+use App\Modules\Settlement\Models\TicketVoid;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Market;
 use App\Modules\SportsData\Services\CreditBudget;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -27,7 +31,7 @@ class AlertService
     /** Un match « en direct » depuis plus longtemps n'a plus été mis à jour par le fournisseur. */
     public const LIVE_STALE_HOURS = 4;
 
-    /** Délai après le début d'un match au-delà duquel un ticket encore en cours est anormal. */
+    /** Délai après le début d'un match au-delà duquel une sélection encore en attente est anormale. */
     public const SETTLEMENT_DELAY_HOURS = 6;
 
     /** Seuil d'échecs MFA sur 24 h signalé aux auditeurs. */
@@ -68,6 +72,9 @@ class AlertService
         }
         if ($can('tickets.view')) {
             array_push($alerts, ...$this->settlementAlerts());
+        }
+        if ($can('tickets.void_approve')) {
+            array_push($alerts, ...$this->ticketVoidAlerts());
         }
         if ($can('ledger.view')) {
             array_push($alerts, ...$this->financeAlerts());
@@ -147,20 +154,57 @@ class AlertService
         return $alerts;
     }
 
-    /** @return list<array<string, mixed>> */
+    /**
+     * Sélections encore en attente plus de SETTLEMENT_DELAY_HOURS après le début du match (audit du 2026-11-22, A4) :
+     * - sans résultat : The Odds API ne signale ni annulation ni report, la mise du joueur reste bloquée tant que
+     *   personne ne saisit le résultat, n'annule ou ne reporte le match ;
+     * - avec un résultat : le règlement a échoué (marché inconnu, statistiques absentes…).
+     *
+     * @return list<array<string, mixed>>
+     */
     private function settlementAlerts(): array
     {
+        $alerts = [];
+        $late = fn () => DB::table('bet_selections')
+            ->join('events', 'events.id', '=', 'bet_selections.event_id')
+            ->where('bet_selections.status', BetSelectionStatus::Pending->value)
+            ->where('bet_selections.event_starts_at', '<', now()->subHours(self::SETTLEMENT_DELAY_HOURS));
+        $withoutResult = [EventStatus::Scheduled->value, EventStatus::Live->value, EventStatus::Postponed->value];
+
+        $stuck = $late()->whereIn('events.status', $withoutResult)
+            ->selectRaw('count(*) as selections, count(distinct bet_selections.event_id) as events, min(bet_selections.event_starts_at) as oldest')
+            ->first();
+        if ((int) $stuck->selections > 0) {
+            $alerts[] = $this->alert('selections_stuck', 'warning', 'Règlement',
+                "{$stuck->selections} sélection(s) bloquée(s) sur {$stuck->events} match(s) sans résultat",
+                'Match commencé il y a plus de '.self::SETTLEMENT_DELAY_HOURS.' h (le plus ancien : '.Carbon::parse($stuck->oldest)->toDateTimeString()
+                    .') : saisir le résultat, annuler ou reporter le match depuis sa fiche.',
+                '/admin/events?stuck=1');
+        }
+
         $overdue = DB::table('bet_tickets')
             ->where('status', BetTicketStatus::Pending->value)
-            ->whereExists(fn ($q) => $q->from('bet_selections')
-                ->whereColumn('bet_selections.bet_ticket_id', 'bet_tickets.id')
-                ->where('bet_selections.event_starts_at', '<', now()->subHours(self::SETTLEMENT_DELAY_HOURS)))
+            ->whereIn('id', $late()->whereNotIn('events.status', $withoutResult)->select('bet_selections.bet_ticket_id'))
             ->count();
+        if ($overdue > 0) {
+            $alerts[] = $this->alert('settlement_overdue', 'warning', 'Règlement',
+                "{$overdue} ticket(s) en attente de règlement",
+                'Le résultat de leur match est connu depuis plus de '.self::SETTLEMENT_DELAY_HOURS.' h après son début, mais le règlement n\'a pas abouti.',
+                '/admin/tickets?status=pending');
+        }
 
-        return $overdue === 0 ? [] : [$this->alert('settlement_overdue', 'warning', 'Règlement',
-            "{$overdue} ticket(s) en attente de règlement",
-            'Au moins un de leurs matchs a commencé il y a plus de '.self::SETTLEMENT_DELAY_HOURS.' h : résultat manquant ou règlement en échec.',
-            '/admin/tickets?status=pending')];
+        return $alerts;
+    }
+
+    /** Annulations de ticket en attente du second administrateur (audit du 2026-11-22, A2). @return list<array<string, mixed>> */
+    private function ticketVoidAlerts(): array
+    {
+        $pending = TicketVoid::query()->where('status', TicketVoidStatus::Pending)->count();
+
+        return $pending === 0 ? [] : [$this->alert('ticket_voids', 'warning', 'Règlement',
+            "{$pending} annulation(s) de ticket à valider",
+            'Un ticket n’est annulé (mise rendue) qu’après la validation d’un second administrateur.',
+            '/admin/tickets?void_status=pending')];
     }
 
     /** @return list<array<string, mixed>> */

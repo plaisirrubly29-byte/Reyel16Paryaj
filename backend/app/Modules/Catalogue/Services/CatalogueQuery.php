@@ -24,6 +24,8 @@ class CatalogueQuery
     public function visibleEvents(?string $marketKey = null): Builder
     {
         return Event::query()
+            // Match masqué par un administrateur (motif dans hidden_reason) : retiré du site.
+            ->whereNull('hidden_at')
             // À venir, ou en cours (statut "live" posé par la synchro en direct : onglet Live). Au-delà de la fenêtre
             // du direct, le match n'est plus suivi (fournisseur en panne, crédits épuisés) : il n'est plus montré « en direct ».
             ->where(fn ($q) => $q
