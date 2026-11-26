@@ -5,6 +5,7 @@ namespace App\Modules\Betting\Models;
 use App\Models\User;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Enums\BetType;
+use App\Modules\Settlement\Models\TicketVoid;
 use App\Modules\Wallet\Models\Wallet;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
@@ -136,5 +137,11 @@ class BetTicket extends Model
     public function selections(): HasMany
     {
         return $this->hasMany(BetSelection::class)->orderBy('id');
+    }
+
+    /** Demandes d'annulation par l'administration (double validation). @return HasMany<TicketVoid, $this> */
+    public function voids(): HasMany
+    {
+        return $this->hasMany(TicketVoid::class);
     }
 }

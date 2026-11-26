@@ -1,11 +1,16 @@
 import { Link, useParams } from 'react-router-dom';
+import { Alert } from '../../shared/components/Alert';
 import { DataTable } from '../../shared/components/DataTable';
 import { ErrorAlert } from '../../shared/components/ErrorAlert';
 import { MoneyText } from '../../shared/components/MoneyText';
 import { Spinner } from '../../shared/components/Spinner';
 import { useMe } from '../../features/auth/api/auth';
-import { LEDGER_TYPE_LABELS, useAdminTicket, type AdminTicketDetail } from '../api/tickets';
+import {
+  LEDGER_TYPE_LABELS, TICKET_STATUS_LABELS, TICKET_VOID_STATUS_LABELS, useAdminTicket, useDecideTicketVoid, useRequestTicketVoid, useTicketVoid,
+  type AdminTicketDetail, type TicketVoid, type TicketVoidImpact,
+} from '../api/tickets';
 import { PageHeader } from '../components/PageHeader';
+import { ReasonForm } from '../components/ReasonForm';
 import { TicketStatusBadge } from '../components/TicketStatusBadge';
 
 const dateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -68,6 +73,8 @@ export function TicketDetailPage() {
             </aside>
           </div>
 
+          <VoidSection ticket={t} />
+
           {t.ledger_entries && (
             <section className="admin-card">
               <h2 className="card-title">Écritures du portefeuille</h2>
@@ -94,6 +101,114 @@ export function TicketDetailPage() {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Annulation du ticket à double validation (erreur de cote, fraude) : un administrateur tickets.void la demande, un
+ * AUTRE tickets.void_approve la valide. À la validation, toutes les sélections passent à la cote 1 et la mise est rendue ;
+ * un gain déjà versé est d'abord repris.
+ */
+function VoidSection({ ticket: t }: { ticket: AdminTicketDetail }) {
+  const { data: me } = useMe();
+  const voids = t.voids ?? [];
+  const pending = voids.find((v) => v.status === 'pending');
+  const canRequest = Boolean(me?.permissions.includes('tickets.void')) && !pending && ['pending', 'won', 'lost'].includes(t.status);
+  const request = useRequestTicketVoid(t.id);
+
+  if (voids.length === 0 && !canRequest) return null;
+
+  return (
+    <section className="admin-card stack" aria-labelledby="void-title">
+      <h2 id="void-title" className="card-title">Annulation du ticket</h2>
+
+      {voids.filter((v) => v.status !== 'pending').map((v) => (
+        <p key={v.id} className="small">
+          Demande n° {v.id} de {v.requested_by.name ?? '—'} ({v.reason}) — <strong>{TICKET_VOID_STATUS_LABELS[v.status]}</strong>
+          {v.decided_by && <> par {v.decided_by.name}, le {dateTime(v.decided_at)}{v.decision_reason ? ` : ${v.decision_reason}` : ''}</>}
+        </p>
+      ))}
+
+      {pending && <PendingVoid void={pending} />}
+
+      {canRequest && (
+        <details className="market-action">
+          <summary>Demander l'annulation du ticket</summary>
+          <ReasonForm
+            id="ticket-void"
+            title="Annuler le ticket"
+            description={t.status === 'pending'
+              ? "Rien ne change tant qu'un autre administrateur n'a pas validé. À la validation, toutes les sélections passent à la cote 1 et la mise est rendue au joueur."
+              : "Ticket déjà réglé : rien ne change tant qu'un autre administrateur n'a pas validé. À la validation, le gain versé est repris (le solde peut devenir négatif) puis la mise est rendue."}
+            submitLabel="Envoyer pour validation"
+            variant="danger"
+            successMessage="Demande envoyée : elle attend la validation d'un second administrateur."
+            onSubmit={(reason, idempotencyKey) => request.mutateAsync({ reason, idempotencyKey })}
+          />
+        </details>
+      )}
+    </section>
+  );
+}
+
+function ImpactText({ impact, currency }: { impact: TicketVoidImpact; currency: string }) {
+  return (
+    <>
+      {TICKET_STATUS_LABELS[impact.from.status]} (<MoneyText value={{ minor: impact.from.payout_minor, currency }} />) →{' '}
+      {TICKET_STATUS_LABELS[impact.to.status]} (<MoneyText value={{ minor: impact.to.payout_minor, currency }} />) ; portefeuille du joueur :{' '}
+      <MoneyText value={{ minor: impact.ledger_delta_minor, currency }} signed />
+    </>
+  );
+}
+
+/** Demande en attente : effet prévu, validation (jamais par le demandeur) ou refus / retrait. */
+function PendingVoid({ void: v }: { void: TicketVoid }) {
+  const { data: me } = useMe();
+  const detail = useTicketVoid(v.id);
+  const decide = useDecideTicketVoid(v.id);
+  const mine = me?.id === v.requested_by.id;
+  const canApprove = Boolean(me?.permissions.includes('tickets.void_approve')) && !mine;
+  const canReject = mine || Boolean(me?.permissions.includes('tickets.void_approve'));
+  const preview = detail.data?.preview;
+
+  return (
+    <div className="stack-sm">
+      <Alert tone="info">
+        Annulation demandée par {v.requested_by.name ?? '—'}{v.created_at ? ` le ${dateTime(v.created_at)}` : ''} : {v.reason}.
+        Elle attend la validation d'un second administrateur.
+      </Alert>
+      <ErrorAlert error={detail.error} onRetry={() => detail.refetch()} />
+      {preview && <p className="small">Effet de la validation : <ImpactText impact={preview} currency={v.ticket.stake.currency} /></p>}
+      {mine && <p className="muted small">Vous avez fait cette demande : un autre administrateur doit la valider.</p>}
+
+      {canApprove && (
+        <details className="market-action">
+          <summary>Valider l'annulation</summary>
+          <ReasonForm
+            id={`void-approve-${v.id}`}
+            title="Valider l'annulation"
+            description="Le ticket est annulé maintenant : sélections à la cote 1, mise rendue, gain déjà versé repris."
+            submitLabel="Valider l'annulation"
+            variant="danger"
+            successMessage="Ticket annulé."
+            onSubmit={(reason, idempotencyKey) => decide.mutateAsync({ decision: 'approve', reason, idempotencyKey })}
+          />
+        </details>
+      )}
+      {canReject && (
+        <details className="market-action">
+          <summary>{mine ? 'Retirer ma demande' : 'Refuser la demande'}</summary>
+          <ReasonForm
+            id={`void-reject-${v.id}`}
+            title={mine ? 'Retirer la demande' : 'Refuser la demande'}
+            submitLabel={mine ? 'Retirer' : 'Refuser'}
+            variant="secondary"
+            successMessage="Demande close : le ticket ne change pas."
+            onSubmit={(reason, idempotencyKey) => decide.mutateAsync({ decision: 'reject', reason, idempotencyKey })}
+          />
+        </details>
+      )}
+    </div>
   );
 }
 

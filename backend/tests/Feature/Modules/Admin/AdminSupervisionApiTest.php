@@ -46,7 +46,7 @@ class AdminSupervisionApiTest extends TestCase
 
     public function test_alerts_come_from_real_data_and_follow_permissions(): void
     {
-        // Match commencé il y a 10 h, ticket toujours en cours : règlement en retard.
+        // Match commencé il y a 10 h, sans résultat, sélection toujours en attente : bloquée (audit du 2026-11-22, A4).
         $market = $this->market();
         $market->event->update(['starts_at' => now()->subHours(10)]);
         $this->select($this->ticket(), $market->load('event'));
@@ -57,9 +57,9 @@ class AdminSupervisionApiTest extends TestCase
 
         // Super Admin : alertes critiques d'abord. Le ticket, écrit directement en base, n'a pas d'écriture
         // de mise dans le ledger : le rapprochement le signale comme un vrai écart.
-        $this->assertSame(['reconciliation', 'failed_jobs', 'settlement_overdue'], $keys(RoleSlug::SuperAdmin));
+        $this->assertSame(['reconciliation', 'failed_jobs', 'selections_stuck'], $keys(RoleSlug::SuperAdmin));
         // Support : voit les tickets, pas la supervision technique.
-        $this->assertSame(['settlement_overdue'], $keys(RoleSlug::Support));
+        $this->assertSame(['selections_stuck'], $keys(RoleSlug::Support));
     }
 
     public function test_every_super_admin_is_alerted_when_a_role_changes(): void
