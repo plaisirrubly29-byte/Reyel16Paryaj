@@ -146,6 +146,24 @@ describe("page d'accueil : matchs", () => {
     expect(within(top).queryByText('Everton')).toBeNull();
   });
 
+  it('affiche la bannière qui défile, avec un lien par diapositive et des points pour choisir', async () => {
+    catalogue();
+    renderApp('/');
+
+    const promo = await screen.findByRole('region', { name: 'À la une' });
+    expect(within(promo).getByRole('link', { name: 'Voir les matchs' })).toHaveAttribute('href', '/sports');
+    expect(within(promo).getByRole('link', { name: 'Déposer', hidden: true })).toHaveAttribute('href', '/wallet?operation=depot');
+    // Pas de tirage publié : pas de diapositive Borlette.
+    expect(within(promo).queryByText(/tirages? ouverts?/)).toBeNull();
+
+    const dots = within(promo).getByRole('group', { name: 'Choisir une diapositive' });
+    expect(within(dots).getAllByRole('button')).toHaveLength(3);
+    expect(within(dots).getByRole('button', { name: 'Diapositive 1' })).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(within(dots).getByRole('button', { name: 'Diapositive 2' }));
+    expect(within(dots).getByRole('button', { name: 'Diapositive 2' })).toHaveAttribute('aria-current', 'true');
+    expect(within(promo).getByRole('link', { name: 'Déposer' })).toBeInTheDocument();
+  });
+
   it('annonce seulement les sports qui ont des matchs (bandeau et pied de page)', async () => {
     catalogue();
     renderApp('/');
