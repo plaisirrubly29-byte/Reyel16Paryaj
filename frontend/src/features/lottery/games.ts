@@ -1,71 +1,98 @@
 /**
  * Jeux de borlette proposés sur une fiche (même vocabulaire que l'API Borlette du fournisseur) :
  * chaque tirage donne un numéro de 3 chiffres et deux de 2 chiffres, d'où les trois lots de bolèt.
- * Ici seulement la saisie et sa vérification de forme : le serveur décide de tout le reste (vente ouverte,
- * plafonds par boule, gains).
+ *
+ * Le serveur donne les jeux en vente, leurs options, les mises min/max et le barème (GET /lottery/games) ; ici
+ * seulement les libellés, la vérification de forme d'une ligne et le calcul affiché du gain possible.
  */
-export type LotteryGameKey = 'bolet' | 'maryaj' | 'loto3' | 'loto4' | 'loto5';
+import type { Money } from '../../shared/api/client';
+import { formatMoney } from '../../shared/format/money';
+import { parseStakeMinor } from '../betting/slip/stake';
+import type { LotteryGameKey, LotteryGameOffer } from './api/lottery';
 
-export type LotteryGame = {
-  key: LotteryGameKey;
-  name: string;
-  /** Chiffres de chaque numéro saisi, et nombre de numéros (maryaj : deux boules). */
-  digits: number;
-  count: number;
-  /** Options du loto 4 (1e+2e, 2e+3e, 1e+3e lot) et du loto 5 (3 chiffres + 2e ou 3e lot). */
-  options: { value: number; label: string }[];
-  help: string;
+export type { LotteryGameKey } from './api/lottery';
+
+type GameText = { name: string; help: string; options: Record<number, string> };
+
+const GAME_TEXTS: Record<LotteryGameKey, GameText> = {
+  bolet: { name: 'Bolèt', help: 'Une boule de 2 chiffres, gagnante au 1er, 2e ou 3e lot.', options: {} },
+  maryaj: { name: 'Maryaj', help: 'Deux boules de 2 chiffres qui doivent sortir ensemble.', options: {} },
+  loto3: { name: 'Loto 3', help: 'Les 3 chiffres du premier numéro.', options: {} },
+  loto4: {
+    name: 'Loto 4', help: '4 chiffres formés par deux lots.',
+    options: { 1: 'Option 1 : 1er + 2e lot', 2: 'Option 2 : 2e + 3e lot', 3: 'Option 3 : 1er + 3e lot' },
+  },
+  loto5: {
+    name: 'Loto 5', help: '5 chiffres : le premier numéro suivi d\'un lot.',
+    options: { 1: 'Option 1 : 3 chiffres + 2e lot', 2: 'Option 2 : 3 chiffres + 3e lot' },
+  },
 };
 
-export const LOTTERY_GAMES: LotteryGame[] = [
-  { key: 'bolet', name: 'Bolèt', digits: 2, count: 1, options: [], help: 'Une boule de 2 chiffres, gagnante au 1er, 2e ou 3e lot.' },
-  { key: 'maryaj', name: 'Maryaj', digits: 2, count: 2, options: [], help: 'Deux boules de 2 chiffres qui doivent sortir ensemble.' },
-  { key: 'loto3', name: 'Loto 3', digits: 3, count: 1, options: [], help: 'Les 3 chiffres du premier numéro.' },
-  {
-    key: 'loto4', name: 'Loto 4', digits: 4, count: 1, help: '4 chiffres formés par deux lots.',
-    options: [
-      { value: 1, label: 'Option 1 : 1er + 2e lot' },
-      { value: 2, label: 'Option 2 : 2e + 3e lot' },
-      { value: 3, label: 'Option 3 : 1er + 3e lot' },
-    ],
-  },
-  {
-    key: 'loto5', name: 'Loto 5', digits: 5, count: 1, help: '5 chiffres : le premier numéro suivi d\'un lot.',
-    options: [
-      { value: 1, label: 'Option 1 : 3 chiffres + 2e lot' },
-      { value: 2, label: 'Option 2 : 3 chiffres + 3e lot' },
-    ],
-  },
-];
-
-export function lotteryGame(key: LotteryGameKey): LotteryGame {
-  return LOTTERY_GAMES.find((g) => g.key === key) ?? LOTTERY_GAMES[0];
+/** Nom affiché d'un jeu (« Bolèt »). */
+export function gameName(key: LotteryGameKey): string {
+  return GAME_TEXTS[key]?.name ?? key;
 }
 
-/** Une ligne de la fiche : un jeu, ses numéros (chaînes : « 07 » garde son zéro) et la mise en gourdes entières. */
-export type LotteryPlay = {
+export function gameHelp(key: LotteryGameKey): string {
+  return GAME_TEXTS[key]?.help ?? '';
+}
+
+export function optionLabel(key: LotteryGameKey, option: number): string {
+  return GAME_TEXTS[key]?.options[option] ?? `Option ${option}`;
+}
+
+/** Une ligne de la fiche en préparation : jeu, numéros (chaînes : « 07 » garde son zéro), mise en unité mineure. */
+export type DraftPlay = {
   id: string;
   game: LotteryGameKey;
   option: number | null;
   numbers: string[];
-  stake: number;
+  stake: Money;
 };
 
-/** Vérifie la saisie d'une ligne ; renvoie un message d'erreur ou null. */
-export function validatePlay(game: LotteryGame, numbers: string[], stake: string, option: number | null): string | null {
+/** Vérifie la saisie d'une ligne selon le jeu en vente ; renvoie un message d'erreur ou null. */
+export function validatePlay(game: LotteryGameOffer, numbers: string[], stake: string, option: number | null): string | null {
   if (numbers.length !== game.count || numbers.some((n) => !new RegExp(`^\\d{${game.digits}}$`).test(n))) {
     return game.count > 1
       ? `Saisissez ${game.count} boules de ${game.digits} chiffres.`
       : `Saisissez un numéro de ${game.digits} chiffres.`;
   }
-  if (game.key === 'maryaj' && numbers[0] === numbers[1]) return 'Un maryaj associe deux boules différentes.';
-  if (game.options.length > 0 && !game.options.some((o) => o.value === option)) return 'Choisissez une option.';
-  if (!/^\d+$/.test(stake.trim()) || Number(stake) < 1) return 'La mise doit être un nombre entier de gourdes (1 au moins).';
+  if (game.count > 1 && new Set(numbers).size !== numbers.length) return 'Un maryaj associe deux boules différentes.';
+  if (game.options.length > 0 && !game.options.includes(option ?? -1)) return 'Choisissez une option.';
+  const minor = parseStakeMinor(stake.trim());
+  if (minor === null) return 'Saisissez une mise.';
+  if (minor < BigInt(game.min_stake.minor) || minor > BigInt(game.max_stake.minor)) {
+    return `La mise doit être comprise entre ${formatMoney(game.min_stake)} et ${formatMoney(game.max_stake)}.`;
+  }
   return null;
 }
 
+/**
+ * Mise × multiplicateur, arrondi au centime inférieur comme le serveur. Le multiplicateur arrive en chaîne
+ * (« 50 », « 12.5 ») : calcul en entiers, jamais en nombre décimal.
+ */
+export function multiplyMinor(stakeMinor: number, multiplier: string): number {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(multiplier.trim());
+  if (!match) return 0;
+  const frac = match[2] ?? '';
+  const scaled = BigInt(match[1] + frac);
+  return Number((BigInt(stakeMinor) * scaled) / 10n ** BigInt(frac.length));
+}
+
+/** Gains possibles d'une ligne : un par lot pour la bolèt (1er, 2e, 3e), un seul sinon. */
+export function possibleWins(game: LotteryGameOffer, stake: Money): { lot: number | null; win: Money }[] {
+  return [...game.payouts]
+    .sort((a, b) => (a.lot ?? 0) - (b.lot ?? 0))
+    .map((p) => ({ lot: p.lot, win: { minor: multiplyMinor(stake.minor, p.multiplier), currency: stake.currency } }));
+}
+
+/** « 1er lot », « 2e lot ». */
+export function lotLabel(lot: number): string {
+  return lot === 1 ? '1er lot' : `${lot}e lot`;
+}
+
 /** Libellé court d'une ligne : « 25 », « 25x07 », « 2507 (opt. 1) ». */
-export function playLabel(play: Pick<LotteryPlay, 'game' | 'numbers' | 'option'>): string {
+export function playLabel(play: { numbers: string[]; option: number | null }): string {
   const numbers = play.numbers.join('x');
   return play.option ? `${numbers} (opt. ${play.option})` : numbers;
 }

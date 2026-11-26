@@ -105,6 +105,7 @@ class PermissionMatrixTest extends TestCase
         ],
         'Marché — suspendre / masquer' => [
             'PATCH api/v1/admin/markets/{market}', 'POST api/v1/admin/events/{event}/suspend', 'POST api/v1/admin/events/{event}/reopen',
+            'POST api/v1/admin/lottery/blocked-numbers', 'DELETE api/v1/admin/lottery/blocked-numbers/{id}',
         ],
         'Match — modifier / reporter / annuler / masquer' => ['PATCH api/v1/admin/events/{event}'],
         'Cotes — fixer à la main / valider' => [
@@ -122,6 +123,7 @@ class PermissionMatrixTest extends TestCase
         'Tickets et exposition — consulter' => [
             'GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure',
             'GET api/v1/admin/ticket-voids', 'GET api/v1/admin/ticket-voids/{ticketVoid}',
+            'GET api/v1/admin/lottery/tickets', 'GET api/v1/admin/lottery/exposure', 'GET api/v1/admin/lottery/blocked-numbers',
         ],
         'Ticket — annuler' => [
             'POST api/v1/admin/tickets/{ticket}/void', 'POST api/v1/admin/ticket-voids/{ticketVoid}/approve',

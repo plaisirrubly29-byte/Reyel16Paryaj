@@ -3,7 +3,9 @@ import { SportsSidebar } from '../../catalogue/components/SportsSidebar';
 import { Alert } from '../../../shared/components/Alert';
 import { Icon } from '../../../shared/components/Icon';
 import { Spinner } from '../../../shared/components/Spinner';
-import { useLotteryDraws, useLotteryResults, type LotteryDraw } from '../api/lottery';
+import { ApiError } from '../../../shared/api/client';
+import { ErrorAlert } from '../../../shared/components/ErrorAlert';
+import { useLotteryDraws, useLotteryGames, useLotteryResults, type LotteryDraw, type LotterySales } from '../api/lottery';
 import { LotteryBalls } from '../components/LotteryBalls';
 import { LotterySlip } from '../components/LotterySlip';
 import { formatCountdown, formatDrawMoment, formatResultDate } from '../format';
@@ -87,7 +89,7 @@ export function LotteryPage() {
             {selected && (
               <div className="lottery-detail">
                 <LotteryHistory draw={selected} />
-                <LotterySlip key={selected.key} draw={selected} />
+                <SlipArea draw={selected} />
               </div>
             )}
           </>
@@ -95,6 +97,19 @@ export function LotteryPage() {
       </div>
     </div>
   );
+}
+
+/** Vente fermée côté serveur (borlette coupée : 404) : même affichage que sales_open false. */
+const SALES_CLOSED: LotterySales = { sales_open: false, close_before_minutes: 0, max_plays_per_ticket: 1, games: [] };
+
+/** Fiche du tirage choisi, une fois connues les conditions de vente (GET /lottery/games). */
+function SlipArea({ draw }: { draw: LotteryDraw }) {
+  const games = useLotteryGames();
+  if (games.isPending) return <Spinner label="Chargement de la fiche…" />;
+  if (games.isError && !(games.error instanceof ApiError && games.error.status === 404)) {
+    return <ErrorAlert error={games.error} onRetry={() => games.refetch()} />;
+  }
+  return <LotterySlip key={draw.key} draw={draw} sales={games.data ?? SALES_CLOSED} />;
 }
 
 /** Derniers résultats publiés d'un tirage. */

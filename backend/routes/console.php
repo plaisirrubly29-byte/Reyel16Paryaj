@@ -119,3 +119,11 @@ Schedule::command('lottery:sync')
     ->when(fn () => (bool) config('lottery.enabled'))
     ->withoutOverlapping()
     ->onOneServer();
+
+// Règlement des fiches de borlette (V2-D09) : gains crédités dès que le résultat est importé. Tourne même vente fermée,
+// pour régler les fiches déjà vendues.
+Schedule::command('lottery:settle')
+    ->cron((string) config('lottery.sync_cron'))
+    ->when(fn () => (bool) config('lottery.enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();

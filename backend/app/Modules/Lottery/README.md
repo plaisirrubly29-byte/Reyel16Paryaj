@@ -11,7 +11,7 @@ paiement des gains, plafonds par boule, jeu responsable) est géré dans la plat
 | Étape | Contenu | État |
 |---|---|---|
 | 1 | Tirages, résultats, synchro, routes publiques en lecture | Fait (faux fournisseur et API Borlette UnitySoftConnect) |
-| 2 | Tickets de borlette (boule, mariage, loto 3/4/5), ledger, plafonds par boule, règlement | À faire |
+| 2 | Fiches de borlette (bolèt, maryaj, loto 3/4/5), ledger, plafonds par combinaison, boules bloquées, règlement | Fait (V2-D09, décision D-12 du 2026-11-26) |
 
 La borlette figure dans les exclusions par défaut de `docs/architecture.md` : tout est coupé tant que
 `LOTTERY_ENABLED=false` (routes en 404, synchro non planifiée).
@@ -64,3 +64,20 @@ Règles de sûreté (les résultats paieront les tickets à l'étape 2) :
 - `GET /api/v1/lottery/results?draw=&date=&per_page=` : résultats, du plus récent au plus ancien, paginés.
 
 Les lots sont toujours des chaînes (« 07 » garde son zéro).
+
+## Vente et règlement (étape 2, V2-D09)
+
+- Barème, mises, limites : `config/lottery.php` (`sales`), décision `docs/decisions/D-12-borlette.md`. Vente ouverte
+  seulement si `LOTTERY_ENABLED=true` **et** `LOTTERY_SALES_ENABLED=true`.
+- Tables : `lottery_tickets` (reçu immuable, barème figé dans `rules_snapshot`), `lottery_plays` (une ligne par jeu),
+  `lottery_blocked_numbers` (jamais effacées, levée = `lifted_at`).
+- `Services/LotterySalesService` : vente tout ou rien (jeu responsable, tirage ouvert, boules bloquées, plafond par
+  combinaison sous verrou du tirage, écriture `stake` du ledger, `related_type = lottery_ticket`).
+- `Services/LotterySettlementService` : règlement idempotent dès que le résultat est importé (`lottery:sync` lance
+  `lottery:settle`, aussi planifiée) ; gains `payout`, lignes injugeables (pick 3 absent) et tirages sans résultat après
+  48 h remboursés (`refund`).
+- Routes : `GET /lottery/games`, `GET|POST /lottery/tickets`, `GET /lottery/tickets/{id}` ; admin :
+  `GET /admin/lottery/tickets`, `GET /admin/lottery/exposure`, `GET|POST /admin/lottery/blocked-numbers`,
+  `DELETE /admin/lottery/blocked-numbers/{id}`.
+- Fournisseur de résultats remplaçable : `LOTTERY_PROVIDER=fake` (simulateur local, `setResult()` dans les tests) ou
+  `unitysoftconnect`.

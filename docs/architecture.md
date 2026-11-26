@@ -10,7 +10,7 @@ En cas de doute, le document de référence fait foi.
 historique des tickets, portefeuille transactionnel (simulé), panneau d'administration, connecteur
 fournisseur de données sportives, environnements Dev/Staging/Prod.
 
-**Exclu par défaut :** application mobile native, casino/loto/borlette/courses/streaming/paris en direct,
+**Exclu par défaut :** application mobile native, casino/loto/courses/streaming/paris en direct (la borlette est sortie de cette liste par la décision D-12 du 2026-11-26),
 **paiements réels, retraits et paris réels** (bloqués jusqu'à validation juridique, contractuelle et fournisseur).
 
 ## Vue d'ensemble
