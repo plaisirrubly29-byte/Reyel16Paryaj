@@ -16,6 +16,7 @@ use App\Modules\Admin\Http\Controllers\AmlAlertController;
 use App\Modules\Admin\Http\Controllers\FinanceCorrectionController;
 use App\Modules\Admin\Http\Controllers\OddsOverrideController;
 use App\Modules\Admin\Http\Controllers\ResultCorrectionController;
+use App\Modules\Admin\Http\Controllers\TicketVoidController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -55,6 +56,10 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     // Événements et marchés (P6-02) : origine et fraîcheur ; suspendre / rouvrir un marché avec motif.
     Route::get('/events', [AdminEventController::class, 'index'])->middleware('permission:events.view');
     Route::get('/events/{event}', [AdminEventController::class, 'show'])->middleware('permission:events.view')->whereNumber('event');
+    // Gestion d'un match (audit du 2026-11-22, A1 et A3) : heure, report, annulation (D-05), masquage ; tous ses marchés.
+    Route::patch('/events/{event}', [AdminEventController::class, 'update'])->middleware(['permission:events.update', 'idempotent'])->whereNumber('event');
+    Route::post('/events/{event}/suspend', [AdminEventController::class, 'suspend'])->middleware(['permission:markets.suspend', 'idempotent'])->whereNumber('event');
+    Route::post('/events/{event}/reopen', [AdminEventController::class, 'reopen'])->middleware(['permission:markets.suspend', 'idempotent'])->whereNumber('event');
     Route::get('/markets/{market}', [AdminMarketController::class, 'show'])->middleware('permission:events.view')->whereNumber('market');
     Route::patch('/markets/{market}', [AdminMarketController::class, 'update'])->middleware(['permission:markets.suspend', 'idempotent'])->whereNumber('market');
 
@@ -81,6 +86,15 @@ Route::middleware(['auth:sanctum', 'active', 'mfa'])->prefix('admin')->group(fun
     // Tickets et finance (P6-04)
     Route::get('/tickets', [AdminTicketController::class, 'index'])->middleware('permission:tickets.view');
     Route::get('/tickets/{ticket}', [AdminTicketController::class, 'show'])->whereNumber('ticket')->middleware('permission:tickets.view');
+    // Annulation d'un ticket à double validation (audit du 2026-11-22, A2) : demander (tickets.void), valider
+    // (tickets.void_approve, jamais le demandeur), refuser ou retirer (le service vérifie : demandeur ou validateur).
+    Route::post('/tickets/{ticket}/void', [TicketVoidController::class, 'store'])->whereNumber('ticket')->middleware(['permission:tickets.void', 'idempotent']);
+    Route::get('/ticket-voids', [TicketVoidController::class, 'index'])->middleware('permission:tickets.view');
+    Route::get('/ticket-voids/{ticketVoid}', [TicketVoidController::class, 'show'])->whereNumber('ticketVoid')->middleware('permission:tickets.view');
+    Route::post('/ticket-voids/{ticketVoid}/approve', [TicketVoidController::class, 'approve'])
+        ->whereNumber('ticketVoid')->middleware(['permission:tickets.void_approve', 'idempotent']);
+    Route::post('/ticket-voids/{ticketVoid}/reject', [TicketVoidController::class, 'reject'])
+        ->whereNumber('ticketVoid')->middleware(['permission:tickets.void', 'idempotent']);
     Route::get('/ledger', [AdminLedgerController::class, 'index'])->middleware('permission:ledger.view');
     Route::get('/finance/reconciliation', [AdminLedgerController::class, 'reconciliation'])->middleware('permission:ledger.view');
     // Journal des transactions des prestataires de paiement et des webhooks reçus (V2-B01).

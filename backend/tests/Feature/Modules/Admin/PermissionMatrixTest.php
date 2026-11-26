@@ -55,12 +55,16 @@ class PermissionMatrixTest extends TestCase
     /** Permissions attendues par rôle, transcrites de docs/permissions-matrix.md (✅, 👁 et 2️⃣ ; *.approve = second validateur). */
     private const EXPECTED_PERMISSIONS = [
         self::SUPER_ADMIN => [
-            'dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'settlement.run',
-            'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'ledger.view',
+            'dashboard.view', 'events.view', 'markets.suspend', 'events.update', 'odds.override', 'results.enter', 'results.approve', 'settlement.run',
+            'settlement.approve', 'users.view', 'users.view_personal_data', 'users.suspend', 'tickets.view', 'tickets.void',
+            'tickets.void_approve', 'ledger.view',
             'finance.correct', 'finance.approve', 'wallet.adjust', 'settings.view', 'settings.update', 'responsible_gaming.view',
             'aml.view', 'audit.view', 'audit.export', 'roles.manage', 'kyc.view', 'kyc.approve', 'kyc.reject',
         ],
-        self::OPERATIONS => ['dashboard.view', 'events.view', 'markets.suspend', 'odds.override', 'results.enter', 'results.approve', 'tickets.view'],
+        self::OPERATIONS => [
+            'dashboard.view', 'events.view', 'markets.suspend', 'events.update', 'odds.override', 'results.enter', 'results.approve',
+            'tickets.view', 'tickets.void', 'tickets.void_approve',
+        ],
         self::FINANCE => [
             'dashboard.view', 'events.view', 'settlement.run', 'settlement.approve', 'users.view', 'users.view_personal_data',
             'tickets.view', 'ledger.view', 'finance.correct', 'finance.approve', 'aml.view', 'audit.view', 'audit.export',
@@ -86,7 +90,10 @@ class PermissionMatrixTest extends TestCase
             'GET api/v1/admin/events', 'GET api/v1/admin/events/{event}', 'GET api/v1/admin/markets/{market}', 'GET api/v1/admin/events/{event}/results',
             'GET api/v1/admin/odds-overrides', 'GET api/v1/admin/odds-overrides/{override}',
         ],
-        'Marché — suspendre / masquer' => ['PATCH api/v1/admin/markets/{market}'],
+        'Marché — suspendre / masquer' => [
+            'PATCH api/v1/admin/markets/{market}', 'POST api/v1/admin/events/{event}/suspend', 'POST api/v1/admin/events/{event}/reopen',
+        ],
+        'Match — modifier / reporter / annuler / masquer' => ['PATCH api/v1/admin/events/{event}'],
         'Cotes — fixer à la main / valider' => [
             'POST api/v1/admin/markets/{market}/odds-overrides', 'POST api/v1/admin/odds-overrides/{override}/approve',
             'POST api/v1/admin/odds-overrides/{override}/reject', 'POST api/v1/admin/odds-overrides/{override}/end',
@@ -98,7 +105,14 @@ class PermissionMatrixTest extends TestCase
         'Règlement — lancer / relancer' => [], // aucune route : règlement automatique (job, commande settlement:run)
         'Utilisateurs — rechercher / consulter' => ['GET api/v1/admin/users', 'GET api/v1/admin/users/{user}'],
         'Utilisateur — suspendre' => ['PATCH api/v1/admin/users/{user}', 'PUT api/v1/admin/users/{user}/stake-limit'],
-        'Tickets — consulter' => ['GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure'],
+        'Tickets — consulter' => [
+            'GET api/v1/admin/tickets', 'GET api/v1/admin/tickets/{ticket}', 'GET api/v1/admin/risk/exposure',
+            'GET api/v1/admin/ticket-voids', 'GET api/v1/admin/ticket-voids/{ticketVoid}',
+        ],
+        'Ticket — annuler' => [
+            'POST api/v1/admin/tickets/{ticket}/void', 'POST api/v1/admin/ticket-voids/{ticketVoid}/approve',
+            'POST api/v1/admin/ticket-voids/{ticketVoid}/reject',
+        ],
         'Ledger / rapprochement — consulter' => [
             'GET api/v1/admin/ledger', 'GET api/v1/admin/finance/reconciliation', 'GET api/v1/admin/finance/corrections',
             'GET api/v1/admin/finance/corrections/{correction}', 'GET api/v1/admin/users/{user}/wallet',
@@ -233,7 +247,27 @@ class PermissionMatrixTest extends TestCase
         $market = $this->event->markets()->firstOrFail();
 
         $this->assertAccess('PATCH', "markets/{$market->id}", [self::SUPER_ADMIN, self::OPERATIONS]);
+        // Tous les marchés d'un match en une fois (audit du 2026-11-22, A3).
+        $this->assertAccess('POST', "events/{$this->event->id}/suspend", [self::SUPER_ADMIN, self::OPERATIONS]);
+        $this->assertAccess('POST', "events/{$this->event->id}/reopen", [self::SUPER_ADMIN, self::OPERATIONS]);
         $this->assertSame('open', $market->fresh()->status->value, 'Aucune requête sans motif ne doit modifier le marché.');
+    }
+
+    /** Heure, report, annulation (D-05), masquage d'un match (audit du 2026-11-22, A1) : EventManagementApiTest. */
+    public function test_row_event_update_is_reserved_to_super_admin_and_operations(): void
+    {
+        $this->assertAccess('PATCH', "events/{$this->event->id}", [self::SUPER_ADMIN, self::OPERATIONS]);
+        $this->assertSame('scheduled', $this->event->fresh()->status->value, 'Aucune requête sans motif ne doit modifier le match.');
+    }
+
+    /** Double validation (demandeur ≠ validateur) : TicketVoidApiTest. */
+    public function test_row_ticket_void_is_double_validated_by_super_admin_and_operations(): void
+    {
+        $allowed = [self::SUPER_ADMIN, self::OPERATIONS];
+
+        $this->assertAccess('POST', 'tickets/'.self::MISSING.'/void', $allowed);
+        $this->assertAccess('POST', 'ticket-voids/'.self::MISSING.'/approve', $allowed);
+        $this->assertAccess('POST', 'ticket-voids/'.self::MISSING.'/reject', $allowed);
     }
 
     /** Double validation (demandeur ≠ validateur) : ResultCorrectionApiTest. */
@@ -301,6 +335,8 @@ class PermissionMatrixTest extends TestCase
         $this->assertAccess('GET', 'tickets', self::ALL);
         $this->assertAccess('GET', 'tickets/'.self::MISSING, self::ALL);
         $this->assertAccess('GET', 'risk/exposure', self::ALL);
+        $this->assertAccess('GET', 'ticket-voids', self::ALL);
+        $this->assertAccess('GET', 'ticket-voids/'.self::MISSING, self::ALL);
     }
 
     public function test_row_ledger_and_reconciliation_are_readable_by_super_admin_finance_and_compliance(): void
