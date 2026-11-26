@@ -36,12 +36,19 @@ function display(type: SettingType | null, value: SettingValue, currency: string
   return String(value);
 }
 
-/** Paramètres de la plateforme versionnés : consultation (settings.view), nouvelle version avec motif (settings.update). */
+/** Groupe de paramètres que la permission risk.manage (Risk & Fraud, V2-G03) permet de modifier sans settings.update. */
+const RISK_GROUP = 'Risque';
+
+/**
+ * Paramètres de la plateforme versionnés : consultation (settings.view), nouvelle version avec motif (settings.update) ;
+ * avec risk.manage seulement, les plafonds du groupe Risque (le reste en lecture).
+ */
 export function SettingsPage() {
   const { data: me } = useMe();
   const settings = usePlatformSettings();
   const s = settings.data;
   const canUpdate = Boolean(me?.permissions.includes('settings.update'));
+  const canSetRisk = !canUpdate && Boolean(me?.permissions.includes('risk.manage'));
   // Le formulaire est recréé à chaque version (key) : le message de succès vit ici.
   const [saved, setSaved] = useState<number | null>(null);
   const currency = s?.items.find((i) => i.currency)?.currency ?? 'HTG';
@@ -60,9 +67,19 @@ export function SettingsPage() {
 
       {saved !== null && saved === s?.version && <Alert tone="success">Version {saved} enregistrée : elle s'applique dès maintenant aux nouveaux paris.</Alert>}
 
-      {s && (canUpdate
-        ? <SettingsForm key={s.version} settings={s} onSaved={setSaved} onStale={() => settings.refetch()} />
-        : <SettingsView settings={s} />)}
+      {s && canUpdate && <SettingsForm key={s.version} settings={s} onSaved={setSaved} onStale={() => settings.refetch()} />}
+      {s && canSetRisk && (
+        <>
+          <SettingsForm
+            key={s.version}
+            settings={{ ...s, items: s.items.filter((i) => i.group === RISK_GROUP) }}
+            onSaved={setSaved}
+            onStale={() => settings.refetch()}
+          />
+          <SettingsView settings={{ ...s, items: s.items.filter((i) => i.group !== RISK_GROUP) }} note="Autres paramètres en consultation seule : leur modification est réservée au Super Admin." />
+        </>
+      )}
+      {s && !canUpdate && !canSetRisk && <SettingsView settings={s} />}
 
       <VersionHistory currency={currency} />
     </section>
@@ -73,10 +90,10 @@ function groupsOf(items: Setting[]) {
   return [...new Set(items.map((i) => i.group))].map((group) => ({ group, items: items.filter((i) => i.group === group) }));
 }
 
-function SettingsView({ settings }: { settings: PlatformSettings }) {
+function SettingsView({ settings, note = 'Consultation seule : la modification est réservée au Super Admin.' }: { settings: PlatformSettings; note?: string }) {
   return (
     <section className="admin-card stack">
-      <Alert tone="info">Consultation seule : la modification est réservée au Super Admin.</Alert>
+      <Alert tone="info">{note}</Alert>
       {groupsOf(settings.items).map(({ group, items }) => (
         <div key={group} className="stack-sm">
           <h2 className="card-title">{group}</h2>

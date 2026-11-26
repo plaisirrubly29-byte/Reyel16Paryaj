@@ -1421,7 +1421,7 @@ paths:
               properties:
                 roles:
                   type: array
-                  items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+                  items: { type: string, enum: [super_admin, operations, finance, support, compliance, risk_fraud, agent_manager] }
                 reason: { type: string, minLength: 5, maxLength: 500 }
       responses:
         "200":
@@ -1662,7 +1662,7 @@ paths:
       parameters:
         - { name: search, in: query, description: "Nom (fragment), email (fragment ; complet seulement sans users.view_personal_data), téléphone complet ou identifiant", schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [active, suspended, excluded, closed] } }
-        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance] } }
+        - { name: role, in: query, schema: { type: string, enum: [super_admin, operations, finance, support, compliance, risk_fraud, agent_manager] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PerPage"
       responses:
@@ -1724,8 +1724,9 @@ paths:
       tags: [Admin]
       summary: Mise maximale par ticket propre à un joueur (motif requis, audité)
       description: |
-        Permission users.suspend (V2-D05). Baisse la limite générale betting.max_stake_minor pour ce joueur ; null la
-        retire. Audit user.stake_limit_changed (avant / après, motif). Comptes joueurs uniquement (422 not_a_player).
+        Permission users.suspend ou risk.manage (V2-D05, rôle Risk & Fraud V2-G03). Baisse la limite générale
+        betting.max_stake_minor pour ce joueur ; null la retire. Audit user.stake_limit_changed (avant / après,
+        motif). Comptes joueurs uniquement (422 not_a_player).
       x-task: V2-D05
       security: [{ sessionCookie: [] }]
       parameters:
@@ -2625,6 +2626,8 @@ paths:
       tags: [Admin]
       summary: Enregistrer une nouvelle version des paramètres (permission settings.update, motif requis, auditée)
       description: |
+        Permission settings.update ; ou risk.manage (rôle Risk & Fraud, V2-G03) pour les seuls plafonds de risque
+        (betting.max_event_liability_minor, betting.max_market_liability_minor) : toute autre clé envoyée → 403 forbidden.
         Seules les valeurs envoyées changent ; la nouvelle version est un instantané complet, en ajout seul, et
         s'applique immédiatement. `base_version` est la version affichée : si une autre version a été enregistrée
         entre-temps, `409 settings_changed` (rien n'est écrasé). Les paramètres déjà figés sur un ticket ne changent pas.
@@ -4177,7 +4180,7 @@ components:
         kyc_status: { type: string, enum: [none, pending, approved, rejected], description: "Vérification d'identité (V2-C03) ; détail par GET /me/kyc" }
         roles:
           type: array
-          items: { type: string, enum: [super_admin, operations, finance, support, compliance] }
+          items: { type: string, enum: [super_admin, operations, finance, support, compliance, risk_fraud, agent_manager] }
           description: Vide pour un joueur.
         permissions:
           type: array

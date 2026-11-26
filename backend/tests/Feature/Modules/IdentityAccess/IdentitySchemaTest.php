@@ -15,16 +15,18 @@ class IdentitySchemaTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_role_seeder_creates_the_five_admin_roles_and_is_idempotent(): void
+    public function test_role_seeder_creates_the_seven_admin_roles_and_is_idempotent(): void
     {
         $this->seed(RoleSeeder::class);
         $this->seed(RoleSeeder::class);
 
         $this->assertEqualsCanonicalizing(
-            ['super_admin', 'operations', 'finance', 'support', 'compliance'],
+            ['super_admin', 'operations', 'finance', 'support', 'compliance', 'risk_fraud', 'agent_manager'],
             Role::pluck('slug')->all(),
         );
         $this->assertSame('Conformité', Role::where('slug', 'compliance')->value('name'));
+        $this->assertSame('Risk & Fraud', Role::where('slug', 'risk_fraud')->value('name'));
+        $this->assertSame('Gestion des agents', Role::where('slug', 'agent_manager')->value('name'));
     }
 
     public function test_new_user_is_active_and_status_is_not_mass_assignable(): void
