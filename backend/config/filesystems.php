@@ -47,6 +47,15 @@ return [
             'report' => false,
         ],
 
+        // Pièces jointes des réclamations (V2-G04) : même règle que le KYC (chiffrées, jamais servies en direct).
+        // En Staging et en Production, ce dossier doit être un volume Docker, sauvegardé avec la base.
+        'complaints' => [
+            'driver' => 'local',
+            'root' => storage_path('app/complaints'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
