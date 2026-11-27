@@ -44,11 +44,22 @@ La `queue` démarre une fois le backend prêt (`docker compose ps` → `healthy`
 - Frontend : http://localhost:5173 — la page d'accueil doit afficher « API : ok (v1) »
 - Admin : http://localhost:5173/admin
 
+**Ports ouverts sur votre machine seulement.** PostgreSQL, Redis, l'API et Vite écoutent sur `127.0.0.1` : sur un
+Wi-Fi partagé, personne d'autre ne peut atteindre la base de développement (mot de passe `secret`) ni Redis (sans mot
+de passe). Pour ouvrir le site depuis un téléphone du même réseau, il faut à la fois :
+
+1. ouvrir les ports : `DEV_BIND_IP=0.0.0.0 docker compose up -d` (PowerShell : `$env:DEV_BIND_IP='0.0.0.0'; docker compose up -d`) ;
+2. faire appeler l'API par l'adresse du PC (ex. `192.168.1.36`) et non `localhost` : `VITE_API_URL` du service
+   `frontend` et `FRONTEND_URL` dans `backend/.env` (CORS), puis `docker compose up -d`.
+
+Revenir ensuite à `docker compose up -d` sans la variable, qui referme les ports.
+
 Dépannage :
 
 | Symptôme | Solution |
 |---|---|
-| Port déjà utilisé (WAMP/XAMPP : PostgreSQL, Redis…) | Arrêter le service local ou changer le port gauche dans `docker-compose.yml` |
+| Port déjà utilisé (WAMP/XAMPP : PostgreSQL, Redis…) | Arrêter le service local ou changer le port dans `docker-compose.yml` (`${DEV_BIND_IP:-127.0.0.1}:<port>:…`) |
+| Site injoignable depuis un téléphone ou un autre PC | Normal : ports fermés au réseau par défaut (voir « Ports ouverts sur votre machine seulement ») |
 | Frontend « API : injoignable » | `FRONTEND_URL` dans `backend/.env` doit correspondre à l'URL du frontend (CORS) |
 | Modification de `backend/.env` non prise en compte | `docker compose restart backend queue` |
 | Requêtes lentes sous Windows | Cloner le dépôt dans le système de fichiers WSL (`\\wsl$\...`) plutôt que sur `C:\` |
