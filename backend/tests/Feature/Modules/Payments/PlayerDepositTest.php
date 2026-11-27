@@ -76,7 +76,8 @@ class PlayerDepositTest extends TestCase
         $this->assertSame(0, $this->balance()); // ouvrir un dépôt ne crédite rien
 
         // Page du prestataire : montant et boutons, CSP propre avec nonce.
-        $page = $this->get($response->json('data.redirect_url'))->assertOk()->assertSee('Payer')->assertSee($reference);
+        $page = $this->get($response->json('data.redirect_url'))->assertOk()->assertSee('Payer')->assertSee($reference)
+            ->assertSee("Payer 1\u{00A0}500,00\u{00A0}HTG", false);
         $this->assertMatchesRegularExpression("/style-src 'nonce-[A-Za-z0-9]+'/", $page->headers->get('Content-Security-Policy'));
 
         $this->decide($reference, 'approve')->assertStatus(303)->assertHeader('Location', "http://localhost:5173/wallet?depot={$reference}");
