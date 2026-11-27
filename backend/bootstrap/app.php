@@ -10,6 +10,7 @@ use App\Modules\IdentityAccess\Http\Middleware\RequireHumanVerification;
 use App\Modules\IdentityAccess\Http\Middleware\RequirePermission;
 use App\Modules\Monitoring\Http\Middleware\CountApiResponses;
 use App\Support\Http\ApiErrorRenderer;
+use App\Support\Http\ApiException;
 use App\Support\QueryErrorSanitizer;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Database\QueryException;
@@ -84,6 +85,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Erreurs SQL : sans la ligne DETAIL de PostgreSQL, qui cite les valeurs refusées (revue P8-02, M5).
         $exceptions->map(fn (QueryException $e) => QueryErrorSanitizer::sanitize($e));
+
+        // Refus métier attendus (4xx : solde insuffisant, clé d'idempotence absente, cote changée…) : réponse normale
+        // au client, pas une panne. Ils ne vont plus au journal, où ils noyaient les vraies erreurs (bilan du
+        // 27/11/2026 : 37 865 lignes ERROR en local, journaux Docker sans limite en Production). Les ApiException 5xx
+        // restent journalisées.
+        $exceptions->dontReportWhen(fn (Throwable $e) => $e instanceof ApiException && $e->status < 500);
 
         // Format d'erreur unique de l'API (docs/api/README.md).
         $exceptions->render(function (Throwable $e, Request $request) {
