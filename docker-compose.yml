@@ -1,6 +1,10 @@
 # Environnement de développement local — REYEL 16 PAYAJ
 # Démarrage : docker compose up -d   (voir README.md)
 # Données et fonds FICTIFS uniquement.
+#
+# Ports ouverts sur cette machine seulement (127.0.0.1) : sur un Wi-Fi partagé, la base (mot de passe « secret »),
+# Redis (sans mot de passe) et le serveur Vite ne sont pas joignables depuis le réseau (bilan du 27/11/2026).
+# Pour tester sur un téléphone du même réseau : DEV_BIND_IP=0.0.0.0 docker compose up -d (voir README.md).
 
 services:
   postgres:
@@ -10,7 +14,7 @@ services:
       POSTGRES_USER: reyel16
       POSTGRES_PASSWORD: secret
     ports:
-      - "5432:5432"
+      - "${DEV_BIND_IP:-127.0.0.1}:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +25,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${DEV_BIND_IP:-127.0.0.1}:6379:6379"
 
   # Pas d'env_file : Laravel lit backend/.env lui-même (monté). Un env_file figerait
   # les valeurs au démarrage du conteneur (ex. APP_KEY vide après key:generate).
@@ -38,7 +42,7 @@ services:
       DB_HOST: postgres
       REDIS_HOST: redis
     ports:
-      - "8000:8000"
+      - "${DEV_BIND_IP:-127.0.0.1}:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,7 +79,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:8000/api/v1
     ports:
-      - "5173:5173"
+      - "${DEV_BIND_IP:-127.0.0.1}:5173:5173"
 
 volumes:
   pgdata:
