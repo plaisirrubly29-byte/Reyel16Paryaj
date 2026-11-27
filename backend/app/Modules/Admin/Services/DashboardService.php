@@ -9,12 +9,20 @@ use App\Modules\Admin\Support\ReportingPeriod;
 use App\Modules\Betting\Enums\BetTicketStatus;
 use App\Modules\Betting\Models\BetTicket;
 use App\Modules\IdentityAccess\Enums\AccountStatus;
+use App\Modules\Lottery\Models\LotteryTicket;
+use App\Modules\Lottery\Services\LotterySalesService;
+use App\Modules\Payments\Enums\PaymentDirection;
+use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\SportsData\Enums\EventStatus;
 use App\Modules\SportsData\Enums\MarketStatus;
 use App\Modules\SportsData\Models\Event;
 use App\Modules\SportsData\Models\Market;
+use App\Modules\Wallet\Enums\LedgerEntryType;
+use App\Modules\Wallet\Models\LedgerEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -62,6 +70,12 @@ class DashboardService
             'excluded' => (int) ($counts[AccountStatus::Excluded->value] ?? 0),
             'new_today' => User::query()->where('created_at', '>=', $todayStart)->count(),
             'new_in_period' => $this->inPeriod(User::query(), 'created_at', $period)->count(),
+            // Joueurs qui ont misé dans la période (paris ou borlette), d'après le ledger (V2-F05).
+            'active_players' => (int) $this->ledger($period)
+                ->where('ledger_entries.type', LedgerEntryType::Stake->value)
+                ->join('wallets', 'wallets.id', '=', 'ledger_entries.wallet_id')
+                ->distinct()
+                ->count('wallets.user_id'),
             'registrations' => $this->daily(User::query(), 'created_at', 'COUNT(*)', $period),
         ];
     }
@@ -89,6 +103,7 @@ class DashboardService
             'stakes_by_sport' => $this->stakesBySport($period),
             'tickets' => $this->daily(BetTicket::query(), 'placed_at', 'COUNT(*)', $period),
             'stakes_daily_minor' => $this->daily(BetTicket::query(), 'placed_at', 'SUM(stake_minor)', $period),
+            'lottery' => $this->lottery($period),
         ];
     }
 
@@ -104,9 +119,128 @@ class DashboardService
             'payouts_minor' => $payouts,
             'gross_gaming_revenue_minor' => $stakes - $payouts,
             'pending_corrections' => FinanceCorrection::query()->where('status', FinanceCorrectionStatus::Pending)->count(),
-            // Fonds fictifs en V1 : aucun dépôt ni retrait réel tant que les paiements (P7-01) ne sont pas intégrés.
-            'payments_available' => false,
+            // Configuration réelle (V2-F05) : un prestataire de dépôt activé, retraits ouverts.
+            'payments_available' => collect((array) config('payments.providers'))->contains(fn ($p) => (bool) ($p['enabled'] ?? false)),
+            'withdrawals_available' => (bool) config('payments.withdrawals.enabled'),
+            'ledger' => $this->gaming($period),
+            'payments' => $this->payments($period),
         ];
+    }
+
+    /**
+     * Borlette (V2-F05) : fiches vendues dans la période ; gains d'après les écritures « gain » du ledger de la période
+     * (versées au règlement), hors remboursements des lignes annulées.
+     *
+     * @return array<string, int>
+     */
+    private function lottery(ReportingPeriod $period): array
+    {
+        $sold = $this->inPeriod(LotteryTicket::query(), 'placed_at', $period);
+
+        return [
+            'tickets_sold' => (clone $sold)->count(),
+            'stakes_minor' => (int) (clone $sold)->sum('stake_minor'),
+            'tickets_settled' => $this->inPeriod(LotteryTicket::query(), 'settled_at', $period)->count(),
+            'payouts_minor' => (int) $this->ledger($period)
+                ->where('type', LedgerEntryType::Payout->value)
+                ->where('related_type', LotterySalesService::LEDGER_TYPE)
+                ->sum('amount_minor'),
+        ];
+    }
+
+    /**
+     * Jeu d'après le ledger (V2-F05) : écritures de la période liées à un pari ou à une fiche de borlette. Les montants
+     * sont signés (mise au débit, gain au crédit) : le produit brut est l'opposé de leur somme, compensations comprises.
+     *
+     * @return array<string, mixed>
+     */
+    private function gaming(ReportingPeriod $period): array
+    {
+        $products = ['sports' => 'bet', 'lottery' => LotterySalesService::LEDGER_TYPE];
+        $rows = $this->ledger($period)
+            ->whereIn('related_type', array_values($products))
+            ->whereIn('type', [LedgerEntryType::Stake->value, LedgerEntryType::Payout->value, LedgerEntryType::Refund->value, LedgerEntryType::Reversal->value])
+            ->groupBy('related_type')
+            ->selectRaw('related_type')
+            // Mises : écritures « mise ». Retours : gains, remboursements et compensations, avec leur signe (annuler
+            // un gain par une correction diminue les retours ; ce n'est pas une mise).
+            ->selectRaw('SUM(CASE WHEN type = ? THEN -amount_minor ELSE 0 END) AS stakes', [LedgerEntryType::Stake->value])
+            ->selectRaw('SUM(CASE WHEN type <> ? THEN amount_minor ELSE 0 END) AS returns', [LedgerEntryType::Stake->value])
+            ->get()
+            ->keyBy('related_type');
+
+        $byProduct = [];
+        foreach ($products as $product => $relatedType) {
+            $stakes = (int) ($rows[$relatedType]->stakes ?? 0);
+            $returns = (int) ($rows[$relatedType]->returns ?? 0);
+            $byProduct[] = [
+                'product' => $product,
+                'stakes_minor' => $stakes,
+                'returns_minor' => $returns,
+                'gross_gaming_revenue_minor' => $stakes - $returns,
+            ];
+        }
+
+        $stakes = array_sum(array_column($byProduct, 'stakes_minor'));
+        $returns = array_sum(array_column($byProduct, 'returns_minor'));
+
+        return [
+            'stakes_minor' => $stakes,
+            'returns_minor' => $returns,
+            'gross_gaming_revenue_minor' => $stakes - $returns,
+            'by_product' => $byProduct,
+        ];
+    }
+
+    /**
+     * Dépôts et retraits d'après le ledger (V2-F05) : prestataire et saisies manuelles du Super Admin, crédits fictifs
+     * exclus. Retraits nets des retraits échoués (écriture compensatoire d'un retrait, datée de la période).
+     *
+     * @return array<string, mixed>
+     */
+    private function payments(ReportingPeriod $period): array
+    {
+        $deposits = $this->ledger($period)->where('ledger_entries.type', LedgerEntryType::Deposit->value);
+        $withdrawals = $this->ledger($period)->where('ledger_entries.type', LedgerEntryType::Withdrawal->value);
+        $returned = (int) $this->ledger($period)
+            ->where('ledger_entries.type', LedgerEntryType::Reversal->value)
+            ->whereIn('ledger_entries.reversal_of_id', DB::table('ledger_entries')->select('id')->where('type', LedgerEntryType::Withdrawal->value))
+            ->sum('ledger_entries.amount_minor');
+
+        // Premier dépôt de toute la vie du portefeuille daté de la période.
+        $firstDeposits = DB::query()
+            ->fromSub(DB::table('ledger_entries')->where('type', LedgerEntryType::Deposit->value)
+                ->groupBy('wallet_id')->selectRaw('wallet_id, MIN(created_at) AS first_at'), 'firsts')
+            ->where('first_at', '>=', $period->startUtc())
+            ->where('first_at', '<', $period->endUtc())
+            ->count();
+
+        $depositsMinor = (int) (clone $deposits)->sum('ledger_entries.amount_minor');
+        $withdrawalsMinor = -(int) (clone $withdrawals)->sum('ledger_entries.amount_minor') - $returned;
+        $pending = PaymentTransaction::query()
+            ->where('direction', PaymentDirection::Payout)
+            ->whereIn('status', [PaymentStatus::Pending, PaymentStatus::Processing]);
+
+        return [
+            'deposits_count' => (clone $deposits)->count(),
+            'deposits_minor' => $depositsMinor,
+            'depositors' => (int) (clone $deposits)->distinct()->count('ledger_entries.wallet_id'),
+            'first_deposits' => $firstDeposits,
+            'withdrawals_count' => (clone $withdrawals)->count(),
+            'withdrawals_minor' => $withdrawalsMinor,
+            'net_deposits_minor' => $depositsMinor - $withdrawalsMinor,
+            'pending_withdrawals_count' => (clone $pending)->count(),
+            'pending_withdrawals_minor' => (int) (clone $pending)->sum('amount_minor'),
+            'deposits_daily_minor' => $this->daily(LedgerEntry::query()->where('type', LedgerEntryType::Deposit), 'created_at', 'SUM(amount_minor)', $period),
+        ];
+    }
+
+    /** Écritures du ledger datées de la période (requête de base, sans modèle : agrégats seulement). */
+    private function ledger(ReportingPeriod $period): QueryBuilder
+    {
+        return DB::table('ledger_entries')
+            ->where('ledger_entries.created_at', '>=', $period->startUtc())
+            ->where('ledger_entries.created_at', '<', $period->endUtc());
     }
 
     /** @return array<string, int> */
