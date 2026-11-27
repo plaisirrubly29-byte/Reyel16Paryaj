@@ -28,6 +28,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/aml', label: 'Alertes AML', icon: 'alert', group: 'Contrôle', description: "Mouvements d'argent inhabituels : classer ou signaler, avec motif.", permissions: ['aml.view'] },
   { to: '/admin/risk', label: 'Risques & exposition', icon: 'target', group: 'Contrôle', description: 'Exposition de la maison sur les tickets en cours.', permissions: ['tickets.view'] },
   { to: '/admin/finance', label: 'Finance', icon: 'wallet', group: 'Contrôle', description: 'Grand livre, rapprochement et corrections.', permissions: ['ledger.view'] },
+  { to: '/admin/payments', label: 'Paiements', icon: 'withdraw', group: 'Contrôle', description: 'Suivi des retraits et des dépôts passés par le prestataire.', permissions: ['ledger.view'] },
   { to: '/admin/audit', label: 'Audit & rapports', icon: 'shield', group: 'Contrôle', description: 'Journal des actions sensibles.', permissions: ['audit.view'] },
   { to: '/admin/system', label: 'Supervision technique', icon: 'server', group: 'Contrôle', description: 'Fournisseur sportif, planificateur et tâches en échec.', permissions: ['settings.view'] },
   { to: '/admin/settings', label: 'Paramètres', icon: 'settings', group: 'Contrôle', description: 'Règles de jeu et configuration.', permissions: ['settings.view'] },
