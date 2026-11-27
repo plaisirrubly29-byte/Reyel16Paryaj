@@ -2894,7 +2894,7 @@ paths:
       x-task: V2-B01
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed, expired, review] } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, processing, succeeded, failed, expired, review, cancelled] }, description: "processing et cancelled : retraits seulement (envoi au prestataire, annulation par le joueur)" }
         - { name: direction, in: query, schema: { type: string, enum: [deposit, payout] } }
         - { name: provider, in: query, schema: { type: string, example: moncash } }
         - { name: user_id, in: query, schema: { type: integer } }
@@ -4507,7 +4507,7 @@ components:
         user_id: { type: string }
         provider: { type: string, example: moncash }
         direction: { type: string, enum: [deposit, payout] }
-        status: { type: string, enum: [pending, succeeded, failed, expired, review] }
+        status: { type: string, enum: [pending, processing, succeeded, failed, expired, review, cancelled] }
         amount: { $ref: "#/components/schemas/Money" }
         reference: { type: string, example: pay_01jc5x0v6z0k6q7m4c2b9p3r8t }
         provider_reference: { type: [string, "null"] }

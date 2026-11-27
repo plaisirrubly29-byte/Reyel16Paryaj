@@ -62,6 +62,8 @@ const KycQueuePage = lazyPage(() => import('../admin/pages/KycQueuePage'), 'KycQ
 const KycSubmissionPage = lazyPage(() => import('../admin/pages/KycSubmissionPage'), 'KycSubmissionPage');
 const AmlAlertDetailPage = lazyPage(() => import('../admin/pages/AmlAlertDetailPage'), 'AmlAlertDetailPage');
 const AmlAlertsPage = lazyPage(() => import('../admin/pages/AmlAlertsPage'), 'AmlAlertsPage');
+const PaymentDetailPage = lazyPage(() => import('../admin/pages/PaymentDetailPage'), 'PaymentDetailPage');
+const PaymentsPage = lazyPage(() => import('../admin/pages/PaymentsPage'), 'PaymentsPage');
 const AdminHomePage = lazyPage(() => import('../admin/pages/AdminHomePage'), 'AdminHomePage');
 const AuditPage = lazyPage(() => import('../admin/pages/AuditPage'), 'AuditPage');
 const CorrectionDetailPage = lazyPage(() => import('../admin/pages/CorrectionDetailPage'), 'CorrectionDetailPage');
@@ -152,6 +154,8 @@ export const routes = [
       section('kyc/:id', <KycSubmissionPage />),
       section('aml', <AmlAlertsPage />),
       section('aml/:id', <AmlAlertDetailPage />),
+      section('payments', <PaymentsPage />),
+      section('payments/:id', <PaymentDetailPage />),
       section('tickets', <TicketsPage />),
       section('tickets/:id', <TicketDetailPage />),
       section('risk', <RiskPage />),
