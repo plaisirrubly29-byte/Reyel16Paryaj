@@ -53,9 +53,18 @@ The Odds API garde les autres sports, SportMonks apporte le football de son abon
   ajouts par `SPORTMONKS_LEAGUE_KEYS="9=soccer_efl_champ"`) pour garder libellés, menu et marge ; sinon
   `soccer_sm_{id}`. **Pas de doublon** : `sports-data:sync` saute et retire du catalogue les compétitions que
   SportMonks a déjà (actives) ; SportMonks coupé, elles reviennent à The Odds API.
-- **Marchés** : 1X2 (1), plus/moins (80, ligne 2.5 si cotée), les deux équipes marquent (14), double chance (2),
-  score exact (57), transposés au format de The Odds API ; un marché par bookmaker de `SPORTMONKS_BOOKMAKERS`
-  (le premier = référence, 2 = bet365), les autres pour la cote juste. Les marchés maison suivent comme d'habitude.
+- **Marchés** (`SportMonksProvider::MARKETS`), transposés au format de The Odds API ; un marché par bookmaker de
+  `SPORTMONKS_BOOKMAKERS` (le premier = référence, 2 = bet365), les autres pour la cote juste :
+  - réglés sur le score final : 1X2, double chance, remboursé si nul, plus/moins (ligne 2.5) et à plusieurs lignes,
+    les deux équipes marquent, score exact, handicap (ligne entière ou demi-but la plus équilibrée) et à plusieurs
+    lignes, buts par équipe, pair/impair ;
+  - réglés avec les statistiques (`STATISTICS_PROVIDER=sportmonks`, sinon non proposés) : 1re mi-temps (1X2, double
+    chance, plus/moins 1.5, les deux équipes marquent, score exact), mi-temps / fin de match, corners et cartons
+    (plus/moins et handicap) ;
+  - jamais : paris sur les joueurs (buteurs, tirs…) ni sur les minutes, que REYEL 16 ne sait pas régler.
+  Une cote à 1.00 écarte sa seule ligne ; les quarts de but sont écartés. Les marchés maison suivent comme d'habitude.
+- **Statistiques** (`Settlement/Providers/SportMonksStatisticsProvider`, `STATISTICS_PROVIDER=sportmonks`) : score à la
+  mi-temps, corners (type 34) et cartons jaunes + rouges (84, 83) des matchs de l'abonnement, même clé.
 - **Résultats** : terminé = états `FT`, `AET`, `FT_PEN` ; après prolongation, score de fin de 2e mi-temps (`2ND_HALF`).
 - **Limite** : pas de crédits mais un nombre d'appels par heure et par type de données (180 en formule gratuite) ;
   journal `sports_data_api_calls` avec coût 0 et appels restants ; un 429 donne `quota_exhausted`. Clé envoyée dans

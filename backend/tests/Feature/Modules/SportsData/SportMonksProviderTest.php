@@ -81,6 +81,20 @@ class SportMonksProviderTest extends TestCase
                 $this->odd(2, 2, 'Man Utd or Brentford', '1.30'),
                 $this->odd(57, 2, '1', '8.00', ['name' => '1-0']), $this->odd(57, 2, '2', '15.00', ['name' => '2-0']),
                 $this->odd(57, 2, 'Draw', '9.00', ['name' => '1-1']),
+                $this->odd(10, 2, '1', '1.45'), $this->odd(10, 2, '2', '2.70'),
+                // Handicap : le quart de but (-0.25) est écarté, la ligne -0.5 / +0.5 est retenue.
+                $this->odd(6, 2, '1', '1.70', ['handicap' => '-0.25']), $this->odd(6, 2, '2', '2.10', ['handicap' => '+0.25']),
+                $this->odd(6, 2, '1', '1.95', ['handicap' => '-0.5']), $this->odd(6, 2, '2', '1.90', ['handicap' => '+0.5']),
+                // Une cote à 1.00 écarte cette seule ligne, pas le marché.
+                $this->odd(81, 2, 'Over', '1.30', ['total' => '1.5']), $this->odd(81, 2, 'Under', '3.40', ['total' => '1.5']),
+                $this->odd(81, 2, 'Under', '1.00', ['total' => '6.5']),
+                $this->odd(86, 2, '1', '1.50', ['total' => 'Over 1.5']), $this->odd(86, 2, '2', '1.60', ['total' => 'Under 1.5']),
+                $this->odd(44, 2, 'Odd', '1.95'), $this->odd(44, 2, 'Even', '1.85'),
+                $this->odd(29, 2, 'Man Utd - Draw', '13.00', ['name' => 'Home/Draw']),
+                $this->odd(29, 2, 'Draw - Brentford', '9.00', ['name' => 'Draw/Away']),
+                $this->odd(69, 2, 'Over', '1.90', ['total' => '9.5']), $this->odd(69, 2, 'Under', '1.85', ['total' => '9.5']),
+                $this->odd(69, 2, 'Exactly', '9.00', ['total' => '10']),
+                $this->odd(61, 2, 'Over', '1.92', ['total' => '9.5']),
                 // Bookmaker non suivi : ignoré.
                 $this->odd(1, 77, 'Home', '9.00'), $this->odd(1, 77, 'Draw', '9.00'), $this->odd(1, 77, 'Away', '9.00'),
             ],
@@ -166,6 +180,15 @@ class SportMonksProviderTest extends TestCase
         $this->assertSame([
             'Manchester United:1|Brentford:0=8', 'Manchester United:0|Brentford:2=15', 'Manchester United:1|Brentford:1=9',
         ], $names('correct_score'));
+        $this->assertSame(['Manchester United=1.45', 'Brentford=2.7'], $names('draw_no_bet'));
+        $this->assertSame(['Manchester United -0.5=1.95', 'Brentford 0.5=1.9'], $names('spreads'));
+        $this->assertSame(['Over 1.5=1.3', 'Under 1.5=3.4'], $names('alternate_totals'));
+        $this->assertSame(['Over 1.5=1.5', 'Under 1.5=1.6'], $names('alternate_team_totals'));
+        $this->assertSame(['Manchester United', 'Brentford'], array_map(fn ($s) => $s->description, $markets['alternate_team_totals']->selections));
+        $this->assertSame(['Odd=1.95', 'Even=1.85'], $names('odd_even'));
+        $this->assertSame(['Manchester United/Draw=13', 'Draw/Brentford=9'], $names('halftime_fulltime'));
+        // Corners : deux marchés SportMonks, une seule sélection par ligne ; « Exactly » écarté.
+        $this->assertSame(['Over 9.5=1.9', 'Under 9.5=1.85'], $names('alternate_totals_corners'));
 
         Http::assertSent(fn (Request $r) => $r->hasHeader('Authorization', self::KEY)
             && ! str_contains($r->url(), self::KEY)
