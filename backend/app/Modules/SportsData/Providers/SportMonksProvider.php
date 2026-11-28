@@ -47,14 +47,39 @@ class SportMonksProvider implements SportsDataProvider
     /** Préfixe des compétitions sans équivalent chez The Odds API. */
     private const KEY_PREFIX = 'soccer_sm_';
 
-    /** Marchés SportMonks → marché du catalogue. */
+    /**
+     * Marchés SportMonks → marché du catalogue. Seulement des paris que REYEL 16 sait régler : score final, ou
+     * statistiques du match (1re mi-temps, corners, cartons : MarketKeys::STATISTICS, proposés seulement avec un
+     * fournisseur de statistiques). Pas de paris sur les joueurs ni sur les minutes (buteurs, tirs, premier corner…).
+     */
     private const MARKETS = [
-        1 => 'h2h',            // Full Time Result
-        80 => 'totals',        // Goals Over/Under
-        14 => 'btts',          // Both Teams to Score
-        2 => 'double_chance',  // Double Chance
-        57 => 'correct_score', // Correct Score
+        1 => 'h2h',                         // Full Time Result
+        2 => 'double_chance',               // Double Chance
+        10 => 'draw_no_bet',                // Draw No Bet
+        80 => 'totals',                     // Goals Over/Under
+        81 => 'alternate_totals',           // Alternative Total Goals
+        14 => 'btts',                       // Both Teams to Score
+        57 => 'correct_score',              // Correct Score
+        6 => 'spreads',                     // Asian Handicap
+        104 => 'alternate_spreads',         // Alternative Asian Handicap
+        86 => 'alternate_team_totals',      // Team Total Goals
+        44 => 'odd_even',                   // Goals Odd/Even
+        31 => 'h2h_h1',                     // Half Time Result
+        47 => 'double_chance_h1',           // Half Time Double Chance
+        28 => 'totals_h1',                  // 1st Half Goals
+        15 => 'btts_h1',                    // Both Teams to Score in 1st Half
+        30 => 'correct_score_h1',           // Half Time Correct Score
+        29 => 'halftime_fulltime',          // Half Time/Full Time
+        69 => 'alternate_totals_corners',   // Alternative Corners
+        61 => 'alternate_totals_corners',   // Asian Total Corners
+        62 => 'alternate_spreads_corners',  // Asian Handicap Corners
+        255 => 'alternate_totals_cards',    // Number of Cards In Match
+        272 => 'alternate_totals_cards',    // Asian Total Cards
+        273 => 'alternate_spreads_cards',   // Asian Handicap Cards
     ];
+
+    /** Ligne préférée d'un plus/moins à une seule ligne. */
+    private const PREFERRED_LINE = ['totals' => '2.5', 'totals_h1' => '1.5'];
 
     /** États SportMonks d'un match terminé ; le score réglé est celui du temps réglementaire. */
     private const FINISHED = ['FT', 'AET', 'FT_PEN'];
@@ -216,6 +241,31 @@ class SportMonksProvider implements SportsDataProvider
         return $results;
     }
 
+    /**
+     * Matchs de football d'une journée (UTC), tous ceux de l'abonnement, avec participants, scores et état : pour les
+     * statistiques des matchs terminés (SportMonksStatisticsProvider).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function fixturesOn(CarbonImmutable $date): array
+    {
+        return $this->pages("/football/fixtures/date/{$date->toDateString()}", ['include' => 'participants;scores;state'], allowEmpty: true);
+    }
+
+    /**
+     * Un match avec ses statistiques (corners, cartons…) et ses participants.
+     *
+     * @return array<string, mixed>
+     */
+    public function fixtureWithStatistics(string $fixtureId): array
+    {
+        if (! ctype_digit($fixtureId)) {
+            throw new SportsDataException(SportsDataException::NOT_FOUND, "Identifiant de match invalide : {$fixtureId}");
+        }
+
+        return (array) ($this->get("/football/fixtures/{$fixtureId}", ['include' => 'statistics;participants'])['data'] ?? []);
+    }
+
     /** Pas de crédits chez SportMonks : seulement une limite d'appels par heure. */
     public function quota(): ?QuotaData
     {
@@ -233,6 +283,10 @@ class SportMonksProvider implements SportsDataProvider
             $key = self::MARKETS[(int) ($odd['market_id'] ?? 0)] ?? null;
             $bookmaker = (int) ($odd['bookmaker_id'] ?? 0);
             if ($key === null || ($bookmakers !== [] && ! in_array($bookmaker, $bookmakers, true)) || ! empty($odd['stopped'])) {
+                continue;
+            }
+            // Cote à 1.00 (ligne extrême, « Moins de 6.5 ») : sélection écartée, pas tout le marché.
+            if (! is_numeric($odd['value'] ?? null) || bccomp(SelectionData::oddsFromProvider((string) $odd['value']), '1', 3) <= 0) {
                 continue;
             }
             $byBookmaker[$bookmaker][$key][] = $odd;
@@ -295,28 +349,45 @@ class SportMonksProvider implements SportsDataProvider
         };
 
         return match ($key) {
-            'h2h' => array_map(fn (array $o) => new SelectionData($side((string) $o['label']), $price($o)), $odds),
-            'btts' => array_map(fn (array $o) => new SelectionData((string) $o['label'], $price($o)), $odds),
-            'totals' => $this->totals($odds, $price),
-            'double_chance' => $this->doubleChance($odds, $home, $away, $price),
-            'correct_score' => $this->correctScore($odds, $home, $away, $price),
+            'h2h', 'h2h_h1', 'draw_no_bet' => array_map(fn (array $o) => new SelectionData($side((string) $o['label']), $price($o)), $odds),
+            'btts', 'btts_h1', 'odd_even' => array_map(fn (array $o) => new SelectionData((string) $o['label'], $price($o)), $odds),
+            'totals', 'totals_h1' => $this->totals($odds, $price, self::PREFERRED_LINE[$key]),
+            'alternate_totals', 'alternate_totals_corners', 'alternate_totals_cards' => $this->alternateTotals($odds, $price),
+            'double_chance', 'double_chance_h1' => $this->doubleChance($odds, $home, $away, $price),
+            'correct_score', 'correct_score_h1' => $this->correctScore($odds, $home, $away, $price),
+            'spreads' => $this->spreads($odds, $side, $price),
+            'alternate_spreads', 'alternate_spreads_corners', 'alternate_spreads_cards' => $this->alternateSpreads($odds, $side, $price),
+            'alternate_team_totals' => $this->teamTotals($odds, $side, $price),
+            'halftime_fulltime' => $this->halftimeFulltime($odds, $side, $price),
         };
     }
 
     /**
-     * Plus/moins : une seule ligne, 2.5 buts si elle est cotée, sinon la première qui a un plus et un moins.
+     * Ligne d'un plus/moins (« 2.5 », « 4.0 ») ; null pour une ligne en quart de but (« 2.50,3.00 ») ou absente.
+     *
+     * @param  array<string, mixed>  $o
+     */
+    private function lineOf(array $o): ?string
+    {
+        $line = trim((string) ($o['total'] ?? $o['name'] ?? ''));
+
+        return is_numeric($line) ? $line : null;
+    }
+
+    /**
+     * Plus/moins à une seule ligne : la ligne préférée si elle est cotée, sinon la première qui a un plus et un moins.
      *
      * @param  list<array<string, mixed>>  $odds
      * @return list<SelectionData>
      */
-    private function totals(array $odds, \Closure $price): array
+    private function totals(array $odds, \Closure $price, string $preferred): array
     {
         $lines = [];
         foreach ($odds as $o) {
-            $line = (string) ($o['total'] ?? $o['name'] ?? '');
+            $line = $this->lineOf($o);
             $label = mb_strtolower(trim((string) $o['label']));
-            if (is_numeric($line) && in_array($label, ['over', 'under'], true)) {
-                $lines[$line][$label] = $o;
+            if ($line !== null && in_array($label, ['over', 'under'], true)) {
+                $lines[$this->normalizedLine($line)][$label] = $o;
             }
         }
 
@@ -325,12 +396,162 @@ class SportMonksProvider implements SportsDataProvider
             throw new InvalidArgumentException('Marché totals incomplet (plus ou moins absent).');
         }
 
-        $line = array_key_exists('2.5', $complete) ? '2.5' : (string) array_key_first($complete);
+        $line = array_key_exists($preferred, $complete) ? $preferred : (string) array_key_first($complete);
 
         return [
             new SelectionData('Over', $price($complete[$line]['over']), $line),
             new SelectionData('Under', $price($complete[$line]['under']), $line),
         ];
+    }
+
+    /**
+     * Plus/moins à plusieurs lignes (buts, corners, cartons) : chaque « Over »/« Under » avec sa ligne, sans doublon
+     * quand deux marchés SportMonks donnent la même ligne ; « Exactly » est écarté. Le catalogue garde les lignes
+     * entières et les demi-buts.
+     *
+     * @param  list<array<string, mixed>>  $odds
+     * @return list<SelectionData>
+     */
+    private function alternateTotals(array $odds, \Closure $price): array
+    {
+        $selections = [];
+        foreach ($odds as $o) {
+            $label = ucfirst(mb_strtolower(trim((string) $o['label'])));
+            $line = $this->lineOf($o);
+            if ($line === null || ! in_array($label, ['Over', 'Under'], true)) {
+                continue;
+            }
+            $line = $this->normalizedLine($line);
+            $selections["{$label} {$line}"] ??= new SelectionData($label, $price($o), $line);
+        }
+
+        return array_values($selections);
+    }
+
+    /**
+     * Handicap à une seule ligne : la ligne entière ou en demi-but cotée des deux côtés (lignes opposées), la plus
+     * équilibrée ; les quarts de but sont écartés.
+     *
+     * @param  list<array<string, mixed>>  $odds
+     * @return list<SelectionData>
+     */
+    private function spreads(array $odds, \Closure $side, \Closure $price): array
+    {
+        $byLine = [];
+        foreach ($odds as $o) {
+            $handicap = $this->handicapOf($o);
+            $label = mb_strtolower(trim((string) $o['label']));
+            if ($handicap === null || ! in_array($label, ['1', '2', 'home', 'away'], true)) {
+                continue;
+            }
+            $home = in_array($label, ['1', 'home'], true);
+            // Ligne de l'équipe à domicile : celle de l'équipe à l'extérieur, de signe opposé.
+            $line = $home ? $handicap : $this->normalizedLine(bcmul($handicap, '-1', 2));
+            $byLine[$line][$home ? 'home' : 'away'] = $o;
+        }
+
+        $complete = array_filter($byLine, fn (array $pair) => isset($pair['home'], $pair['away']));
+        if ($complete === []) {
+            throw new InvalidArgumentException('Marché handicap incomplet (lignes opposées absentes).');
+        }
+
+        uasort($complete, fn (array $a, array $b) => abs((float) $a['home']['value'] - (float) $a['away']['value'])
+            <=> abs((float) $b['home']['value'] - (float) $b['away']['value']));
+        $line = (string) array_key_first($complete);
+        $pair = $complete[$line];
+
+        return [
+            new SelectionData($side('1'), $price($pair['home']), $line),
+            new SelectionData($side('2'), $price($pair['away']), $this->normalizedLine(bcmul($line, '-1', 2))),
+        ];
+    }
+
+    /**
+     * Handicap à plusieurs lignes (buts, corners, cartons) : chaque équipe avec sa ligne, quarts de but écartés.
+     *
+     * @param  list<array<string, mixed>>  $odds
+     * @return list<SelectionData>
+     */
+    private function alternateSpreads(array $odds, \Closure $side, \Closure $price): array
+    {
+        $selections = [];
+        foreach ($odds as $o) {
+            $handicap = $this->handicapOf($o);
+            if ($handicap === null || ! in_array(mb_strtolower(trim((string) $o['label'])), ['1', '2', 'home', 'away'], true)) {
+                continue;
+            }
+            $team = $side((string) $o['label']);
+            $selections["{$team} {$handicap}"] ??= new SelectionData($team, $price($o), $handicap);
+        }
+
+        return array_values($selections);
+    }
+
+    /**
+     * Buts d'une équipe : « total » vaut « Over 1.5 » ou « Under 0.5 », le libellé 1 ou 2 désigne l'équipe.
+     *
+     * @param  list<array<string, mixed>>  $odds
+     * @return list<SelectionData>
+     */
+    private function teamTotals(array $odds, \Closure $side, \Closure $price): array
+    {
+        $selections = [];
+        foreach ($odds as $o) {
+            if (! preg_match('/^(Over|Under)\s+(\d+(?:\.\d+)?)$/i', trim((string) ($o['total'] ?? '')), $m)) {
+                continue;
+            }
+            $team = $side((string) $o['label']);
+            $selections[] = new SelectionData(ucfirst(mb_strtolower($m[1])), $price($o), $this->normalizedLine($m[2]), $team);
+        }
+
+        return $selections;
+    }
+
+    /**
+     * Mi-temps / fin de match : « name » vaut « Home/Away », « Draw/Draw »… ; transposé en « Équipe/Draw ».
+     *
+     * @param  list<array<string, mixed>>  $odds
+     * @return list<SelectionData>
+     */
+    private function halftimeFulltime(array $odds, \Closure $side, \Closure $price): array
+    {
+        $selections = [];
+        foreach ($odds as $o) {
+            $parts = explode('/', (string) ($o['name'] ?? ''));
+            if (count($parts) !== 2) {
+                throw new InvalidArgumentException("Sélection inconnue : {$o['label']}");
+            }
+            $selections[] = new SelectionData($side($parts[0]).'/'.$side($parts[1]), $price($o));
+        }
+
+        return $selections;
+    }
+
+    /**
+     * Ligne de handicap entière ou en demi-but (« -1.5 », « +0.5 », « 0.0 ») ; null pour un quart de but (« -0.25 »)
+     * ou une ligne double.
+     *
+     * @param  array<string, mixed>  $o
+     */
+    private function handicapOf(array $o): ?string
+    {
+        $handicap = trim((string) ($o['handicap'] ?? ''));
+        if (! preg_match('/^[+-]?\d{1,3}(\.\d{1,2})?$/', $handicap)) {
+            return null;
+        }
+
+        $value = bcadd(ltrim($handicap, '+'), '0', 2);
+
+        return in_array(substr($value, -2), ['00', '50'], true) ? $this->normalizedLine($value) : null;
+    }
+
+    /** « 2.50 » → « 2.5 », « 4.0 » → « 4 », « -0.00 » → « 0 ». */
+    private function normalizedLine(string $line): string
+    {
+        $value = bcadd(ltrim(trim($line), '+'), '0', 2);
+        $value = str_contains($value, '.') ? rtrim(rtrim($value, '0'), '.') : $value;
+
+        return $value === '-0' ? '0' : $value;
     }
 
     /**
