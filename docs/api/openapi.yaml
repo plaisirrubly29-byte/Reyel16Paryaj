@@ -1602,6 +1602,7 @@ paths:
         Définitions : mises = tickets PLACÉS dans la période ; gains payés et remboursements = tickets RÉGLÉS
         dans la période ; produit brut = mises réglées (hors annulés) - gains payés ; exposition = gains
         potentiels des tickets en cours (pas une perte certaine). Montants en unités mineures.
+        V2-F05 : finance.ledger et finance.payments sont calculés à partir du ledger (cohérents avec le rapprochement).
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: period, in: query, schema: { type: string, enum: [today, yesterday, 7d, 30d, month, last_month, custom], default: 7d } }
@@ -1637,6 +1638,7 @@ paths:
                           excluded: { type: integer }
                           new_today: { type: integer }
                           new_in_period: { type: integer }
+                          active_players: { type: integer, description: "V2-F05. Joueurs qui ont misé au moins une fois dans la période (paris ou borlette, d'après le ledger)" }
                           registrations: { $ref: "#/components/schemas/DailySeries" }
                       betting:
                         type: object
@@ -1655,14 +1657,59 @@ paths:
                             items: { type: object, properties: { sport: { type: string }, name: { type: string }, tickets: { type: integer }, stakes_minor: { type: integer } } }
                           tickets: { $ref: "#/components/schemas/DailySeries" }
                           stakes_daily_minor: { $ref: "#/components/schemas/DailySeries" }
+                          lottery:
+                            type: object
+                            description: "V2-F05. Borlette : fiches VENDUES dans la période, et gains des fiches RÉGLÉES dans la période"
+                            properties:
+                              tickets_sold: { type: integer }
+                              stakes_minor: { type: integer }
+                              tickets_settled: { type: integer }
+                              payouts_minor: { type: integer, description: "Gains versés (hors lignes annulées remboursées)" }
                       finance:
                         type: object
                         properties:
                           settled_stakes_minor: { type: integer }
                           payouts_minor: { type: integer }
-                          gross_gaming_revenue_minor: { type: integer, description: "Mises réglées - gains versés" }
+                          gross_gaming_revenue_minor: { type: integer, description: "Paris sportifs, par tickets réglés : mises réglées - gains versés" }
                           pending_corrections: { type: integer }
-                          payments_available: { type: boolean, description: "false tant qu'aucun prestataire de paiement n'est intégré (P7-01)" }
+                          payments_available: { type: boolean, description: "Un prestataire de dépôt est activé (PAYMENTS_*_ENABLED)" }
+                          withdrawals_available: { type: boolean, description: "Retraits par le prestataire ouverts (PAYMENTS_WITHDRAWALS_ENABLED)" }
+                          ledger:
+                            type: object
+                            description: |
+                              V2-F05. Jeu, d'après les écritures du ledger datées de la période (argent réellement entré et sorti) :
+                              mises encaissées ; retours = gains + remboursements + écritures compensatoires (corrections,
+                              annulations) ; produit brut = mises - retours. Diffère du produit brut par tickets réglés quand une
+                              mise et son règlement tombent dans deux périodes différentes.
+                            properties:
+                              stakes_minor: { type: integer }
+                              returns_minor: { type: integer }
+                              gross_gaming_revenue_minor: { type: integer }
+                              by_product:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    product: { type: string, enum: [sports, lottery] }
+                                    stakes_minor: { type: integer }
+                                    returns_minor: { type: integer }
+                                    gross_gaming_revenue_minor: { type: integer }
+                          payments:
+                            type: object
+                            description: |
+                              V2-F05. Dépôts et retraits d'après le ledger (prestataire ET saisies manuelles du Super Admin ;
+                              crédits fictifs exclus). Retraits nets des retraits échoués rendus au joueur.
+                            properties:
+                              deposits_count: { type: integer }
+                              deposits_minor: { type: integer }
+                              depositors: { type: integer, description: Joueurs distincts qui ont déposé }
+                              first_deposits: { type: integer, description: Joueurs dont le tout premier dépôt est dans la période }
+                              withdrawals_count: { type: integer }
+                              withdrawals_minor: { type: integer }
+                              net_deposits_minor: { type: integer, description: Dépôts - retraits }
+                              pending_withdrawals_count: { type: integer, description: "Retraits demandés, pas encore versés (maintenant)" }
+                              pending_withdrawals_minor: { type: integer }
+                              deposits_daily_minor: { $ref: "#/components/schemas/DailySeries" }
                       catalogue:
                         type: object
                         properties:
