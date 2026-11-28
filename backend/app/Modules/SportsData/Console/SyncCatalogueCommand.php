@@ -5,6 +5,7 @@ namespace App\Modules\SportsData\Console;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Exceptions\SportsDataException;
 use App\Modules\SportsData\Models\Competition;
+use App\Modules\SportsData\Providers\SportMonksProvider;
 use App\Modules\SportsData\Services\CatalogueSyncService;
 use App\Modules\SportsData\Services\CreditBudget;
 use Illuminate\Console\Command;
@@ -70,6 +71,13 @@ class SyncCatalogueCommand extends Command
             $competitions = $matching->merge(array_diff($configured, $patterns))->unique()->sort()->values()->all();
         }
 
+        // Ligues déjà synchronisées par SportMonks (sports-data:sportmonks) : pas de match en double ni de crédit dépensé.
+        $covered = $this->coveredBySportMonks($provider);
+        if ($covered !== []) {
+            $competitions = array_values(array_diff($competitions, $covered));
+            $this->line('Couvertes par SportMonks : '.implode(', ', $covered));
+        }
+
         $this->info("Fournisseur : {$provider->name()} — compétitions : ".implode(', ', $competitions));
 
         if ($budget->enabled() && ! $this->option('force')) {
@@ -127,10 +135,11 @@ class SyncCatalogueCommand extends Command
     private function applySelection(SportsDataProvider $provider, array $configured): void
     {
         $changed = ['activées' => [], 'retirées' => []];
+        $covered = $this->coveredBySportMonks($provider);
 
         Competition::where('provider', $provider->name())->orderBy('external_key')->get()
-            ->each(function (Competition $competition) use ($configured, &$changed) {
-                $wanted = Str::is($configured, $competition->external_key);
+            ->each(function (Competition $competition) use ($configured, $covered, &$changed) {
+                $wanted = Str::is($configured, $competition->external_key) && ! in_array($competition->external_key, $covered, true);
                 if ($competition->is_active !== $wanted) {
                     $competition->update(['is_active' => $wanted]);
                     $changed[$wanted ? 'activées' : 'retirées'][] = $competition->external_key;
@@ -146,5 +155,21 @@ class SyncCatalogueCommand extends Command
         if ($changed['activées'] !== [] || $changed['retirées'] !== []) {
             Log::info('sports_data.selection_changed', $changed);
         }
+    }
+
+    /**
+     * Compétitions au catalogue de SportMonks (actives) quand SportMonks est branché : le fournisseur principal ne
+     * les synchronise plus. SportMonks coupé (clé vide), elles reviennent au fournisseur principal.
+     *
+     * @return list<string>
+     */
+    private function coveredBySportMonks(SportsDataProvider $provider): array
+    {
+        if ($provider->name() === SportMonksProvider::NAME || empty(config('sports_data.sportmonks.key'))) {
+            return [];
+        }
+
+        return Competition::where('provider', SportMonksProvider::NAME)->where('is_active', true)
+            ->orderBy('external_key')->pluck('external_key')->all();
     }
 }

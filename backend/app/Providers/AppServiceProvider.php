@@ -21,6 +21,7 @@ use App\Modules\Settlement\Providers\ApiFootballProvider;
 use App\Modules\Settlement\Providers\FakeMatchStatisticsProvider;
 use App\Modules\SportsData\Contracts\SportsDataProvider;
 use App\Modules\SportsData\Providers\FakeSportsDataProvider;
+use App\Modules\SportsData\Providers\SportMonksProvider;
 use App\Modules\SportsData\Providers\TheOddsApiProvider;
 use App\Modules\SportsData\Services\CreditBudget;
 use App\Modules\Wallet\Services\LedgerDepositHistory;
@@ -55,6 +56,13 @@ class AppServiceProvider extends ServiceProvider
             ),
             default => throw new InvalidArgumentException('SPORTS_DATA_PROVIDER inconnu : '.config('sports_data.provider')),
         });
+
+        // Football depuis SportMonks, à côté du fournisseur principal (sports-data:sportmonks, actif avec SPORTMONKS_API_KEY).
+        $this->app->singleton(SportMonksProvider::class, fn ($app) => new SportMonksProvider(
+            $app->make(HttpFactory::class),
+            $app->make('cache.store'),
+            config('sports_data.sportmonks'),
+        ));
 
         // Statistiques des matchs terminés (V2-D09) : STATISTICS_PROVIDER=apifootball ; sinon fournisseur en mémoire
         // (tests ; l'import est coupé quand STATISTICS_PROVIDER est vide).
