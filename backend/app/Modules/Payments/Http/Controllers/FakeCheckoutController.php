@@ -9,10 +9,10 @@ use App\Modules\Payments\Providers\FakePaymentProvider;
 use App\Modules\Payments\Services\PaymentProviderRegistry;
 use App\Modules\Payments\Services\PaymentService;
 use App\Support\Http\ApiException;
+use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 
 /**
@@ -35,7 +35,7 @@ class FakeCheckoutController extends Controller
                 'transaction' => $transaction,
                 // Moyen choisi par le joueur (« MonCash (test) »), comme la page de l'opérateur chez Plop Plop.
                 'label' => $this->providers->label('fake', $transaction->metadata['method'] ?? null),
-                'amount' => Number::format($transaction->amount_minor / 100, 2, locale: 'fr').' '.$transaction->currency,
+                'amount' => Money::ofMinor($transaction->amount_minor, $transaction->currency)->format(),
                 'action' => '/api/v1/payments/fake/checkout/'.$transaction->reference,
                 'returnUrl' => self::returnUrl($transaction),
                 'statusText' => match ($transaction->status) {

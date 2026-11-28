@@ -31,4 +31,16 @@ class MoneyTest extends TestCase
 
         Money::ofMinor(100, 'gourde');
     }
+
+    /** Sans l'extension intl (#280) : espaces insécables entre les milliers et avant la devise. */
+    public function test_formats_in_french_without_intl(): void
+    {
+        $nbsp = "\u{00A0}";
+
+        $this->assertSame("1{$nbsp}500,00{$nbsp}HTG", Money::ofMinor(1_500_00, 'HTG')->format());
+        $this->assertSame("0,05{$nbsp}HTG", Money::ofMinor(5, 'HTG')->format());
+        $this->assertSame("0,00{$nbsp}HTG", Money::zero('HTG')->format());
+        $this->assertSame("1{$nbsp}234{$nbsp}567,89{$nbsp}USD", Money::ofMinor(123_456_789, 'USD')->format());
+        $this->assertSame("-2{$nbsp}050,10{$nbsp}HTG", Money::ofMinor(-205_010, 'HTG')->format());
+    }
 }

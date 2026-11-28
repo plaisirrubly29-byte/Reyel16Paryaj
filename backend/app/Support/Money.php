@@ -60,6 +60,19 @@ final class Money
         return $this->currency === $other->currency && $this->minor === $other->minor;
     }
 
+    /**
+     * Montant lisible en français, ex. « 1 500,00 HTG » (espaces insécables : le montant ne se coupe pas en fin de
+     * ligne). Calcul en entiers, sans float ni extension intl (absente des images Docker, #280). Deux décimales.
+     */
+    public function format(): string
+    {
+        $absolute = abs($this->minor);
+        $units = number_format(intdiv($absolute, 100), 0, '', "\u{00A0}");
+        $cents = str_pad((string) ($absolute % 100), 2, '0', STR_PAD_LEFT);
+
+        return ($this->minor < 0 ? '-' : '')."{$units},{$cents}\u{00A0}{$this->currency}";
+    }
+
     private function assertSameCurrency(self $other): void
     {
         if ($this->currency !== $other->currency) {
