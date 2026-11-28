@@ -41,6 +41,8 @@ tags:
   - name: ResponsibleGaming
   - name: Complaints
     description: Réclamations du joueur (V2-G04)
+  - name: Notifications
+    description: Messagerie du joueur et choix de ses canaux de notification (V2-E04)
   - name: Rewards
     description: Fidélité, parrainage et bonus (V2-E07, D-19) — 404 tant que les programmes sont désactivés
   - name: Admin
@@ -1242,6 +1244,137 @@ paths:
                   links: { $ref: "#/components/schemas/PaginationLinks" }
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /me/notifications:
+    get:
+      tags: [Notifications]
+      summary: Messagerie du joueur connecté (plus récentes d'abord)
+      description: |
+        V2-E04. Une notification par événement : ticket gagnant ou corrigé (paris sportifs et borlette), dépôt
+        crédité, retrait versé ou échoué, KYC validé ou refusé, réponse de l'équipe à une réclamation.
+        La messagerie est toujours active, quels que soient les canaux choisis : elle garde la trace de chaque envoi.
+        Conservation : 90 jours (notifications.retention_days), puis suppression automatique.
+        Contenu limité au nécessaire : ni solde ni mot de passe ; le détail est sur la page liée (link).
+        meta.unread_count : nombre de notifications non lues, toutes pages confondues.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: unread, in: query, schema: { type: boolean }, description: "true : seulement les non lues" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta:
+                    allOf:
+                      - $ref: "#/components/schemas/PaginationMeta"
+                      - type: object
+                        properties:
+                          unread_count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Nombre de notifications non lues (pastille du menu)
+      description: V2-E04. Requête légère, à relire au plus une fois par minute ou au retour sur l'onglet.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: object, properties: { count: { type: integer } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Marquer une notification comme lue
+      description: V2-E04. Sans effet si elle l'est déjà. 404 pour la notification d'un autre compte.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: Notification à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Notification" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Tout marquer comme lu
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: object, properties: { marked: { type: integer, description: Notifications passées en lues } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/notification-preferences:
+    get:
+      tags: [Notifications]
+      summary: Canaux choisis par le joueur, par type de notification
+      description: |
+        V2-E04, D-15. Une ligne par type. La messagerie (in_app) est toujours active. Par défaut : e-mail activé,
+        SMS désactivé. Le SMS n'est proposé que pour withdrawal_paid et kyc_rejected (D-15, SE-8) : sms_available.
+        email_available false tant que le compte n'a pas d'adresse e-mail confirmée (V2-C02) ; sms_available false tant
+        que l'envoi de SMS n'est pas branché (V2-C01) ou que le numéro n'est pas vérifié. Un canal indisponible garde
+        le choix du joueur, mais rien n'y est envoyé.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationPreference" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    put:
+      tags: [Notifications]
+      summary: Changer ses canaux (tous les types envoyés ensemble)
+      description: |
+        V2-E04. Les types absents gardent leur réglage. sms true sur un type sans SMS : 422 notification_channel_unavailable
+        (details.type). Renvoie la liste complète à jour.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferences]
+              properties:
+                preferences:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [type]
+                    properties:
+                      type: { $ref: "#/components/schemas/NotificationType" }
+                      email: { type: boolean }
+                      sms: { type: boolean }
+      responses:
+        "200":
+          description: Réglages enregistrés
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationPreference" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422":
+          description: validation_failed ; notification_channel_unavailable
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   /complaints:
     get:
@@ -4739,6 +4872,38 @@ components:
       properties:
         minor: { type: integer, example: 10050 }
         currency: { type: string, example: HTG }
+    NotificationType:
+      type: string
+      description: |
+        ticket_won : ticket gagnant (pari sportif ou borlette) ; ticket_corrected : résultat corrigé après règlement
+        (P5-06), le gain change ; deposit_credited ; withdrawal_paid ; withdrawal_failed (montant rendu au solde) ;
+        kyc_approved ; kyc_rejected (avec le motif) ; complaint_replied (réponse visible de l'équipe, jamais une note
+        interne).
+      enum: [ticket_won, ticket_corrected, deposit_credited, withdrawal_paid, withdrawal_failed, kyc_approved, kyc_rejected, complaint_replied]
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/NotificationType" }
+        title: { type: string, example: Ticket gagnant }
+        body: { type: string, example: "Votre ticket R16-7KQ2M9XAPB est gagnant : 2 050,00 HTG ont été crédités sur votre solde." }
+        link:
+          type: [object, "null"]
+          description: Page à ouvrir ; null si aucune.
+          properties:
+            type: { type: string, enum: [bet, lottery_ticket, payment, kyc, complaint] }
+            id: { type: [string, "null"], description: "null pour kyc (une seule page)" }
+        read_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    NotificationPreference:
+      type: object
+      properties:
+        type: { $ref: "#/components/schemas/NotificationType" }
+        in_app: { type: boolean, description: Toujours true (messagerie) }
+        email: { type: boolean }
+        sms: { type: boolean }
+        email_available: { type: boolean, description: Adresse e-mail confirmée et envoi branché }
+        sms_available: { type: boolean, description: "Type autorisé en SMS (withdrawal_paid, kyc_rejected), numéro vérifié et envoi branché" }
     ComplaintAttachment:
       type: object
       description: Contenu par GET …/attachments/{id} (joueur ou admin).
