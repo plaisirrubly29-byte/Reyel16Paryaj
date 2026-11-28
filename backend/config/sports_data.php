@@ -25,6 +25,42 @@ return [
         'reference_bookmaker' => env('SPORTS_DATA_REFERENCE_BOOKMAKER'),
     ],
 
+    // SportMonks (football seulement), à côté de The Odds API : actif dès que SPORTMONKS_API_KEY est renseignée.
+    // Les ligues de l'abonnement SportMonks sont synchronisées par sports-data:sportmonks ; The Odds API ne
+    // synchronise plus celles que SportMonks couvre déjà (pas de match en double au catalogue).
+    'sportmonks' => [
+        'url' => env('SPORTMONKS_API_URL', 'https://api.sportmonks.com/v3'),
+        'key' => env('SPORTMONKS_API_KEY'),
+        'timeout' => (int) env('SPORTMONKS_TIMEOUT', 30),
+        // Ligues synchronisées (identifiants SportMonks), « * » : toutes celles de l'abonnement.
+        'leagues' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTMONKS_LEAGUES', '*'))))),
+        // Bookmakers suivis (identifiants SportMonks ; 2 = bet365) : le premier est la référence des cotes publiées,
+        // les autres servent à la cote juste (moyenne sans marge).
+        'bookmakers' => array_values(array_filter(array_map('intval', explode(',', (string) env('SPORTMONKS_BOOKMAKERS', '2,9,14,23,29,35'))))),
+        'reference_bookmaker' => (int) explode(',', (string) env('SPORTMONKS_BOOKMAKERS', '2,9,14,23,29,35'))[0],
+        // Ligue SportMonks → clé The Odds API (mêmes libellés, ordre du menu et marge), vérifiées sur l'API. Une ligue
+        // absente d'ici prend la clé « soccer_sm_{id} ». Ajouts : SPORTMONKS_LEAGUE_KEYS="9=soccer_efl_champ,564=soccer_spain_la_liga".
+        'league_keys' => (function () {
+            $keys = [8 => 'soccer_epl', 82 => 'soccer_germany_bundesliga', 271 => 'soccer_denmark_superliga', 501 => 'soccer_spl'];
+            foreach (explode(',', (string) env('SPORTMONKS_LEAGUE_KEYS', '')) as $pair) {
+                $parts = array_map('trim', explode('=', $pair, 2));
+                if (count($parts) === 2 && ctype_digit($parts[0]) && preg_match('/^soccer_[a-z0-9_]+$/', $parts[1])) {
+                    $keys[(int) $parts[0]] = $parts[1];
+                }
+            }
+
+            return $keys;
+        })(),
+        'horizon_days' => (int) env('SPORTS_DATA_HORIZON_DAYS', 7),
+        // Matchs en cours : un seul appel pour toutes les ligues, gardé ce nombre de secondes.
+        'inplay_cache_seconds' => (int) env('SPORTMONKS_INPLAY_CACHE_SECONDS', 20),
+        // Formule gratuite : 180 appels par heure et par type de données. Cotes toutes les 30 min (1 appel par ligue),
+        // scores des matchs en cours chaque minute (1 appel pour toutes les ligues), résultats chaque heure.
+        'sync_cron' => env('SPORTMONKS_SYNC_CRON', '*/30 * * * *'),
+        'results_cron' => env('SPORTMONKS_RESULTS_CRON', '25 * * * *'),
+        'live_enabled' => (bool) env('SPORTMONKS_LIVE', true),
+    ],
+
     // Sports synchronisés (clés du fournisseur), ex. "soccer_epl,basketball_nba". Liste V1 : décision D-03 (P0-03).
     // Motifs acceptés ("*", "tennis_*") ; les compétitions que la liste ne désigne plus sont retirées du catalogue.
     'sports' => array_values(array_filter(array_map('trim', explode(',', (string) env('SPORTS_DATA_SPORTS', 'soccer_epl'))))),
