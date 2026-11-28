@@ -39,6 +39,28 @@
 | `fake` | `Providers/FakeSportsDataProvider` | Développement et tests : données déterministes, panne et cotes périmées simulables |
 | `theodds` | `Providers/TheOddsApiProvider` | The Odds API v4 (clé dans `SPORTS_DATA_API_KEY`) |
 
+### Football depuis SportMonks (à côté du fournisseur principal)
+
+`Providers/SportMonksProvider` (SportMonks Football API v3), actif dès que `SPORTMONKS_API_KEY` est renseignée :
+The Odds API garde les autres sports, SportMonks apporte le football de son abonnement.
+
+- **`php artisan sports-data:sportmonks`** (`SPORTMONKS_SYNC_CRON`, 30 min) : matchs et cotes des ligues de
+  l'abonnement (`SPORTMONKS_LEAGUES`, `*` = toutes), 1 appel par ligue ; `--results` (`SPORTMONKS_RESULTS_CRON`) :
+  résultats des matchs commencés ; `--live` (chaque minute) : score des matchs en cours, 1 seul appel
+  (`/livescores/inplay`) pour toutes les ligues, aucun sans match en cours. Mêmes services que The Odds API
+  (`CatalogueSyncService`, `ResultImportService`) : matchs et compétitions portent le fournisseur `sportmonks`.
+- **Clés** : celle de The Odds API quand la ligue y correspond (`league_keys` : 8 → `soccer_epl`, 82, 271, 501 ;
+  ajouts par `SPORTMONKS_LEAGUE_KEYS="9=soccer_efl_champ"`) pour garder libellés, menu et marge ; sinon
+  `soccer_sm_{id}`. **Pas de doublon** : `sports-data:sync` saute et retire du catalogue les compétitions que
+  SportMonks a déjà (actives) ; SportMonks coupé, elles reviennent à The Odds API.
+- **Marchés** : 1X2 (1), plus/moins (80, ligne 2.5 si cotée), les deux équipes marquent (14), double chance (2),
+  score exact (57), transposés au format de The Odds API ; un marché par bookmaker de `SPORTMONKS_BOOKMAKERS`
+  (le premier = référence, 2 = bet365), les autres pour la cote juste. Les marchés maison suivent comme d'habitude.
+- **Résultats** : terminé = états `FT`, `AET`, `FT_PEN` ; après prolongation, score de fin de 2e mi-temps (`2ND_HALF`).
+- **Limite** : pas de crédits mais un nombre d'appels par heure et par type de données (180 en formule gratuite) ;
+  journal `sports_data_api_calls` avec coût 0 et appels restants ; un 429 donne `quota_exhausted`. Clé envoyée dans
+  l'en-tête `Authorization`, jamais dans l'URL ni les journaux.
+
 ```php
 $provider = app(SportsDataProvider::class);
 $provider->sports();                 // gratuit

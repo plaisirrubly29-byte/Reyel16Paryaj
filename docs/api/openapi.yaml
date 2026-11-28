@@ -41,6 +41,8 @@ tags:
   - name: ResponsibleGaming
   - name: Complaints
     description: Réclamations du joueur (V2-G04)
+  - name: Notifications
+    description: Messagerie du joueur et choix de ses canaux de notification (V2-E04)
   - name: Rewards
     description: Fidélité, parrainage et bonus (V2-E07, D-19) — 404 tant que les programmes sont désactivés
   - name: Admin
@@ -1243,6 +1245,137 @@ paths:
                   meta: { $ref: "#/components/schemas/PaginationMeta" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
 
+  /me/notifications:
+    get:
+      tags: [Notifications]
+      summary: Messagerie du joueur connecté (plus récentes d'abord)
+      description: |
+        V2-E04. Une notification par événement : ticket gagnant ou corrigé (paris sportifs et borlette), dépôt
+        crédité, retrait versé ou échoué, KYC validé ou refusé, réponse de l'équipe à une réclamation.
+        La messagerie est toujours active, quels que soient les canaux choisis : elle garde la trace de chaque envoi.
+        Conservation : 90 jours (notifications.retention_days), puis suppression automatique.
+        Contenu limité au nécessaire : ni solde ni mot de passe ; le détail est sur la page liée (link).
+        meta.unread_count : nombre de notifications non lues, toutes pages confondues.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: unread, in: query, schema: { type: boolean }, description: "true : seulement les non lues" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+                  links: { $ref: "#/components/schemas/PaginationLinks" }
+                  meta:
+                    allOf:
+                      - $ref: "#/components/schemas/PaginationMeta"
+                      - type: object
+                        properties:
+                          unread_count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Nombre de notifications non lues (pastille du menu)
+      description: V2-E04. Requête légère, à relire au plus une fois par minute ou au retour sur l'onglet.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: object, properties: { count: { type: integer } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Marquer une notification comme lue
+      description: V2-E04. Sans effet si elle l'est déjà. 404 pour la notification d'un autre compte.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: Notification à jour
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Notification" } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Tout marquer comme lu
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: object, properties: { marked: { type: integer, description: Notifications passées en lues } } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me/notification-preferences:
+    get:
+      tags: [Notifications]
+      summary: Canaux choisis par le joueur, par type de notification
+      description: |
+        V2-E04, D-15. Une ligne par type. La messagerie (in_app) est toujours active. Par défaut : e-mail activé,
+        SMS désactivé. Le SMS n'est proposé que pour withdrawal_paid et kyc_rejected (D-15, SE-8) : sms_available.
+        email_available false tant que le compte n'a pas d'adresse e-mail confirmée (V2-C02) ; sms_available false tant
+        que l'envoi de SMS n'est pas branché (V2-C01) ou que le numéro n'est pas vérifié. Un canal indisponible garde
+        le choix du joueur, mais rien n'y est envoyé.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationPreference" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    put:
+      tags: [Notifications]
+      summary: Changer ses canaux (tous les types envoyés ensemble)
+      description: |
+        V2-E04. Les types absents gardent leur réglage. sms true sur un type sans SMS : 422 notification_channel_unavailable
+        (details.type). Renvoie la liste complète à jour.
+      x-task: V2-E04
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferences]
+              properties:
+                preferences:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [type]
+                    properties:
+                      type: { $ref: "#/components/schemas/NotificationType" }
+                      email: { type: boolean }
+                      sms: { type: boolean }
+      responses:
+        "200":
+          description: Réglages enregistrés
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/NotificationPreference" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422":
+          description: validation_failed ; notification_channel_unavailable
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
   /complaints:
     get:
       tags: [Complaints]
@@ -1469,6 +1602,7 @@ paths:
         Définitions : mises = tickets PLACÉS dans la période ; gains payés et remboursements = tickets RÉGLÉS
         dans la période ; produit brut = mises réglées (hors annulés) - gains payés ; exposition = gains
         potentiels des tickets en cours (pas une perte certaine). Montants en unités mineures.
+        V2-F05 : finance.ledger et finance.payments sont calculés à partir du ledger (cohérents avec le rapprochement).
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: period, in: query, schema: { type: string, enum: [today, yesterday, 7d, 30d, month, last_month, custom], default: 7d } }
@@ -1504,6 +1638,7 @@ paths:
                           excluded: { type: integer }
                           new_today: { type: integer }
                           new_in_period: { type: integer }
+                          active_players: { type: integer, description: "V2-F05. Joueurs qui ont misé au moins une fois dans la période (paris ou borlette, d'après le ledger)" }
                           registrations: { $ref: "#/components/schemas/DailySeries" }
                       betting:
                         type: object
@@ -1522,14 +1657,59 @@ paths:
                             items: { type: object, properties: { sport: { type: string }, name: { type: string }, tickets: { type: integer }, stakes_minor: { type: integer } } }
                           tickets: { $ref: "#/components/schemas/DailySeries" }
                           stakes_daily_minor: { $ref: "#/components/schemas/DailySeries" }
+                          lottery:
+                            type: object
+                            description: "V2-F05. Borlette : fiches VENDUES dans la période, et gains des fiches RÉGLÉES dans la période"
+                            properties:
+                              tickets_sold: { type: integer }
+                              stakes_minor: { type: integer }
+                              tickets_settled: { type: integer }
+                              payouts_minor: { type: integer, description: "Gains versés (hors lignes annulées remboursées)" }
                       finance:
                         type: object
                         properties:
                           settled_stakes_minor: { type: integer }
                           payouts_minor: { type: integer }
-                          gross_gaming_revenue_minor: { type: integer, description: "Mises réglées - gains versés" }
+                          gross_gaming_revenue_minor: { type: integer, description: "Paris sportifs, par tickets réglés : mises réglées - gains versés" }
                           pending_corrections: { type: integer }
-                          payments_available: { type: boolean, description: "false tant qu'aucun prestataire de paiement n'est intégré (P7-01)" }
+                          payments_available: { type: boolean, description: "Un prestataire de dépôt est activé (PAYMENTS_*_ENABLED)" }
+                          withdrawals_available: { type: boolean, description: "Retraits par le prestataire ouverts (PAYMENTS_WITHDRAWALS_ENABLED)" }
+                          ledger:
+                            type: object
+                            description: |
+                              V2-F05. Jeu, d'après les écritures du ledger datées de la période (argent réellement entré et sorti) :
+                              mises encaissées ; retours = gains + remboursements + écritures compensatoires (corrections,
+                              annulations) ; produit brut = mises - retours. Diffère du produit brut par tickets réglés quand une
+                              mise et son règlement tombent dans deux périodes différentes.
+                            properties:
+                              stakes_minor: { type: integer }
+                              returns_minor: { type: integer }
+                              gross_gaming_revenue_minor: { type: integer }
+                              by_product:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    product: { type: string, enum: [sports, lottery] }
+                                    stakes_minor: { type: integer }
+                                    returns_minor: { type: integer }
+                                    gross_gaming_revenue_minor: { type: integer }
+                          payments:
+                            type: object
+                            description: |
+                              V2-F05. Dépôts et retraits d'après le ledger (prestataire ET saisies manuelles du Super Admin ;
+                              crédits fictifs exclus). Retraits nets des retraits échoués rendus au joueur.
+                            properties:
+                              deposits_count: { type: integer }
+                              deposits_minor: { type: integer }
+                              depositors: { type: integer, description: Joueurs distincts qui ont déposé }
+                              first_deposits: { type: integer, description: Joueurs dont le tout premier dépôt est dans la période }
+                              withdrawals_count: { type: integer }
+                              withdrawals_minor: { type: integer }
+                              net_deposits_minor: { type: integer, description: Dépôts - retraits }
+                              pending_withdrawals_count: { type: integer, description: "Retraits demandés, pas encore versés (maintenant)" }
+                              pending_withdrawals_minor: { type: integer }
+                              deposits_daily_minor: { $ref: "#/components/schemas/DailySeries" }
                       catalogue:
                         type: object
                         properties:
@@ -2894,7 +3074,7 @@ paths:
       x-task: V2-B01
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed, expired, review] } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, processing, succeeded, failed, expired, review, cancelled] }, description: "processing et cancelled : retraits seulement (envoi au prestataire, annulation par le joueur)" }
         - { name: direction, in: query, schema: { type: string, enum: [deposit, payout] } }
         - { name: provider, in: query, schema: { type: string, example: moncash } }
         - { name: user_id, in: query, schema: { type: integer } }
@@ -4507,7 +4687,7 @@ components:
         user_id: { type: string }
         provider: { type: string, example: moncash }
         direction: { type: string, enum: [deposit, payout] }
-        status: { type: string, enum: [pending, succeeded, failed, expired, review] }
+        status: { type: string, enum: [pending, processing, succeeded, failed, expired, review, cancelled] }
         amount: { $ref: "#/components/schemas/Money" }
         reference: { type: string, example: pay_01jc5x0v6z0k6q7m4c2b9p3r8t }
         provider_reference: { type: [string, "null"] }
@@ -4739,6 +4919,38 @@ components:
       properties:
         minor: { type: integer, example: 10050 }
         currency: { type: string, example: HTG }
+    NotificationType:
+      type: string
+      description: |
+        ticket_won : ticket gagnant (pari sportif ou borlette) ; ticket_corrected : résultat corrigé après règlement
+        (P5-06), le gain change ; deposit_credited ; withdrawal_paid ; withdrawal_failed (montant rendu au solde) ;
+        kyc_approved ; kyc_rejected (avec le motif) ; complaint_replied (réponse visible de l'équipe, jamais une note
+        interne).
+      enum: [ticket_won, ticket_corrected, deposit_credited, withdrawal_paid, withdrawal_failed, kyc_approved, kyc_rejected, complaint_replied]
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/NotificationType" }
+        title: { type: string, example: Ticket gagnant }
+        body: { type: string, example: "Votre ticket R16-7KQ2M9XAPB est gagnant : 2 050,00 HTG ont été crédités sur votre solde." }
+        link:
+          type: [object, "null"]
+          description: Page à ouvrir ; null si aucune.
+          properties:
+            type: { type: string, enum: [bet, lottery_ticket, payment, kyc, complaint] }
+            id: { type: [string, "null"], description: "null pour kyc (une seule page)" }
+        read_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    NotificationPreference:
+      type: object
+      properties:
+        type: { $ref: "#/components/schemas/NotificationType" }
+        in_app: { type: boolean, description: Toujours true (messagerie) }
+        email: { type: boolean }
+        sms: { type: boolean }
+        email_available: { type: boolean, description: Adresse e-mail confirmée et envoi branché }
+        sms_available: { type: boolean, description: "Type autorisé en SMS (withdrawal_paid, kyc_rejected), numéro vérifié et envoi branché" }
     ComplaintAttachment:
       type: object
       description: Contenu par GET …/attachments/{id} (joueur ou admin).

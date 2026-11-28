@@ -34,6 +34,7 @@
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <!-- Les tests n'appellent jamais le vrai fournisseur (quota limité) : faux fournisseur, aucune clé. -->
         <env name="SPORTS_DATA_PROVIDER" value="fake"/>
+        <env name="SPORTMONKS_API_KEY" value=""/>
         <env name="SPORTS_DATA_API_KEY" value=""/>
     </php>
 </phpunit>

@@ -188,6 +188,28 @@ class AuditLogTest extends TestCase
         $this->assertSame(['action' => 'user.suspended'], $log->metadata['filters']);
     }
 
+    public function test_an_action_unknown_to_this_version_is_listed_and_exported_as_is(): void
+    {
+        // Ligne écrite par une version plus récente (retour arrière après un déploiement) ou par une autre branche :
+        // l'enum ne la connaît pas. Le journal et son export doivent rester lisibles, jamais d'erreur 500.
+        $compliance = User::factory()->withRole(RoleSlug::Compliance)->create();
+        AuditLog::insert(['action' => 'future.unknown_action', 'reason' => 'Ligne venue d\'ailleurs', 'created_at' => now()->subMinute()]);
+        $this->actingAsVerifiedAdmin($compliance);
+
+        $this->getJson('/api/v1/admin/audit-logs')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.action', 'future.unknown_action')
+            ->assertJsonPath('data.0.reason', 'Ligne venue d\'ailleurs');
+
+        $response = $this->post('/api/v1/admin/audit-logs/export', ['reason' => 'Contrôle trimestriel'], ['Accept' => 'application/json'])
+            ->assertOk();
+        $this->assertStringContainsString(';future.unknown_action;', $response->streamedContent());
+
+        // La ligne n'est ni modifiée ni supprimée : le journal reste en ajout seul.
+        $this->assertSame(1, AuditLog::where('action', 'future.unknown_action')->count());
+    }
+
     public function test_export_is_reserved_to_audit_export_and_capped(): void
     {
         $support = User::factory()->withRole(RoleSlug::Support)->create();

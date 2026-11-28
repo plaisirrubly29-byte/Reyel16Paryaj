@@ -84,7 +84,8 @@ jobs:
           php artisan test tests/Feature/Modules/Wallet tests/Feature/Modules/Betting \
             tests/Feature/Modules/Settlement tests/Feature/Modules/Payments tests/Feature/AppendOnlyTruncateTest.php \
             tests/Feature/AppendOnlyLocksTest.php tests/Feature/Modules/Admin/AdminSettingsApiTest.php \
-            tests/Feature/Modules/Admin/FinanceCorrectionsApiTest.php
+            tests/Feature/Modules/Admin/FinanceCorrectionsApiTest.php tests/Feature/Modules/Admin/AdminDashboardLedgerTest.php \
+            tests/Feature/Modules/Admin/DashboardIndexesTest.php
 
       - name: Dependency audit
         run: composer audit

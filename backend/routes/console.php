@@ -27,6 +27,25 @@ Schedule::command('sports-data:sync')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Football depuis SportMonks, seulement quand SPORTMONKS_API_KEY est renseignée : matchs et cotes, résultats, et score
+// des matchs en cours chaque minute (1 appel pour toutes les ligues, aucun appel sans match en cours).
+$sportMonks = fn () => ! empty(config('sports_data.sportmonks.key'));
+Schedule::command('sports-data:sportmonks')
+    ->cron((string) config('sports_data.sportmonks.sync_cron'))
+    ->when($sportMonks)
+    ->withoutOverlapping()
+    ->onOneServer();
+Schedule::command('sports-data:sportmonks', ['--results'])
+    ->cron((string) config('sports_data.sportmonks.results_cron'))
+    ->when($sportMonks)
+    ->withoutOverlapping()
+    ->onOneServer();
+Schedule::command('sports-data:sportmonks', ['--live'])
+    ->everyMinute()
+    ->when(fn () => $sportMonks() && (bool) config('sports_data.sportmonks.live_enabled'))
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Matchs en direct : score et cotes des matchs en cours, plafonnés en crédits par jour (SPORTS_DATA_LIVE_DAILY_CREDITS).
 Schedule::command('sports-data:live')
     ->cron((string) config('sports_data.live_cron'))

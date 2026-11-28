@@ -63,6 +63,7 @@ Chaque module vit dans `backend/app/Modules/<Module>/` avec son `README.md` (res
 | Audit & Reporting | `Audit` | 6 |
 | Compliance & Responsible Play | `Compliance` | 7 |
 | Payments Adapter | `Payments` | 7 (bloqué) |
+| Réclamations | `Complaints` | V2-G04 |
 
 **Règle de dépendance :** un module appelle un autre module via ses `Services`, jamais en écrivant
 directement dans ses tables. Pas de dépendance circulaire.

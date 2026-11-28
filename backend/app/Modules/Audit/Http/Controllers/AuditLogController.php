@@ -71,7 +71,7 @@ class AuditLogController extends Controller
             $query->chunkById(500, function ($logs) use ($out) {
                 foreach ($logs as $log) {
                     fputcsv($out, array_map(self::cell(...), [
-                        $log->id, $log->created_at->toIso8601String(), $log->action->value, $log->actor_id, $log->actor_email,
+                        $log->id, $log->created_at->toIso8601String(), (string) $log->getRawOriginal('action'), $log->actor_id, $log->actor_email,
                         $log->subject_type, $log->subject_id, $log->reason, $log->before, $log->after, $log->metadata,
                         $log->ip_address, $log->request_id,
                     ]), ';', '"', '');
